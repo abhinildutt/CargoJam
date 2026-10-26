@@ -28,6 +28,16 @@ namespace CargoJam.Game.Feel
                 case Sfx.Win: return Notes("win", new[] { 72, 76, 79, 84 }, 0.11f, 0.45f, 0.4f);
                 case Sfx.Fail: return Notes("fail", new[] { 67, 63, 60 }, 0.16f, 0.45f, 0.38f);
                 case Sfx.Click: return Clip("click", 0.03f, (t, d) => Sine(t * 1200f) * Decay(t, 120f) * 0.3f);
+                case Sfx.Tick: return Clip("tick", 0.045f, (t, d) =>
+                    (Sine(t * 1500f) * Decay(t, 85f) * 0.6f + Noise(t) * Decay(t, 400f) * 0.25f) * 0.35f);
+                case Sfx.Sparkle: return Pings("sparkle", new[] { 96, 100, 103, 108 }, 0.045f, 0.22f);
+                case Sfx.Whoosh: return Whoosh();
+                case Sfx.Pop: return Clip("pop", 0.1f, (t, d) => Sine(Sweep(t, d, 320f, 980f)) * Envelope(t, d, 0.003f, 0.06f) * 0.5f);
+                case Sfx.Chime: return Pings("chime", new[] { 88, 95 }, 0.08f, 0.32f);
+                case Sfx.Whir: return Whir();
+                case Sfx.Puff: return Puff();
+                case Sfx.Unlock: return Clip("unlock", 0.22f, Unlock);
+                case Sfx.Callout: return Notes("callout", new[] { 79, 84, 88 }, 0.06f, 0.3f, 0.3f);
                 default: throw new ArgumentOutOfRangeException(nameof(sfx));
             }
         }
@@ -46,6 +56,71 @@ namespace CargoJam.Game.Feel
         {
             float tone = Soft(Sine(t * 370f) * 3f) + Soft(Sine(t * 466f) * 3f);
             return tone * Envelope(t, d, 0.01f, 0.06f) * 0.16f;
+        }
+
+        /// <summary>Bell-like sine pings (with an inharmonic partial), each left ringing.</summary>
+        static AudioClip Pings(string name, int[] midi, float step, float gain)
+        {
+            float length = step * (midi.Length - 1) + 0.35f;
+            return Clip(name, length, (t, d) =>
+            {
+                float sum = 0f;
+                for (int i = 0; i < midi.Length; i++)
+                {
+                    float local = t - i * step;
+                    if (local < 0f) break;
+                    float f = 440f * Mathf.Pow(2f, (midi[i] - 69) / 12f);
+                    sum += (Sine(local * f) + 0.25f * Sine(local * f * 2.76f)) * Decay(local, 14f) * Mathf.Min(1f, local * 800f);
+                }
+                return sum * gain;
+            });
+        }
+
+        // Noise through a one-pole low-pass whose cutoff swells and falls: air rushing past.
+        static AudioClip Whoosh()
+        {
+            float lp = 0f;
+            return Clip("whoosh", 0.32f, (t, d) =>
+            {
+                float k = t / d;
+                float bell = Mathf.Sin(k * Mathf.PI);
+                float a = 0.02f + 0.18f * bell;
+                lp += a * (Noise(t) - lp);
+                return lp * bell * bell * 1.1f;
+            });
+        }
+
+        // A small motor spinning up: a soft saw rising in pitch with a fast flutter.
+        static AudioClip Whir()
+        {
+            return Clip("whir", 0.55f, (t, d) =>
+            {
+                float flutter = 0.75f + 0.25f * Sine(t * 32f);
+                float tone = Soft(Saw(Sweep(t, d, 110f, 330f)) * 1.4f) * 0.6f + Sine(Sweep(t, d, 220f, 660f)) * 0.25f;
+                return tone * flutter * Envelope(t, d, 0.06f, 0.18f) * 0.16f;
+            });
+        }
+
+        // Low, dull burst of air: a tarp flicked off.
+        static AudioClip Puff()
+        {
+            float lp = 0f;
+            return Clip("puff", 0.22f, (t, d) =>
+            {
+                lp += 0.08f * (Noise(t) - lp);
+                return lp * Decay(t, 16f) * Mathf.Min(1f, t * 300f) * 2.2f;
+            });
+        }
+
+        // Click-clack of a padlock: two bright clicks and a little metallic ring.
+        static float Unlock(float t, float d)
+        {
+            float second = t - 0.07f;
+            float click = Noise(t) * Decay(t, 260f) * 0.5f + Sine(t * 3100f) * Decay(t, 120f) * 0.3f;
+            if (second > 0f)
+                click += Noise(second) * Decay(second, 240f) * 0.6f + Sine(second * 2350f) * Decay(second, 90f) * 0.35f;
+            float ring = second > 0f ? Sine(second * 1760f) * Decay(second, 18f) * 0.12f : 0f;
+            return (click + ring) * 0.55f;
         }
 
         /// <summary>A triangle-wave arpeggio of MIDI notes, the last one held.</summary>
