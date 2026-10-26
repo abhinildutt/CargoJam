@@ -26,6 +26,7 @@ namespace CargoJam.Game.Presentation
             view.materials = materials;
             view.body = MaterialBank.Box("Body", go.transform, Vector3.zero, Vector3.one, materials.Parcel(parcel.Color, false))
                 .GetComponent<MeshRenderer>();
+            Symbols.Create(parcel.Color, go.transform, new Vector3(0f, 0.5f, 0f), 1f, materials.Symbol(parcel.Color));
             return view;
         }
 
@@ -53,6 +54,9 @@ namespace CargoJam.Game.Presentation
                 if (this && InYard) transform.position = Vector3.LerpUnclamped(from, target, Ease.OutBack(t));
             });
         }
+
+        /// <summary>Shows the parcel at full color even while blocked, to point it out.</summary>
+        public void Highlight() => body.sharedMaterial = materials.Parcel(Parcel.Color, true);
 
         public void MarkLeftYard()
         {

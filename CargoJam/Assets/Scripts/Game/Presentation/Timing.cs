@@ -18,8 +18,15 @@ namespace CargoJam.Game.Presentation
         public const float Lift = 0.12f;
         public const float BlockedShake = 0.22f;
 
-        public const float WinOverlayDelay = 0.35f;
-        public const float FailOverlayDelay = 0.6f;
+        public const float WinCelebrateDelay = 0.1f;
+        /// <summary>From the confetti to the win card.</summary>
+        public const float WinOverlayDelay = 1.1f;
+
+        /// <summary>From the losing tap to the fail explanation, so the last parcel lands first.</summary>
+        public const float FailExplainDelay = 0.5f;
+        public const float FailPulse = 0.4f;
+        /// <summary>From the fail explanation to the fail card.</summary>
+        public const float FailOverlayDelay = 1.5f;
 
         public static float Slide(int pointCount) =>
             UnityEngine.Mathf.Clamp(pointCount * SlidePerCell, SlideMin, SlideMax);

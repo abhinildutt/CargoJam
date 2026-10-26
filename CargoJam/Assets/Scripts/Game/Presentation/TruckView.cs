@@ -40,6 +40,7 @@ namespace CargoJam.Game.Presentation
             MaterialBank.Box("Bed", b, new Vector3(BedCenterX, 0.36f, 0f), new Vector3(1.8f, 0.32f, 1.1f), materials.TruckBody(truck.Color));
             MaterialBank.Box("Cab", b, new Vector3(0.95f, 0.55f, 0f), new Vector3(0.75f, 0.72f, 1.05f), materials.TruckCab(truck.Color));
             MaterialBank.Box("Window", b, new Vector3(1.33f, 0.68f, 0f), new Vector3(0.04f, 0.28f, 0.8f), materials.Window);
+            Symbols.Create(truck.Color, b, new Vector3(0.95f, 0.91f, 0f), 0.95f, materials.Symbol(truck.Color));
             foreach (float x in new[] { -0.95f, 0.95f })
             foreach (float z in new[] { -0.5f, 0.5f })
                 MaterialBank.Box("Wheel", b, new Vector3(x, 0.17f, z), new Vector3(0.38f, 0.34f, 0.16f), materials.Wheel);

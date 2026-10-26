@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CargoJam.Core;
+using CargoJam.Game.Feel;
 using CargoJam.Game.Meta;
 using CargoJam.Game.Presentation;
 using UnityEngine;
@@ -19,6 +20,7 @@ namespace CargoJam.Game
         Camera cam;
         Tweener tweener;
         Hud hud;
+        AudioService sfx;
         MaterialBank materials;
         LevelLibrary levels;
 
@@ -32,6 +34,9 @@ namespace CargoJam.Game
         readonly List<Parcel> freeScratch = new List<Parcel>();
         int lastScreenWidth, lastScreenHeight;
 
+        /// <summary>Loads in a row without anything going to the dock; drives the rising load pitch.</summary>
+        int combo;
+
         public GameSession Session => session;
         public int LevelIndex => levelIndex;
 
@@ -44,7 +49,10 @@ namespace CargoJam.Game
             RenderSettings.ambientLight = new Color(0.62f, 0.62f, 0.66f);
 
             tweener = gameObject.AddComponent<Tweener>();
+            sfx = gameObject.AddComponent<AudioService>();
+            Haptics.Prepare();
             hud = gameObject.AddComponent<Hud>();
+            hud.Audio = sfx;
             hud.Restart += () => LoadLevel(levelIndex);
             hud.Next += () => LoadLevel(levelIndex + 1);
             hud.Previous += () => LoadLevel(levelIndex - 1);
@@ -77,6 +85,7 @@ namespace CargoJam.Game
 
             tweener.Clear();
             hud.HideCard();
+            combo = 0;
             parcels.Clear();
             trucks.Clear();
             if (levelRoot != null) Destroy(levelRoot.gameObject);
@@ -117,11 +126,16 @@ namespace CargoJam.Game
             {
                 case ParcelBlocked blocked:
                     ShakeInPlace(parcels[blocked.Parcel.Id], now);
+                    sfx.Play(Sfx.Nope);
+                    Haptics.Play(Haptic.Nope);
                     break;
 
                 case DockFullRejected rejected:
                     ShakeInPlace(parcels[rejected.Parcel.Id], now);
                     dock.Flash(tweener);
+                    sfx.Play(Sfx.Nope);
+                    sfx.Play(Sfx.Danger, 1f, 0.7f);
+                    Haptics.Play(Haptic.Nope);
                     break;
 
                 case ParcelLoaded loaded:
@@ -132,7 +146,7 @@ namespace CargoJam.Game
                     float slide = Timing.Slide(path.Count);
                     float start = Mathf.Max(now, tv.BayReadyAt - slide - Timing.HopToTruck);
                     LeaveYard(pv, path, start, slide);
-                    HopIntoTruck(pv, tv, loaded.TruckSlot, start + slide);
+                    HopIntoTruck(pv, tv, loaded.TruckSlot, start + slide, fromDock: false);
                     break;
                 }
 
@@ -146,6 +160,18 @@ namespace CargoJam.Game
                     tweener.Arc(pv.transform, layout.DockRest(held.DockSlot), 0.5f, Layout.ParcelSize,
                         start + slide, Timing.HopToDock);
                     pv.SettledAt = start + slide + Timing.HopToDock;
+
+                    combo = 0;
+                    int filled = session.Dock.Count, capacity = session.Dock.Capacity;
+                    tweener.At(pv.SettledAt, () =>
+                    {
+                        sfx.Play(Sfx.Hold);
+                        if (filled >= capacity - 1)
+                        {
+                            sfx.Play(Sfx.Danger, filled >= capacity ? 0.8f : 1f);
+                            Haptics.Play(Haptic.Warning);
+                        }
+                    });
                     break;
                 }
 
@@ -155,7 +181,7 @@ namespace CargoJam.Game
                     var tv = trucks[fromDock.Truck.Index];
                     float start = Mathf.Max(now, pv.SettledAt, tv.BayReadyAt) + fromDock.ChainIndex * Timing.ChainStagger;
                     dock.SlotFreeAt[fromDock.DockSlot] = start + 0.05f;
-                    HopIntoTruck(pv, tv, fromDock.TruckSlot, start);
+                    HopIntoTruck(pv, tv, fromDock.TruckSlot, start, fromDock: true);
                     break;
                 }
 
@@ -167,19 +193,16 @@ namespace CargoJam.Game
                 {
                     var tv = trucks[arrived.Truck.Index];
                     tweener.Punch(tv.Body, Vector3.one, new Vector3(0.06f, -0.12f, 0.06f), tv.BayReadyAt, 0.25f);
+                    tweener.At(tv.BayReadyAt - Timing.QueueShift * 0.7f, () => sfx.Play(Sfx.Arrive));
                     break;
                 }
 
                 case LevelWon _:
-                {
-                    float lastDeparture = 0f;
-                    foreach (var tv in trucks) lastDeparture = Mathf.Max(lastDeparture, tv.MoveFreeAt);
-                    hud.ShowWon(Mathf.Max(now, lastDeparture) + Timing.WinOverlayDelay);
+                    Celebrate(now);
                     break;
-                }
 
                 case LevelFailed _:
-                    hud.ShowFailed(now + Timing.FailOverlayDelay);
+                    ExplainFail(now);
                     break;
             }
         }
@@ -189,9 +212,12 @@ namespace CargoJam.Game
             pv.MarkLeftYard();
             tweener.Punch(pv.transform, Layout.ParcelSize, new Vector3(-0.12f, 0.18f, -0.12f), start, Timing.TapPunch);
             tweener.MoveAlong(pv.transform, path, start, slide);
+            // Feedback on the tap itself is immediate, even if the parcel waits for a truck to pull in.
+            sfx.Play(Sfx.Pick);
+            Haptics.Play(Haptic.Tap);
         }
 
-        void HopIntoTruck(ParcelView pv, TruckView tv, int slot, float start)
+        void HopIntoTruck(ParcelView pv, TruckView tv, int slot, float start, bool fromDock)
         {
             var local = tv.SlotLocal(slot);
             var target = layout.Bay + local;
@@ -208,6 +234,13 @@ namespace CargoJam.Game
             tweener.Punch(tv.Body, Vector3.one, new Vector3(0.04f, -0.1f, 0.04f), landing, 0.18f);
             pv.SettledAt = landing;
             tv.LastLandingAt = Mathf.Max(tv.LastLandingAt, landing);
+
+            float pitch = AudioService.ComboPitch(combo++);
+            tweener.At(landing, () =>
+            {
+                sfx.Play(Sfx.Load, pitch);
+                if (fromDock) Haptics.Play(Haptic.Tick);
+            });
         }
 
         void Depart(TruckView tv, float now)
@@ -217,6 +250,11 @@ namespace CargoJam.Game
             tweener.MoveTo(tv.transform, layout.DepartPosition, departAt + 0.05f, Timing.Depart, Ease.InCubic,
                 () => { if (tv) tv.gameObject.SetActive(false); });
             tv.MoveFreeAt = departAt + 0.05f + Timing.Depart;
+            tweener.At(departAt - 0.05f, () =>
+            {
+                sfx.Play(Sfx.Horn);
+                Haptics.Play(Haptic.TruckFull);
+            });
 
             // Everyone behind it rolls up one place; the first one becomes the loading truck.
             for (int i = tv.Truck.Index + 1; i < trucks.Count; i++)
@@ -228,6 +266,63 @@ namespace CargoJam.Game
                 next.MoveFreeAt = start + Timing.QueueShift;
                 if (offset == 0) next.BayReadyAt = next.MoveFreeAt;
             }
+        }
+
+        /// <summary>Confetti, fanfare and a slow push-in once the last truck is on its way.</summary>
+        void Celebrate(float now)
+        {
+            float lastDeparture = now;
+            foreach (var tv in trucks) lastDeparture = Mathf.Max(lastDeparture, tv.MoveFreeAt - Timing.Depart * 0.5f);
+            float at = lastDeparture + Timing.WinCelebrateDelay;
+            var center = layout.ContentBounds.center;
+
+            tweener.At(at, () =>
+            {
+                Confetti.Burst(levelRoot, center + Vector3.up * 1.5f, 60, materials, ParcelColors.Count);
+                sfx.Play(Sfx.Win);
+                Haptics.Play(Haptic.Win);
+            });
+            PushCamera(center, 0.07f, at, 0.9f);
+            hud.ShowWon(at + Timing.WinOverlayDelay);
+        }
+
+        /// <summary>
+        /// Shows why the level was lost before the card covers it: the waiting truck honks, the dock
+        /// shakes, and the buried parcels it needed pulse while the camera leans toward the dock.
+        /// </summary>
+        void ExplainFail(float now)
+        {
+            float at = now + Timing.FailExplainDelay;
+            var truck = session.CurrentTruck;
+            var tv = truck != null ? trucks[truck.Index] : null;
+
+            if (tv != null)
+            {
+                tweener.Punch(tv.Body, Vector3.one, new Vector3(0.08f, 0.12f, 0.08f), at, 0.3f);
+                foreach (var p in session.Board.Parcels)
+                {
+                    if (p.Color != truck.Color) continue;
+                    var pv = parcels[p.Id];
+                    tweener.At(at, pv.Highlight);
+                    for (int k = 0; k < 3; k++)
+                        tweener.Punch(pv.transform, Layout.ParcelSize, new Vector3(0.3f, 0.3f, 0.3f), at + 0.15f + k * Timing.FailPulse, 0.3f);
+                }
+            }
+            tweener.At(at, () =>
+            {
+                dock.Flash(tweener);
+                sfx.Play(Sfx.Horn, 0.85f);
+                sfx.Play(Sfx.Fail);
+                Haptics.Play(Haptic.Fail);
+            });
+            PushCamera(layout.DockSlotCenter((layout.DockSlots - 1) / 2), 0.06f, at, 0.6f);
+            hud.ShowFailed(at + Timing.FailOverlayDelay);
+        }
+
+        void PushCamera(Vector3 toward, float fraction, float start, float duration)
+        {
+            var from = cam.transform.position;
+            tweener.MoveTo(cam.transform, Vector3.Lerp(from, toward, fraction), start, duration, Ease.OutCubic);
         }
 
         void ShakeInPlace(ParcelView pv, float now)
@@ -301,6 +396,7 @@ namespace CargoJam.Game
         {
             var go = new GameObject("Main Camera") { tag = "MainCamera" };
             var c = go.AddComponent<Camera>();
+            go.AddComponent<AudioListener>();
             c.clearFlags = CameraClearFlags.SolidColor;
             c.backgroundColor = new Color(0.86f, 0.83f, 0.78f);
             c.nearClipPlane = 0.3f;

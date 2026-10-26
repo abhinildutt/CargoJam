@@ -40,9 +40,11 @@ namespace CargoJam.Game.Presentation
             for (int i = 0; i < Swatches.Length; i++)
             {
                 bright[i] = Make(Swatches[i]);
-                dim[i] = Make(Color.Lerp(Swatches[i], new Color(0.35f, 0.35f, 0.38f), 0.45f));
+                dim[i] = Make(Dim(Swatches[i]));
                 truckBody[i] = Make(Color.Lerp(Swatches[i], Color.white, 0.25f));
             }
+            symbolLight = Make(new Color(0.98f, 0.98f, 0.98f));
+            symbolDark = Make(new Color(0.22f, 0.19f, 0.14f));
 
             Ground = Make(new Color(0.86f, 0.83f, 0.78f));
             Tile = Make(new Color(0.78f, 0.75f, 0.70f));
@@ -58,6 +60,24 @@ namespace CargoJam.Game.Presentation
         public Material Parcel(int color, bool free) => free ? bright[color] : dim[color];
         public Material TruckBody(int color) => truckBody[color];
         public Material TruckCab(int color) => bright[color];
+
+        /// <summary>Symbols are white, except on yellow where white would vanish.</summary>
+        public Material Symbol(int color) => color == YellowIndex ? symbolDark : symbolLight;
+
+        const int YellowIndex = 3;
+        readonly Material symbolLight;
+        readonly Material symbolDark;
+
+        /// <summary>
+        /// Blocked parcels are duller and a little darker, but keep their hue: dimming toward plain
+        /// grey turned yellow into olive and made it read as a different color.
+        /// </summary>
+        static Color Dim(Color c)
+        {
+            float luma = 0.299f * c.r + 0.587f * c.g + 0.114f * c.b;
+            var grey = new Color(luma, luma, luma) * 0.8f;
+            return Color.Lerp(c, grey, 0.3f) * 0.92f;
+        }
 
         Material Make(Color c)
         {
