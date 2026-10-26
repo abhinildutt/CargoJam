@@ -25,7 +25,10 @@ namespace CargoJam.Game.Presentation
         Yard,
     }
 
-    /// <summary>Everything the FX layer may decorate for one level, handed over right after it is built.</summary>
+    /// <summary>
+    /// Everything the FX layer may decorate for one level, handed over right after it is built. The
+    /// controller keeps <see cref="Dock"/> and <see cref="Layout"/> current when the dock grows.
+    /// </summary>
     public sealed class LevelViews
     {
         public int LevelIndex;
@@ -57,6 +60,7 @@ namespace CargoJam.Game.Presentation
         void TruckFull(TruckView truck, float departAt);
         void TruckArriving(TruckView truck, float arriveAt);
         void TapRejected(ParcelView parcel, bool dockFull);
+        /// <summary>The holding dock's fill or capacity changed (holds report at landing time).</summary>
         void DockFillChanged(int count, int capacity, float at);
         void ParcelRevealed(ParcelView parcel, float at);
         void ParcelUnlocked(ParcelView parcel, float at);

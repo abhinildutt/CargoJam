@@ -32,3 +32,8 @@ CargoJam/crashlytics-build.properties
 
 # tools/check build output
 tools/.out/
+CargoJam/Assets/Screenshots/
+CargoJam/Assets/Screenshots.meta
+
+# Claude Code local state and agent worktrees
+.claude/

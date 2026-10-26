@@ -63,6 +63,7 @@ namespace CargoJam.Game
         readonly List<Parcel> freeScratch = new List<Parcel>();
         int lastScreenWidth, lastScreenHeight;
         float inputBlockedUntil;
+        LevelViews views;
         bool craneArmed;
         bool movedThisLevel;
 
@@ -205,7 +206,7 @@ namespace CargoJam.Game
             RefreshBoard();
             FitCamera();
 
-            float introSeconds = fx?.LevelBuilt(new LevelViews
+            views = new LevelViews
             {
                 LevelIndex = levelIndex,
                 Hard = session.Level.Hard,
@@ -217,7 +218,8 @@ namespace CargoJam.Game
                 Dock = dock,
                 Parcels = new List<ParcelView>(parcels.Values),
                 Trucks = trucks,
-            }) ?? 0f;
+            };
+            float introSeconds = fx?.LevelBuilt(views) ?? 0f;
             inputBlockedUntil = Time.time + introSeconds;
 
             ComboChanged?.Invoke(0);
@@ -365,9 +367,18 @@ namespace CargoJam.Game
         {
             if (events.Count == 0) return;
             int comboBefore = combo;
-            foreach (var e in events) Play(e);
+            int dockBefore = session.Dock.Count, capacityBefore = session.Dock.Capacity;
+            bool held = false;
+            foreach (var e in events)
+            {
+                Play(e);
+                held |= e is ParcelHeld;
+            }
             RefreshBoard();
             if (combo != comboBefore) ComboChanged?.Invoke(combo);
+            // Holds report their own fill at landing time; anything else that changed the dock reports now.
+            if (!held && (session.Dock.Count != dockBefore || session.Dock.Capacity != capacityBefore))
+                fx?.DockFillChanged(session.Dock.Count, session.Dock.Capacity, tweener.Now);
             DockChanged?.Invoke(session.Dock.Count, session.Dock.Capacity);
         }
 
@@ -548,6 +559,11 @@ namespace CargoJam.Game
             dock = DockView.Create(levelRoot, layout, materials);
             for (int i = 0; i < oldFreeAt.Length && i < dock.SlotFreeAt.Length; i++) dock.SlotFreeAt[i] = oldFreeAt[i];
             dock.PopIn(tweener, now, capacity - 1);
+            if (views != null)
+            {
+                views.Dock = dock;
+                views.Layout = layout;
+            }
 
             // Held parcels slide to their slots' new positions.
             for (int slot = 0; slot < session.Dock.Capacity; slot++)

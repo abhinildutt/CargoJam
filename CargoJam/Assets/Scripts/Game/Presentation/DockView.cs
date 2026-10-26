@@ -5,7 +5,8 @@ namespace CargoJam.Game.Presentation
     /// <summary>The holding pads. They turn amber with one slot left and red when full.</summary>
     public sealed class DockView : MonoBehaviour
     {
-        static readonly Vector3 PadScale = new Vector3(0.92f, 0.04f, 0.92f);
+        /// <summary>A pad's resting scale.</summary>
+        public static readonly Vector3 PadScale = new Vector3(0.92f, 0.04f, 0.92f);
 
         MeshRenderer[] pads;
         MaterialBank materials;
