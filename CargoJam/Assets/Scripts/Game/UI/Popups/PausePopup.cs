@@ -21,7 +21,11 @@ namespace CargoJam.Game.UI
         {
             var toggles = Ui.El(Body, "cj-card cj-settings");
             AddToggle(toggles, "Sound", IconKind.Sound, IconKind.SoundOff, Settings.SoundOn, v => Settings.SoundOn = v);
-            AddToggle(toggles, "Music", IconKind.Music, IconKind.MusicOff, Settings.MusicOn, v => Settings.MusicOn = v);
+            AddToggle(toggles, "Music", IconKind.Music, IconKind.MusicOff, Settings.MusicOn, v =>
+            {
+                Settings.MusicOn = v;
+                (ctx.Controller.Fx as Feel.FeelDirector)?.Music?.Refresh();
+            });
             AddToggle(toggles, "Haptics", IconKind.Haptics, IconKind.HapticsOff, Settings.HapticsOn, v =>
             {
                 Settings.HapticsOn = v;

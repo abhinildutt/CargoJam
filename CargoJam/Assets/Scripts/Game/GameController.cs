@@ -155,7 +155,7 @@ namespace CargoJam.Game
 
         void Update()
         {
-            if (Screen.width != lastScreenWidth || Screen.height != lastScreenHeight) FitCamera();
+            if (ScreenInfo.Width != lastScreenWidth || ScreenInfo.Height != lastScreenHeight) FitCamera();
 
             var pointer = Pointer.current;
             if (pointer == null || !pointer.press.wasPressedThisFrame) return;
@@ -730,8 +730,8 @@ namespace CargoJam.Game
 
         void FitCamera()
         {
-            lastScreenWidth = Screen.width;
-            lastScreenHeight = Screen.height;
+            lastScreenWidth = ScreenInfo.Width;
+            lastScreenHeight = ScreenInfo.Height;
             if (layout == null) return;
             var viewport = hudLayout != null ? hudLayout.GameViewport : new Rect(0.03f, 0.03f, 0.94f, 0.85f);
             CameraRig.Fit(cam, layout.ContentBounds, viewport);

@@ -99,7 +99,8 @@ namespace CargoJam.Game.UI
 
             streakLabel.text = p.WinStreak.ToString();
             streakChip.EnableInClassList("cj-chip--cold", p.WinStreak <= 0);
-            float m = p.StreakMultiplier;
+            // What the next win will pay, so the chip is a promise rather than a receipt.
+            float m = p.NextWinMultiplier;
             streakMultiplier.text = m > 1.01f ? UiText.Multiplier(m) + " coins" : "";
             Ui.Show(streakMultiplier, m > 1.01f);
 

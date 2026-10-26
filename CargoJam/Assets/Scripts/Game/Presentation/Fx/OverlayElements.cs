@@ -9,11 +9,14 @@ namespace CargoJam.Game.Presentation.Fx
     /// </summary>
     public sealed class EdgeVignette : VisualElement
     {
-        // Outer to inner; the sum is how far the glow reaches in from the edge (panel units).
-        static readonly float[] Widths = { 16f, 18f, 22f, 26f, 32f };
-        static readonly float[] Alphas = { 0.62f, 0.40f, 0.25f, 0.13f, 0.05f };
+        // How far the glow reaches in from each edge, as a fraction of the texture (stretched to the screen).
+        const float ReachX = 0.16f;
+        const float ReachY = 0.09f;
+        const float PeakAlpha = 0.8f;
 
-        readonly VisualElement[] layers = new VisualElement[Widths.Length];
+        static Texture2D falloff;
+
+        readonly VisualElement glow;
         readonly float tintAlpha;
 
         /// <param name="tintAlpha">Alpha of a flat full-screen tint under the edges (0 for none).</param>
@@ -21,32 +24,22 @@ namespace CargoJam.Game.Presentation.Fx
         {
             this.tintAlpha = tintAlpha;
             Fill(this);
-            VisualElement parent = this;
-            for (int i = 0; i < Widths.Length; i++)
-            {
-                var layer = new VisualElement();
-                Fill(layer);
-                layer.style.borderTopWidth = layer.style.borderBottomWidth =
-                    layer.style.borderLeftWidth = layer.style.borderRightWidth = Widths[i];
-                parent.Add(layer);
-                layers[i] = layer;
-                parent = layer;
-            }
+            glow = new VisualElement();
+            Fill(glow);
+            glow.style.backgroundImage = new StyleBackground(Falloff());
+            glow.style.backgroundSize = new BackgroundSize(Length.Percent(100), Length.Percent(100));
+            Add(glow);
             SetColor(color);
             style.opacity = 0f;
             style.display = DisplayStyle.None;
         }
 
-        /// <summary>Recolors every layer, keeping the alpha falloff.</summary>
+        /// <summary>Recolors the edge glow and the flat tint.</summary>
         public void SetColor(Color color)
         {
-            for (int i = 0; i < layers.Length; i++)
-            {
-                var c = color;
-                c.a = Alphas[i];
-                var s = layers[i].style;
-                s.borderTopColor = s.borderBottomColor = s.borderLeftColor = s.borderRightColor = c;
-            }
+            var c = color;
+            c.a = 1f;
+            glow.style.unityBackgroundImageTintColor = c;
             var tint = color;
             tint.a = tintAlpha;
             style.backgroundColor = tint;
@@ -58,6 +51,37 @@ namespace CargoJam.Game.Presentation.Fx
             bool visible = value > 0.003f;
             style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             if (visible) style.opacity = Mathf.Clamp01(value);
+        }
+
+        /// <summary>
+        /// A white texture whose alpha fades smoothly in from every edge. One small texture, stretched
+        /// to the screen, instead of stacked borders that showed visible steps.
+        /// </summary>
+        static Texture2D Falloff()
+        {
+            if (falloff != null) return falloff;
+            const int w = 64, h = 128;
+            falloff = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+                name = "Vignette Falloff",
+            };
+            var pixels = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float u = (x + 0.5f) / w, v = (y + 0.5f) / h;
+                float ex = Mathf.Clamp01(Mathf.Min(u, 1f - u) / ReachX);
+                float ey = Mathf.Clamp01(Mathf.Min(v, 1f - v) / ReachY);
+                // Strongest at the edges, eased so the inner boundary is invisible.
+                float edge = 1f - Mathf.Min(ex, ey);
+                float a = PeakAlpha * edge * edge * (3f - 2f * edge);
+                pixels[y * w + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+            }
+            falloff.SetPixels32(pixels);
+            falloff.Apply(false, true);
+            return falloff;
         }
 
         internal static void Fill(VisualElement e)

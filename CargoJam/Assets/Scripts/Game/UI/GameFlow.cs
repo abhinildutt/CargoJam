@@ -130,7 +130,7 @@ namespace CargoJam.Game.UI
         void Update()
         {
             if (ctx == null) return;
-            if (Screen.safeArea != lastSafeArea || Screen.width != lastScreen.x || Screen.height != lastScreen.y)
+            if (ScreenInfo.SafeArea != lastSafeArea || ScreenInfo.Width != lastScreen.x || ScreenInfo.Height != lastScreen.y)
                 ApplySafeArea();
 
             for (int i = 0; i < timed.Count; i++)
@@ -153,10 +153,10 @@ namespace CargoJam.Game.UI
         {
             get
             {
-                float w = Mathf.Max(1, Screen.width), h = Mathf.Max(1, Screen.height);
+                float w = Mathf.Max(1, ScreenInfo.Width), h = Mathf.Max(1, ScreenInfo.Height);
                 float k = space != null ? space.UnitsPerPixel : 1f;
                 if (k <= 0f || float.IsNaN(k)) k = 1f;
-                var safe = Screen.safeArea;
+                var safe = ScreenInfo.SafeArea;
                 float top = (safe.yMax - (LevelHud.TopBarHeight + 24f) / k) / h;
                 float bottom = (safe.yMin + LevelHud.BottomBarHeight / k) / h;
                 float left = safe.xMin / w + 0.03f;
@@ -190,6 +190,8 @@ namespace CargoJam.Game.UI
             go.SetActive(false);
             document = go.AddComponent<UIDocument>();
             document.panelSettings = settings;
+            // Above the FX overlay (callouts, vignettes), which shares this panel.
+            document.sortingOrder = 10;
             go.SetActive(true);
 
             var docRoot = document.rootVisualElement;
@@ -271,8 +273,8 @@ namespace CargoJam.Game.UI
 
         void ApplySafeArea()
         {
-            lastSafeArea = Screen.safeArea;
-            lastScreen = new Vector2Int(Screen.width, Screen.height);
+            lastSafeArea = ScreenInfo.SafeArea;
+            lastScreen = new Vector2Int(ScreenInfo.Width, ScreenInfo.Height);
             var insets = space.SafeInsets;
             ctx.Root.Query<VisualElement>(className: "cj-safe").ForEach(e =>
             {
@@ -399,16 +401,17 @@ namespace CargoJam.Game.UI
 
         void ShowFail(int parcelsLeft)
         {
-            int cost = EconomyConfig.ContinueCost(continuesUsed);
-            bool canGrow = controller.Session != null && controller.Session.CanAddHoldingSlot;
+            int cost = progression.ContinueCost(continuesUsed);
+            // A board stalled by padlocks fails with dock room to spare; another slot wouldn't help.
+            bool canGrow = controller.CanContinue;
             fail.Show(parcelsLeft, cost, progression.CanAfford(cost), canGrow, progression.WinStreak);
         }
 
         void OnContinueClicked()
         {
             if (state != State.Failed) return;
-            int cost = EconomyConfig.ContinueCost(continuesUsed);
-            if (controller.Session == null || !controller.Session.CanAddHoldingSlot || !progression.TrySpend(cost))
+            int cost = progression.ContinueCost(continuesUsed);
+            if (!controller.CanContinue || !progression.TrySpend(cost))
             {
                 fail.RejectContinue();
                 return;

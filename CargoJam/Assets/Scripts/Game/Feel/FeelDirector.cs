@@ -275,6 +275,7 @@ namespace CargoJam.Game.Feel
         public void Fail(float at, IReadOnlyList<ParcelView> needed, TruckView waiting)
         {
             if (views == null) return;
+            overlay.ClearCallouts();
             music.Duck(at, 2.2f);
             views.Tweener.At(at, () =>
             {

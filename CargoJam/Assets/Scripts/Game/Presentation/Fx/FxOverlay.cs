@@ -134,6 +134,17 @@ namespace CargoJam.Game.Presentation.Fx
             b.Element.style.scale = new Scale(Vector2.zero);
         }
 
+        /// <summary>Hides any floating callouts (the level just ended; they'd read as praise for a fail).</summary>
+        public void ClearCallouts()
+        {
+            if (callouts == null) return;
+            foreach (var c in callouts)
+            {
+                c.Start = -1f;
+                c.Label.style.display = DisplayStyle.None;
+            }
+        }
+
         /// <summary>Hides everything immediately (level teardown).</summary>
         public void ClearAll()
         {
@@ -302,7 +313,7 @@ namespace CargoJam.Game.Presentation.Fx
             var screen = cam.WorldToScreenPoint(world);
             if (screen.z <= 0f) return false;
             // Screen space is y-up; ScreenToPanel expects y-down from the top-left.
-            position = RuntimePanelUtils.ScreenToPanel(panel, new Vector2(screen.x, Screen.height - screen.y));
+            position = RuntimePanelUtils.ScreenToPanel(panel, new Vector2(screen.x, ScreenInfo.Height - screen.y));
             return true;
         }
     }

@@ -33,17 +33,17 @@ namespace CargoJam.Game.Presentation
         {
             get
             {
-                var safe = Screen.safeArea;
+                var safe = ScreenInfo.SafeArea;
                 float bar = BarHeight * Scale;
-                float top = (safe.yMax - bar) / Screen.height;
-                float bottom = safe.yMin / Screen.height + 0.02f;
-                float left = safe.xMin / Screen.width + 0.03f;
-                float right = safe.xMax / Screen.width - 0.03f;
+                float top = (safe.yMax - bar) / ScreenInfo.Height;
+                float bottom = safe.yMin / ScreenInfo.Height + 0.02f;
+                float left = safe.xMin / ScreenInfo.Width + 0.03f;
+                float right = safe.xMax / ScreenInfo.Width - 0.03f;
                 return Rect.MinMaxRect(left, bottom, right, top);
             }
         }
 
-        float Scale => Screen.height / VirtualHeight;
+        float Scale => ScreenInfo.Height / VirtualHeight;
 
         public void ShowWon(float at) => Show(Card.Won, at);
         public void ShowFailed(float at) => Show(Card.Failed, at);
@@ -59,7 +59,7 @@ namespace CargoJam.Game.Presentation
         public bool Captures(Vector2 screenPosition)
         {
             if (card != Card.None) return true;
-            float barBottom = Screen.safeArea.yMax - BarHeight * Scale;
+            float barBottom = ScreenInfo.SafeArea.yMax - BarHeight * Scale;
             return screenPosition.y >= barBottom;
         }
 
@@ -81,8 +81,8 @@ namespace CargoJam.Game.Presentation
             float s = Scale;
             GUI.matrix = Matrix4x4.Scale(new Vector3(s, s, 1f));
 
-            float width = Screen.width / s;
-            float top = (Screen.height - Screen.safeArea.yMax) / s;
+            float width = ScreenInfo.Width / s;
+            float top = (ScreenInfo.Height - ScreenInfo.SafeArea.yMax) / s;
             float pad = 24f;
 
             GUI.Label(new Rect(pad, top + 20f, 400f, 90f), LevelLabel, label);
@@ -111,7 +111,7 @@ namespace CargoJam.Game.Presentation
 
             if (card == Card.None || Time.time < cardAt) return;
 
-            float h = Screen.height / s;
+            float h = ScreenInfo.Height / s;
             var box = new Rect(width * 0.5f - 300f, h * 0.5f - 220f, 600f, 440f);
             GUI.Box(box, GUIContent.none, cardStyle);
             bool won = card == Card.Won;

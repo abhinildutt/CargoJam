@@ -73,6 +73,12 @@ namespace CargoJam.Game.UI
             }
         }
 
+        /// <summary>Acts as a completed tap (for automated play-throughs and tools).</summary>
+        public void SimulateTap()
+        {
+            if (Interactable) Clicked?.Invoke();
+        }
+
         void OnDown(PointerDownEvent e)
         {
             if (!Interactable || pressed) return;
