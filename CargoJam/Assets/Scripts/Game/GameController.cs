@@ -295,10 +295,17 @@ namespace CargoJam.Game
             CraneArmedChanged?.Invoke(false);
         }
 
+        /// <summary>
+        /// Whether the fail screen should offer Continue (+1 slot). Only when the dock filled up: a board
+        /// stalled by padlocks fails with room to spare, and another slot wouldn't help.
+        /// </summary>
+        public bool CanContinue => session != null && session.Status == GameStatus.Failed
+            && session.Dock.IsFull && session.CanAddHoldingSlot;
+
         /// <summary>The fail screen's Continue: one more slot, and play resumes.</summary>
         public bool ContinueWithExtraSlot()
         {
-            if (session == null || session.Status != GameStatus.Failed || !session.CanAddHoldingSlot) return false;
+            if (!CanContinue) return false;
             PlayAll(session.AddHoldingSlot());
             if (session.Status != GameStatus.Playing) return false;
             fx?.BoosterUsed(BoosterType.ExtraSlot, tweener.Now);
