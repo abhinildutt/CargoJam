@@ -676,6 +676,7 @@ namespace CargoJam.Game
             foreach (var p in session.Board.Parcels)
             {
                 var pv = parcels[p.Id];
+                if (pv.HasKeyBadge && !session.IsKey(p)) pv.RemoveKeyBadge();
                 if (!pv.InYard) continue;
                 pv.SetFree(free.Contains(p.Id) && !session.IsLocked(p), layout, tweener);
             }

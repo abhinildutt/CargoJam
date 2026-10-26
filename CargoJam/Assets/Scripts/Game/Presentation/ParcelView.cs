@@ -10,6 +10,7 @@ namespace CargoJam.Game.Presentation
         Transform symbol;
         Transform tarpMark;
         Transform padlock;
+        Transform keyBadge;
         bool? free;
         bool hidden;
 
@@ -22,6 +23,14 @@ namespace CargoJam.Game.Presentation
         public bool IsFree => free == true;
         public bool IsHidden => hidden;
         public bool IsLocked => padlock != null;
+        public bool HasKeyBadge => keyBadge != null;
+
+        /// <summary>The lock this parcel opened is gone (unlocked, or lifted by the Crane).</summary>
+        public void RemoveKeyBadge()
+        {
+            if (keyBadge != null) Destroy(keyBadge.gameObject);
+            keyBadge = null;
+        }
 
         public static ParcelView Create(Parcel parcel, Transform parent, Layout layout, MaterialBank materials,
             bool hidden = false, bool locked = false, bool isKey = false)
@@ -145,7 +154,8 @@ namespace CargoJam.Game.Presentation
         {
             padlock = new GameObject("Padlock").transform;
             padlock.SetParent(transform, false);
-            padlock.localPosition = new Vector3(0f, 0.62f, -0.05f);
+            padlock.localPosition = new Vector3(0f, 0.7f, -0.05f);
+            padlock.localScale = Vector3.one * 1.35f;
             MaterialBank.Box("Body", padlock, Vector3.zero, new Vector3(0.46f, 0.3f, 0.34f), materials.Gold);
             MaterialBank.Box("Shackle L", padlock, new Vector3(-0.15f, 0.24f, 0f), new Vector3(0.07f, 0.24f, 0.07f), materials.Steel);
             MaterialBank.Box("Shackle R", padlock, new Vector3(0.15f, 0.24f, 0f), new Vector3(0.07f, 0.24f, 0.07f), materials.Steel);
@@ -155,7 +165,7 @@ namespace CargoJam.Game.Presentation
 
         void AddKeyBadge()
         {
-            var key = new GameObject("Key").transform;
+            var key = keyBadge = new GameObject("Key").transform;
             key.SetParent(transform, false);
             key.localPosition = new Vector3(0.3f, 0.54f, 0.3f);
             MaterialBank.Box("Bow", key, Vector3.zero, new Vector3(0.2f, 0.06f, 0.2f), materials.Gold);
