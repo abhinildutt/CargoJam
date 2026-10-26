@@ -1,0 +1,7 @@
+<Project>
+  <!-- Keep build output out of the source tree: tools/.out is gitignored. -->
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)../.out/levelgen/obj/</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)../.out/levelgen/bin/</BaseOutputPath>
+  </PropertyGroup>
+</Project>
