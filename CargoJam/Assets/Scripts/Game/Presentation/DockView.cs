@@ -37,6 +37,11 @@ namespace CargoJam.Game.Presentation
             foreach (var pad in pads) pad.sharedMaterial = m;
         }
 
+        public int SlotCount => pads.Length;
+
+        /// <summary>The pad under a slot, for FX to decorate (don't change its scale permanently).</summary>
+        public Transform Pad(int slot) => pads[slot].transform;
+
         /// <summary>A new slot pops in (Extra Slot booster).</summary>
         public void PopIn(Tweener tweener, float at, int slot)
         {
