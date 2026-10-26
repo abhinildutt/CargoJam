@@ -37,6 +37,15 @@ namespace CargoJam.Game.Presentation
             foreach (var pad in pads) pad.sharedMaterial = m;
         }
 
+        /// <summary>A new slot pops in (Extra Slot booster).</summary>
+        public void PopIn(Tweener tweener, float at, int slot)
+        {
+            if (slot < 0 || slot >= pads.Length) return;
+            var pad = pads[slot].transform;
+            pad.localScale = Vector3.zero;
+            tweener.Run(at, 0.35f, t => { if (pad) pad.localScale = PadScale * Ease.OutBack(t); });
+        }
+
         public void Flash(Tweener tweener)
         {
             foreach (var pad in pads)

@@ -18,6 +18,8 @@ namespace CargoJam.Core
     public sealed class LevelDefinition
     {
         public int Id { get; }
+        /// <summary>TODO(stream A): set from LevelData.hard.</summary>
+        public bool Hard { get; }
         public int Width { get; }
         public int Height { get; }
         public int HoldingSlots { get; }

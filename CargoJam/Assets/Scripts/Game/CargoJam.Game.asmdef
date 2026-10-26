@@ -3,6 +3,7 @@
     "rootNamespace": "CargoJam.Game",
     "references": [
         "CargoJam.Core",
+        "CargoJam.Meta",
         "Unity.InputSystem"
     ],
     "includePlatforms": [],

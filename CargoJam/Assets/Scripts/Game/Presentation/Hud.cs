@@ -10,7 +10,7 @@ namespace CargoJam.Game.Presentation
     /// end-of-level card, and (in development builds) level skip buttons and an FPS readout.
     /// Replaced by real UI in the art pass.
     /// </summary>
-    public sealed class Hud : MonoBehaviour
+    public sealed class Hud : MonoBehaviour, IHudLayout
     {
         const float VirtualHeight = 1600f;
         const float BarHeight = 210f;

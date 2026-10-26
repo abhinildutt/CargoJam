@@ -29,3 +29,6 @@ CargoJam/crashlytics-build.properties
 
 # macOS
 .DS_Store
+
+# tools/check build output
+tools/.out/

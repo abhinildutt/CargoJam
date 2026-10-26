@@ -30,6 +30,10 @@ namespace CargoJam.Game.Presentation
         public Material Road { get; }
         public Material Wheel { get; }
         public Material Window { get; }
+        public Material Tarp { get; }
+        public Material TarpDim { get; }
+        public Material Gold { get; }
+        public Material Steel { get; }
 
         public MaterialBank(Material baseMaterial)
         {
@@ -55,14 +59,26 @@ namespace CargoJam.Game.Presentation
             Road = Make(new Color(0.32f, 0.32f, 0.35f));
             Wheel = Make(new Color(0.12f, 0.12f, 0.14f));
             Window = Make(new Color(0.75f, 0.88f, 0.95f));
+            Tarp = Make(new Color(0.55f, 0.56f, 0.6f));
+            TarpDim = Make(new Color(0.45f, 0.46f, 0.5f));
+            Gold = Make(new Color(1f, 0.78f, 0.22f));
+            Steel = Make(new Color(0.7f, 0.72f, 0.76f));
         }
 
         public Material Parcel(int color, bool free) => free ? bright[color] : dim[color];
         public Material TruckBody(int color) => truckBody[color];
         public Material TruckCab(int color) => bright[color];
 
-        /// <summary>Symbols are white, except on yellow where white would vanish.</summary>
+        /// <summary>Symbols are white, except on yellow where white would vanish. -1 is the mystery mark.</summary>
         public Material Symbol(int color) => color == YellowIndex ? symbolDark : symbolLight;
+
+        /// <summary>Recolors the ground, yard tiles and road for a route theme.</summary>
+        public void SetEnvironment(Color ground, Color tile, Color road)
+        {
+            Ground.SetColor("_BaseColor", ground);
+            Tile.SetColor("_BaseColor", tile);
+            Road.SetColor("_BaseColor", road);
+        }
 
         const int YellowIndex = 3;
         readonly Material symbolLight;

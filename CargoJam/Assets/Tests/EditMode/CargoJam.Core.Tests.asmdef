@@ -3,6 +3,7 @@
     "rootNamespace": "CargoJam.Core.Tests",
     "references": [
         "CargoJam.Core",
+        "CargoJam.Meta",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

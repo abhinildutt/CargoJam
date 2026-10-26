@@ -64,6 +64,41 @@ namespace CargoJam.Core
 
         public GameSession Clone() => new GameSession(this);
 
+        // ---- Boosters and blockers: contract for stream A (see docs/design-v2-polish-and-retention.md).
+        // Placeholders keep the game compiling until stream A lands the real rules and tests.
+
+        public const int MaxHoldingSlots = 7;
+
+        /// <summary>Undo is possible when at least one parcel is held.</summary>
+        public bool CanUndo => false;
+
+        /// <summary>Sends the most recently held parcel back to its yard cell (<see cref="ParcelReturned"/>).</summary>
+        public IReadOnlyList<GameEvent> Undo() => new List<GameEvent>();
+
+        /// <summary>True while the dock is below <see cref="MaxHoldingSlots"/>, in Playing or Failed state.</summary>
+        public bool CanAddHoldingSlot => false;
+
+        /// <summary>
+        /// Adds a holding slot (<see cref="DockExpanded"/>). Also the fail "Continue": called while
+        /// <see cref="GameStatus.Failed"/>, it resumes play.
+        /// </summary>
+        public IReadOnlyList<GameEvent> AddHoldingSlot() => new List<GameEvent>();
+
+        /// <summary>The Crane can lift any parcel on the board, blocked or locked, if the truck or dock can take it.</summary>
+        public bool CanCrane(Cell cell) => false;
+
+        /// <summary>Like <see cref="Tap"/> but ignores blocking and locks; resulting events have Lifted = true.</summary>
+        public IReadOnlyList<GameEvent> CraneLift(Cell cell) => new List<GameEvent>();
+
+        /// <summary>Locked parcels can't be tapped until their key parcel has been loaded.</summary>
+        public bool IsLocked(Parcel parcel) => false;
+
+        /// <summary>Mystery parcels hide their color until they become free.</summary>
+        public bool IsHidden(Parcel parcel) => false;
+
+        /// <summary>True for a parcel whose loading unlocks some locked parcel.</summary>
+        public bool IsKey(Parcel parcel) => false;
+
         public IReadOnlyList<GameEvent> Tap(Cell cell)
         {
             var events = new List<GameEvent>();

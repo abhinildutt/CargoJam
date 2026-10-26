@@ -16,6 +16,8 @@ namespace CargoJam.Game.Presentation
         public const float QueueShift = 0.4f;
 
         public const float Lift = 0.12f;
+        /// <summary>Crane booster: straight up and over the dock edge.</summary>
+        public const float CraneLift = 0.45f;
         public const float BlockedShake = 0.22f;
 
         public const float WinCelebrateDelay = 0.1f;
