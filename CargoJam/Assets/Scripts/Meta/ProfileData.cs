@@ -35,6 +35,7 @@ namespace CargoJam.Meta
 
         public int totalWins;
         public int totalGiveUps;
+        /// <summary>Lifetime coins granted (wins, chests, daily rewards, AddCoins); spending doesn't lower it.</summary>
         public int coinsEarned;
     }
 
