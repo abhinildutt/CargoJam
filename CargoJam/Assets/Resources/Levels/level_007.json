@@ -1,0 +1,14 @@
+{
+  "id": 7,
+  "holdingSlots": 5,
+  "truckCapacity": 3,
+  "trucks": "RYBYBYGGRGBR",
+  "rows": [
+    "GYRGRG",
+    "YGBBGB",
+    "YGRRYG",
+    "YYRYBB",
+    "RGRYYB",
+    "GBRBRB"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": 3,
+  "holdingSlots": 5,
+  "truckCapacity": 3,
+  "trucks": "RBRB",
+  "rows": [
+    "RRRB",
+    "RBBB",
+    "RRBB"
+  ]
+}

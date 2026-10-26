@@ -1,0 +1,31 @@
+# Unity generated
+CargoJam/[Ll]ibrary/
+CargoJam/[Tt]emp/
+CargoJam/[Oo]bj/
+CargoJam/[Bb]uild/
+CargoJam/[Bb]uilds/
+CargoJam/[Ll]ogs/
+CargoJam/[Uu]ser[Ss]ettings/
+CargoJam/[Mm]emoryCaptures/
+CargoJam/[Rr]ecordings/
+CargoJam/Screenshots/
+
+# IDE / solution files Unity regenerates
+CargoJam/*.csproj
+CargoJam/*.sln
+CargoJam/*.slnx
+CargoJam/*.suo
+CargoJam/*.user
+CargoJam/.vs/
+CargoJam/.vscode/
+CargoJam/.idea/
+
+# Crash and build reports
+CargoJam/sysinfo.txt
+CargoJam/*.apk
+CargoJam/*.aab
+CargoJam/*.unitypackage
+CargoJam/crashlytics-build.properties
+
+# macOS
+.DS_Store

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "unity-editor": {
+      "type": "stdio",
+      "command": "/Users/abhinildutt/.unity/bin/unity",
+      "args": [
+        "mcp",
+        "--project-path",
+        "/Users/abhinildutt/Desktop/iOS game dev/CargoJam"
+      ],
+      "env": {}
+    }
+  }
+}
