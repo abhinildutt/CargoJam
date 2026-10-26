@@ -1,0 +1,663 @@
+/* Cargo Jam UI: screens and popups. */
+
+/* ---- In-level HUD --------------------------------------------------------------------------- */
+
+.cj-hud__top {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+}
+
+.cj-hud__level {
+    flex-direction: row;
+    align-items: center;
+    height: 92px;
+    padding: 0 36px;
+    border-radius: 46px;
+    background-color: var(--chip);
+}
+
+.cj-hud__level-label {
+    font-size: 54px;
+}
+
+/* Keeps the centre pill centred: the coin counter (top layer) occupies this spot. */
+.cj-hud__coin-space {
+    width: 270px;
+}
+
+.cj-hud__bottom {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding-bottom: 24px;
+}
+
+/* ---- Booster buttons ------------------------------------------------------------------------ */
+
+.cj-booster {
+    width: 210px;
+    height: 230px;
+    margin: 0 22px;
+    align-items: center;
+    justify-content: center;
+}
+
+.cj-btn--booster {
+    width: 180px;
+    height: 180px;
+    border-radius: 90px;
+    border-bottom-width: 12px;
+    padding: 0;
+}
+
+.cj-btn--booster .cj-btn__icon {
+    width: 104px;
+    height: 104px;
+    margin: 0;
+}
+
+.cj-booster--unusable .cj-btn__icon {
+    opacity: 0.4;
+}
+
+.cj-booster--armed .cj-btn--booster {
+    background-color: var(--coin);
+    border-color: var(--coin-edge);
+}
+
+.cj-booster__ring {
+    position: absolute;
+    left: 15px;
+    top: 25px;
+    width: 180px;
+    height: 180px;
+    border-radius: 90px;
+    border-width: 10px;
+    border-color: var(--coin);
+}
+
+.cj-booster__badge {
+    position: absolute;
+    top: -14px;
+    right: -14px;
+    min-width: 72px;
+    height: 72px;
+    padding: 0 12px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 36px;
+    border-width: 5px;
+    border-color: #FFFFFF;
+    background-color: var(--danger);
+}
+
+.cj-booster__badge-label {
+    font-size: 38px;
+}
+
+.cj-booster__price,
+.cj-booster__lock {
+    position: absolute;
+    bottom: -34px;
+    left: 10px;
+    right: 10px;
+    height: 60px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    border-radius: 30px;
+    background-color: rgba(59, 47, 42, 0.92);
+}
+
+.cj-booster__lock {
+    background-color: #8F877C;
+}
+
+.cj-booster__price-coin {
+    width: 46px;
+    height: 46px;
+    margin-right: 4px;
+}
+
+.cj-booster__price-label,
+.cj-booster__lock-label {
+    font-size: 36px;
+}
+
+/* ---- Home ----------------------------------------------------------------------------------- */
+
+.cj-home__scrim {
+    background-color: rgba(20, 16, 30, 0.38);
+}
+
+.cj-home__top {
+    flex-direction: row;
+    align-items: center;
+    padding: 0 28px;
+}
+
+.cj-home__daily {
+    margin-left: 18px;
+}
+
+.cj-home__header {
+    align-items: center;
+    margin-top: 40px;
+}
+
+.cj-home__route {
+    font-size: 76px;
+}
+
+.cj-home__chest {
+    flex-direction: row;
+    align-items: center;
+    margin: 0 60px 36px 60px;
+    padding: 22px 32px;
+    border-width: 6px;
+    border-radius: 44px;
+    border-color: var(--panel-border);
+    background-color: var(--panel);
+}
+
+.cj-home__chest-icon {
+    width: 150px;
+    height: 150px;
+}
+
+.cj-home__chest-icon--big {
+    width: 176px;
+    height: 176px;
+}
+
+.cj-home__chest-col {
+    flex-grow: 1;
+    flex-shrink: 1;
+    margin-left: 26px;
+}
+
+.cj-home__chest-title {
+    font-size: 38px;
+    -unity-font-style: bold;
+    color: var(--text-dark);
+    margin-bottom: 10px;
+}
+
+.cj-home__chest-hint {
+    font-size: 34px;
+    color: var(--text-dark);
+    margin-top: 10px;
+}
+
+.cj-home__play {
+    align-self: center;
+    margin-bottom: 110px;
+}
+
+/* ---- HARD banner ---------------------------------------------------------------------------- */
+
+.cj-hard-banner {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 34%;
+    height: 230px;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-top-width: 10px;
+    border-bottom-width: 10px;
+    border-color: var(--danger-edge);
+    background-color: var(--danger);
+}
+
+.cj-hard-banner__inner {
+    flex-direction: row;
+    align-items: center;
+}
+
+.cj-hard-banner__icon {
+    width: 110px;
+    height: 110px;
+    margin: 0 20px;
+}
+
+.cj-hard-banner__col {
+    align-items: center;
+}
+
+.cj-hard-banner__title {
+    font-size: 100px;
+}
+
+.cj-hard-banner__sub {
+    font-size: 42px;
+    color: var(--coin);
+}
+
+/* ---- Tutorial ------------------------------------------------------------------------------- */
+
+.cj-hand {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.cj-tip {
+    align-self: center;
+    flex-direction: row;
+    align-items: center;
+    max-width: 960px;
+    margin-top: 24px;
+    padding: 20px 34px;
+    border-width: 6px;
+    border-radius: 44px;
+    border-color: var(--panel-border);
+    background-color: var(--panel);
+}
+
+.cj-tip__icon {
+    width: 64px;
+    height: 64px;
+    margin-right: 18px;
+}
+
+.cj-tip__label {
+    flex-shrink: 1;
+    font-size: 40px;
+    -unity-font-style: bold;
+    white-space: normal;
+    color: var(--text-dark);
+}
+
+/* ---- Win panel ------------------------------------------------------------------------------ */
+
+.cj-win__stars {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: center;
+    margin-top: 6px;
+}
+
+.cj-win__star {
+    width: 130px;
+    height: 130px;
+    margin: 0 8px;
+}
+
+.cj-win__star--mid {
+    width: 170px;
+    height: 170px;
+}
+
+.cj-win__reward {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    margin-top: 16px;
+}
+
+.cj-win__coin {
+    width: 120px;
+    height: 120px;
+    margin-right: 16px;
+}
+
+.cj-win__coins {
+    font-size: 104px;
+    color: var(--coin);
+}
+
+.cj-win__mult {
+    flex-direction: row;
+    align-items: center;
+    height: 84px;
+    margin-top: 10px;
+    padding: 0 30px 0 12px;
+    border-radius: 42px;
+    border-bottom-width: 8px;
+    border-color: var(--danger-edge);
+    background-color: var(--danger);
+}
+
+.cj-win__mult-icon {
+    width: 62px;
+    height: 62px;
+    margin-right: 8px;
+}
+
+.cj-win__mult-label {
+    font-size: 46px;
+}
+
+.cj-win__streak {
+    margin-top: 10px;
+    font-size: 38px;
+    -unity-font-style: bold;
+    color: var(--text-dark);
+}
+
+.cj-win__chest {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    margin-top: 22px;
+    padding: 18px 26px;
+    border-radius: 36px;
+    background-color: rgba(232, 211, 168, 0.45);
+}
+
+.cj-win__chest-icon {
+    width: 124px;
+    height: 124px;
+}
+
+.cj-win__chest-col {
+    flex-grow: 1;
+    margin-left: 22px;
+}
+
+.cj-win__chest-ready {
+    font-size: 42px;
+    color: var(--coin);
+    margin-top: 8px;
+}
+
+/* ---- Fail panel ----------------------------------------------------------------------------- */
+
+.cj-fail__badge {
+    width: 200px;
+    height: 200px;
+    margin-top: 14px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 100px;
+    border-bottom-width: 12px;
+    border-color: var(--secondary-edge);
+    background-color: var(--secondary);
+}
+
+.cj-fail__icon {
+    width: 116px;
+    height: 116px;
+}
+
+.cj-fail__left {
+    margin-top: 18px;
+    font-size: 60px;
+    color: var(--danger);
+}
+
+.cj-fail__continue-text {
+    align-items: center;
+}
+
+.cj-fail__continue-sub {
+    font-size: 36px;
+    margin-top: -6px;
+}
+
+.cj-fail__poor {
+    margin-top: 12px;
+    font-size: 38px;
+    -unity-font-style: bold;
+    color: var(--danger);
+}
+
+.cj-fail__warning {
+    margin-top: 22px;
+    font-size: 36px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    color: var(--text-dark);
+}
+
+.cj-fail__giveup {
+    margin-top: 16px;
+}
+
+/* ---- Pause / settings ----------------------------------------------------------------------- */
+
+.cj-settings {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px 0;
+}
+
+.cj-settings__row {
+    flex-direction: row;
+    align-items: center;
+    height: 116px;
+    padding: 0 30px;
+}
+
+.cj-settings__icon {
+    width: 72px;
+    height: 72px;
+}
+
+.cj-settings__label {
+    margin-left: 24px;
+    font-size: 48px;
+    -unity-font-style: bold;
+    color: var(--text-dark);
+}
+
+.cj-pause__buttons {
+    width: 100%;
+    align-items: center;
+}
+
+.cj-pause__row {
+    flex-direction: row;
+    justify-content: center;
+    margin-top: 24px;
+}
+
+.cj-pause__half {
+    min-width: 0;
+    width: 360px;
+    margin: 0 10px;
+    padding: 0 20px;
+}
+
+/* ---- Booster disc (buy / unlock) ------------------------------------------------------------ */
+
+.cj-booster-disc {
+    width: 220px;
+    height: 220px;
+    margin: 10px 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 110px;
+    border-width: 8px;
+    border-bottom-width: 16px;
+    border-color: var(--panel-border);
+    background-color: #FFFFFF;
+}
+
+.cj-booster-disc__icon {
+    width: 136px;
+    height: 136px;
+}
+
+.cj-booster-disc--big {
+    width: 270px;
+    height: 270px;
+    border-radius: 135px;
+}
+
+.cj-booster-disc--big .cj-booster-disc__icon {
+    width: 170px;
+    height: 170px;
+}
+
+/* ---- Chest / unlock stage ------------------------------------------------------------------- */
+
+.cj-chest__stage {
+    width: 520px;
+    height: 400px;
+    align-items: center;
+    justify-content: center;
+}
+
+.cj-chest__rays {
+    position: absolute;
+    left: -80px;
+    top: -140px;
+    width: 680px;
+    height: 680px;
+}
+
+.cj-chest__icon {
+    width: 310px;
+    height: 310px;
+}
+
+.cj-chest__icon--big {
+    width: 370px;
+    height: 370px;
+}
+
+.cj-chest__hint {
+    font-size: 60px;
+    color: var(--coin);
+    margin-top: 6px;
+}
+
+.cj-chest__rewards {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.cj-reward {
+    align-items: center;
+    margin: 0 16px;
+}
+
+.cj-reward__disc {
+    width: 140px;
+    height: 140px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 70px;
+    border-bottom-width: 10px;
+    border-color: #D9CBB0;
+    background-color: #FFFFFF;
+}
+
+.cj-reward__icon {
+    width: 96px;
+    height: 96px;
+}
+
+.cj-reward__label {
+    font-size: 48px;
+    margin-top: 6px;
+}
+
+.cj-unlock__name {
+    font-size: 76px;
+    margin-top: 4px;
+}
+
+.cj-unlock__gift {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 10px;
+    padding: 10px 26px;
+    border-radius: 36px;
+    background-color: rgba(232, 211, 168, 0.45);
+}
+
+.cj-unlock__gift-icon {
+    width: 64px;
+    height: 64px;
+    margin-right: 14px;
+}
+
+.cj-unlock__gift-label {
+    font-size: 40px;
+    -unity-font-style: bold;
+    color: var(--text-dark);
+}
+
+/* ---- Daily reward --------------------------------------------------------------------------- */
+
+.cj-daily__streak {
+    font-size: 40px;
+    -unity-font-style: bold;
+    color: var(--text-dark);
+    margin-bottom: 10px;
+}
+
+.cj-daily__grid {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.cj-daily__cell {
+    width: 170px;
+    height: 214px;
+    margin: 8px;
+    padding: 12px 0;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 28px;
+    border-bottom-width: 9px;
+    border-color: #D9CBB0;
+    background-color: #FFFFFF;
+}
+
+.cj-daily__cell--chest {
+    width: 356px;
+    background-color: #FFE9B0;
+}
+
+.cj-daily__cell--claimed {
+    opacity: 0.6;
+}
+
+.cj-daily__cell--today {
+    border-width: 7px;
+    border-bottom-width: 12px;
+    border-color: var(--coin-edge);
+    background-color: #FFF3C4;
+}
+
+.cj-daily__day {
+    font-size: 32px;
+}
+
+.cj-daily__icon {
+    width: 92px;
+    height: 92px;
+}
+
+.cj-daily__amount {
+    font-size: 38px;
+    color: var(--coin);
+}
+
+.cj-daily__check {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 24px;
+    background-color: rgba(59, 201, 91, 0.55);
+}
+
+.cj-daily__check-icon {
+    width: 92px;
+    height: 92px;
+}

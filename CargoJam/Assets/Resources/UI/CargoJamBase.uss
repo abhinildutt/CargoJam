@@ -1,0 +1,537 @@
+/* Cargo Jam UI: tokens, layout helpers and shared widgets.
+   Sizes are panel units at the 1080x1920 reference resolution. */
+
+.cj-root {
+    --primary: #3BC95B;
+    --primary-edge: #2A9644;
+    --secondary: #4A90F0;
+    --secondary-edge: #3570C4;
+    --coin: #FFC83D;
+    --coin-edge: #D99A1E;
+    --danger: #F2554B;
+    --danger-edge: #C23B33;
+    --panel: #FFF6E5;
+    --panel-border: #E8D3A8;
+    --text-dark: #3B2F2A;
+    --scrim: rgba(20, 16, 30, 0.55);
+    --chip: rgba(30, 20, 40, 0.45);
+
+    font-size: 40px;
+    color: var(--text-dark);
+}
+
+.cj-root .unity-label {
+    margin: 0;
+    padding: 0;
+}
+
+.cj-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.cj-grow {
+    flex-grow: 1;
+}
+
+.cj-icon {
+    flex-shrink: 0;
+}
+
+/* Bold white text with a dark outline: the candy-game look. */
+.cj-txt {
+    -unity-font-style: bold;
+    color: #FFFFFF;
+    -unity-text-outline-width: 3px;
+    -unity-text-outline-color: rgba(59, 47, 42, 0.95);
+    text-shadow: 0 4px 0 rgba(0, 0, 0, 0.25);
+    -unity-text-align: middle-center;
+}
+
+/* ---- Candy buttons ------------------------------------------------------------------------ */
+
+.cj-btn {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0 40px;
+    border-bottom-width: 14px;
+    border-radius: 80px;
+    background-color: var(--secondary);
+    border-color: var(--secondary-edge);
+}
+
+.cj-btn--pressed {
+    border-bottom-width: 6px;
+}
+
+.cj-btn__shine {
+    position: absolute;
+    left: 14%;
+    right: 14%;
+    top: 8px;
+    height: 30%;
+    border-radius: 40px;
+    background-color: rgba(255, 255, 255, 0.28);
+}
+
+.cj-btn__content {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+
+.cj-btn__icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 8px;
+}
+
+.cj-btn__label {
+    font-size: 64px;
+    margin: 0 8px;
+}
+
+.cj-btn--primary {
+    background-color: var(--primary);
+    border-color: var(--primary-edge);
+}
+
+.cj-btn--secondary {
+    background-color: var(--secondary);
+    border-color: var(--secondary-edge);
+}
+
+.cj-btn--danger {
+    background-color: var(--danger);
+    border-color: var(--danger-edge);
+}
+
+.cj-btn--coin {
+    background-color: var(--coin);
+    border-color: var(--coin-edge);
+}
+
+.cj-btn--white {
+    background-color: #FFFFFF;
+    border-color: #D9CBB0;
+}
+
+.cj-btn--greyed {
+    background-color: #C9C1B6;
+    border-color: #9C9488;
+}
+
+.cj-btn--huge {
+    height: 200px;
+    min-width: 620px;
+    border-radius: 100px;
+    border-bottom-width: 18px;
+    padding: 0 70px;
+}
+
+.cj-btn--huge .cj-btn__label {
+    font-size: 88px;
+}
+
+.cj-btn--big {
+    height: 164px;
+    min-width: 540px;
+    border-radius: 82px;
+    margin-top: 28px;
+}
+
+.cj-btn--big .cj-btn__label {
+    font-size: 68px;
+}
+
+.cj-btn--medium {
+    height: 132px;
+    min-width: 300px;
+    border-radius: 66px;
+    border-bottom-width: 12px;
+}
+
+.cj-btn--medium .cj-btn__label {
+    font-size: 50px;
+}
+
+.cj-btn--medium .cj-btn__icon {
+    width: 54px;
+    height: 54px;
+}
+
+.cj-btn--small {
+    height: 108px;
+    min-width: 280px;
+    border-radius: 54px;
+    border-bottom-width: 10px;
+}
+
+.cj-btn--small .cj-btn__label {
+    font-size: 44px;
+}
+
+.cj-btn--round-m {
+    width: 124px;
+    height: 124px;
+    border-radius: 62px;
+    border-bottom-width: 10px;
+    padding: 0;
+}
+
+.cj-btn--round-m .cj-btn__icon {
+    width: 62px;
+    height: 62px;
+    margin: 0;
+}
+
+.cj-btn--close {
+    position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 100px;
+    height: 100px;
+    border-radius: 50px;
+    border-bottom-width: 9px;
+    padding: 0;
+}
+
+.cj-btn--close .cj-btn__icon {
+    width: 46px;
+    height: 46px;
+    margin: 0;
+}
+
+/* ---- Coin counter, chips, prices, badges --------------------------------------------------- */
+
+.cj-top__row {
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    padding-right: 28px;
+}
+
+.cj-coins {
+    flex-direction: row;
+    align-items: center;
+    height: 96px;
+    min-width: 250px;
+    padding-right: 32px;
+    margin-left: 24px;
+    border-radius: 48px;
+    background-color: var(--chip);
+}
+
+.cj-coins__icon {
+    width: 112px;
+    height: 112px;
+    margin-left: -28px;
+    margin-right: 6px;
+}
+
+.cj-coins__label {
+    font-size: 56px;
+    flex-grow: 1;
+}
+
+.cj-chip {
+    flex-direction: row;
+    align-items: center;
+    height: 96px;
+    padding: 0 28px 0 8px;
+    margin-left: 18px;
+    border-radius: 48px;
+    background-color: var(--chip);
+}
+
+.cj-chip__icon {
+    width: 80px;
+    height: 80px;
+}
+
+.cj-chip__label {
+    font-size: 52px;
+    margin-left: 6px;
+}
+
+.cj-chip__tag {
+    font-size: 34px;
+    color: var(--coin);
+    margin-left: 12px;
+}
+
+.cj-chip--cold .cj-chip__icon {
+    opacity: 0.4;
+}
+
+.cj-price {
+    flex-direction: row;
+    align-items: center;
+    height: 80px;
+    margin-left: 24px;
+    padding: 0 22px 0 6px;
+    border-radius: 40px;
+    background-color: rgba(0, 0, 0, 0.22);
+}
+
+.cj-price__coin {
+    width: 62px;
+    height: 62px;
+    margin-right: 6px;
+}
+
+.cj-price__label {
+    font-size: 48px;
+}
+
+.cj-hard-badge {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 54px;
+    padding: 0 18px;
+    margin-left: 16px;
+    border-radius: 27px;
+    border-bottom-width: 6px;
+    background-color: var(--danger);
+    border-color: var(--danger-edge);
+}
+
+.cj-hard-badge__label {
+    font-size: 32px;
+}
+
+.cj-hard-badge--play {
+    position: absolute;
+    top: -34px;
+    right: -26px;
+    height: 70px;
+    padding: 0 26px;
+    border-radius: 35px;
+    rotate: 10deg;
+}
+
+.cj-hard-badge--play .cj-hard-badge__label {
+    font-size: 42px;
+}
+
+.cj-dot {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+    border-width: 5px;
+    border-color: #FFFFFF;
+    background-color: var(--danger);
+}
+
+.cj-card {
+    background-color: rgba(232, 211, 168, 0.45);
+    border-radius: 36px;
+}
+
+/* ---- Progress bar --------------------------------------------------------------------------- */
+
+.cj-bar {
+    height: 56px;
+    border-radius: 28px;
+    border-width: 4px;
+    border-color: rgba(59, 47, 42, 0.5);
+    background-color: rgba(59, 47, 42, 0.35);
+    overflow: hidden;
+}
+
+.cj-bar__fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: 24px;
+    background-color: var(--primary);
+}
+
+.cj-bar__gloss {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: 4px;
+    height: 32%;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+.cj-bar__label {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    font-size: 34px;
+}
+
+.cj-bar--chest {
+    width: 100%;
+}
+
+.cj-bar--chest .cj-bar__fill {
+    background-color: var(--coin);
+}
+
+.cj-bar--route {
+    width: 440px;
+    height: 48px;
+    margin-top: 14px;
+}
+
+.cj-bar--route .cj-bar__fill {
+    background-color: var(--secondary);
+}
+
+/* ---- Switch --------------------------------------------------------------------------------- */
+
+.cj-switch {
+    width: 150px;
+    height: 80px;
+    border-radius: 40px;
+    flex-shrink: 0;
+    background-color: #C9C1B6;
+}
+
+.cj-switch--on {
+    background-color: var(--primary);
+}
+
+.cj-switch__knob {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    width: 64px;
+    height: 64px;
+    border-radius: 32px;
+    background-color: #FFFFFF;
+    border-bottom-width: 4px;
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
+/* ---- Fly-ins -------------------------------------------------------------------------------- */
+
+.cj-flyer {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.cj-spark {
+    position: absolute;
+    left: 0;
+    top: 0;
+    border-radius: 50px;
+}
+
+/* ---- Modals --------------------------------------------------------------------------------- */
+
+.cj-modal {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+}
+
+.cj-scrim {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--scrim);
+}
+
+.cj-panel {
+    width: 880px;
+    padding: 0 48px 48px 48px;
+    align-items: center;
+    border-width: 8px;
+    border-bottom-width: 18px;
+    border-radius: 64px;
+    border-color: var(--panel-border);
+    background-color: var(--panel);
+}
+
+.cj-panel__body {
+    width: 100%;
+    align-items: center;
+    padding-top: 20px;
+}
+
+.cj-ribbon {
+    margin-top: -66px;
+    height: 132px;
+    min-width: 560px;
+    padding: 0 64px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 66px;
+    border-bottom-width: 14px;
+    background-color: var(--secondary);
+    border-color: var(--secondary-edge);
+}
+
+.cj-ribbon__label {
+    font-size: 68px;
+}
+
+.cj-ribbon--primary {
+    background-color: var(--primary);
+    border-color: var(--primary-edge);
+}
+
+.cj-ribbon--secondary {
+    background-color: var(--secondary);
+    border-color: var(--secondary-edge);
+}
+
+.cj-ribbon--danger {
+    background-color: var(--danger);
+    border-color: var(--danger-edge);
+}
+
+.cj-ribbon--coin {
+    background-color: var(--coin);
+    border-color: var(--coin-edge);
+}
+
+.cj-popup__text {
+    max-width: 760px;
+    margin: 14px 0 6px 0;
+    font-size: 42px;
+    white-space: normal;
+    -unity-text-align: middle-center;
+    color: var(--text-dark);
+}
+
+/* ---- Toast ---------------------------------------------------------------------------------- */
+
+.cj-toast {
+    align-self: center;
+    margin-top: 16px;
+    padding: 18px 40px;
+    border-radius: 44px;
+    background-color: rgba(30, 20, 40, 0.82);
+}
+
+.cj-toast__label {
+    font-size: 42px;
+    -unity-font-style: bold;
+    color: #FFFFFF;
+    -unity-text-align: middle-center;
+}
