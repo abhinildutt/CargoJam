@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NUnit.Framework;
@@ -43,6 +44,76 @@ namespace CargoJam.Core.Tests
                 new LevelData { trucks = "RX", rows = new[] { "RRZ" } }, out _);
             Assert.That(errors, Has.Some.Contains("'Z'"));
             Assert.That(errors, Has.Some.Contains("'X'"));
+        }
+
+        [Test]
+        public void HardFlagMysteryCellsAndLocksAreExposed()
+        {
+            var data = TestLevels.Data("RB", 5, 3, "RBb", "rRB");
+            data.hard = true;
+            data.locks = new[] { TestLevels.Lock(0, 0, 1, 1) };
+            var level = LevelDefinition.Parse(data);
+
+            Assert.That(level.Hard, Is.True);
+            Assert.That(level.IsMystery(2, 0), Is.True);
+            Assert.That(level.IsMystery(0, 1), Is.True);
+            Assert.That(level.IsMystery(1, 0), Is.False);
+            Assert.That(level.ColorAt(2, 0), Is.EqualTo(ParcelColors.FromCode('B')), "a mystery keeps its real color");
+            Assert.That(level.Locks.Single().Locked, Is.EqualTo(new Cell(0, 0)));
+            Assert.That(level.Locks.Single().Key, Is.EqualTo(new Cell(1, 1)));
+        }
+
+        [Test]
+        public void MissingLocksMeanNoLocks()
+        {
+            var level = TestLevels.Make("R", 5, 3, "RRR");
+            Assert.That(level.Hard, Is.False);
+            Assert.That(level.Locks, Is.Empty);
+        }
+
+        static List<string> LockErrors(params LockData[] locks)
+        {
+            var data = TestLevels.Data("RB", 5, 3, "RRB.", "RBB.");
+            data.locks = locks;
+            return LevelDefinition.Validate(data, out _);
+        }
+
+        [Test]
+        public void LockCellsMustHoldParcels()
+        {
+            Assert.That(LockErrors(TestLevels.Lock(3, 0, 0, 0)), Has.Some.Contains("no parcel at locked cell (3,0)"));
+            Assert.That(LockErrors(TestLevels.Lock(0, 0, 3, 1)), Has.Some.Contains("no parcel at key cell (3,1)"));
+            Assert.That(LockErrors(TestLevels.Lock(0, 0, 9, 9)), Has.Some.Contains("no parcel at key cell (9,9)"));
+            Assert.That(LockErrors(TestLevels.Lock(-1, 0, 0, 0)), Has.Some.Contains("locked cell (-1,0)"));
+        }
+
+        [Test]
+        public void ParcelCantBeItsOwnKey()
+        {
+            Assert.That(LockErrors(TestLevels.Lock(1, 1, 1, 1)), Has.Some.Contains("its own key"));
+        }
+
+        [Test]
+        public void ParcelHasAtMostOneLock()
+        {
+            var errors = LockErrors(TestLevels.Lock(0, 0, 1, 0), TestLevels.Lock(0, 0, 2, 0));
+            Assert.That(errors, Has.Some.Contains("already has a lock"));
+        }
+
+        [Test]
+        public void LockCyclesAreRejected()
+        {
+            Assert.That(LockErrors(TestLevels.Lock(0, 0, 1, 0), TestLevels.Lock(1, 0, 0, 0)),
+                Has.Some.Contains("cycle"));
+            Assert.That(LockErrors(TestLevels.Lock(0, 0, 1, 0), TestLevels.Lock(1, 0, 2, 0), TestLevels.Lock(2, 0, 0, 0)),
+                Has.Some.Contains("cycle"));
+        }
+
+        [Test]
+        public void LockChainsAndSharedKeysAreFine()
+        {
+            Assert.That(LockErrors(TestLevels.Lock(0, 0, 1, 0), TestLevels.Lock(1, 0, 2, 0)), Is.Empty);
+            Assert.That(LockErrors(TestLevels.Lock(0, 0, 2, 0), TestLevels.Lock(1, 0, 2, 0)), Is.Empty);
         }
 
         [Test]

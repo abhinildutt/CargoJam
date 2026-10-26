@@ -1,9 +1,12 @@
 namespace CargoJam.Core
 {
-    /// <summary>Fixed slots where non-matching parcels wait. Parcels keep their slot until they leave.</summary>
+    /// <summary>
+    /// Slots where non-matching parcels wait. Parcels keep their slot until they leave. The dock can
+    /// grow (Extra Slot) but never shrinks, so slot indexes stay stable.
+    /// </summary>
     public sealed class HoldingDock
     {
-        readonly Parcel[] slots;
+        Parcel[] slots;
 
         public int Capacity => slots.Length;
         public int Count { get; private set; }
@@ -26,6 +29,20 @@ namespace CargoJam.Core
                 Count++;
                 return i;
             }
+            return -1;
+        }
+
+        /// <summary>Adds one empty slot at the end. Existing parcels keep their slot indexes.</summary>
+        internal void AddSlot()
+        {
+            System.Array.Resize(ref slots, slots.Length + 1);
+        }
+
+        /// <summary>The slot holding <paramref name="parcel"/>, or -1 when it isn't held.</summary>
+        internal int IndexOf(Parcel parcel)
+        {
+            for (int i = 0; i < slots.Length; i++)
+                if (slots[i] == parcel) return i;
             return -1;
         }
 

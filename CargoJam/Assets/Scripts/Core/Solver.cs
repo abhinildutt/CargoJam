@@ -48,6 +48,7 @@ namespace CargoJam.Core
 
             foreach (var parcel in free)
             {
+                if (session.IsLocked(parcel)) continue;
                 if (session.Dock.IsFull && (truck == null || !truck.Accepts(parcel))) continue;
                 var next = session.Clone();
                 next.Tap(parcel.Cell);

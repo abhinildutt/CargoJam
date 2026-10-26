@@ -1,0 +1,19 @@
+{
+  "id": 34,
+  "hard": false,
+  "holdingSlots": 5,
+  "truckCapacity": 3,
+  "trucks": "RBRBOBYBGBYBYOG",
+  "rows": [
+    "BRBBBBB",
+    "RBob.rB",
+    "RRBORBY",
+    "GBBYOBY",
+    "YYGGYBG",
+    "YB.OYYB",
+    "OO..GGB"
+  ],
+  "locks": [
+    { "x": 3, "y": 0, "keyX": 0, "keyY": 3 }
+  ]
+}

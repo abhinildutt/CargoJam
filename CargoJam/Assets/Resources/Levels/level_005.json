@@ -1,13 +1,13 @@
 {
   "id": 5,
+  "hard": false,
   "holdingSlots": 5,
   "truckCapacity": 3,
-  "trucks": "RRBBGRBG",
+  "trucks": "GBRB",
   "rows": [
-    "GBBBG",
-    "RGRRB",
-    "R.GBR",
-    "BGRRB",
-    "GBBRR"
+    "GBRG",
+    "BGRB",
+    "BRB.",
+    "...B"
   ]
 }
