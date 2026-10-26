@@ -96,9 +96,7 @@ namespace CargoJam.Game.UI
         {
             if (ctx == null) return;
             ApplySafeArea();
-            // The current level sits live (and dimmed) behind the home screen.
             ShowHome();
-            controller.StartLevel(progression.LevelIndex);
         }
 
         void OnDestroy()
@@ -300,6 +298,8 @@ namespace CargoJam.Game.UI
             banner.Stop();
             ctx.Toast.Hide();
             controller.CancelCrane();
+            // The main menu has its own living depot backdrop; the level loads when Play is tapped.
+            controller.ShowMenuScene(progression.LevelIndex);
             home.Show();
 
             if (dailyChecked) return;
@@ -436,7 +436,6 @@ namespace CargoJam.Game.UI
             fail.Close(() =>
             {
                 ShowHome();
-                controller.StartLevel(progression.LevelIndex);
             });
         }
 
@@ -463,7 +462,6 @@ namespace CargoJam.Game.UI
             {
                 if (controller.MovedThisLevel) progression.RecordGiveUp();
                 ShowHome();
-                controller.StartLevel(progression.LevelIndex);
             });
         }
 

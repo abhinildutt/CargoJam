@@ -64,6 +64,10 @@ namespace CargoJam.Game
         int lastScreenWidth, lastScreenHeight;
         float inputBlockedUntil;
         LevelViews views;
+        MenuDiorama menu;
+
+        /// <summary>Where the home screen's 3D backdrop sits on screen (0..1 viewport), between its logo and buttons.</summary>
+        static readonly Rect MenuViewport = new Rect(0.02f, 0.31f, 0.96f, 0.27f);
         bool craneArmed;
         bool movedThisLevel;
 
@@ -174,15 +178,8 @@ namespace CargoJam.Game
             levelIndex = Mathf.Max(0, index);
             if (debugHud != null) Progress.LevelIndex = levelIndex;
 
-            fx?.LevelCleared();
-            tweener.Clear();
+            ClearLevel();
             debugHud?.HideCard();
-            parcels.Clear();
-            trucks.Clear();
-            combo = 0;
-            craneArmed = false;
-            movedThisLevel = false;
-            if (levelRoot != null) Destroy(levelRoot.gameObject);
             levelRoot = new GameObject("Level").transform;
 
             session = new GameSession(levels.Get(ContentIndex(levelIndex)));
@@ -228,6 +225,40 @@ namespace CargoJam.Game
         }
 
         public void Restart() => StartLevel(levelIndex);
+
+        /// <summary>
+        /// Swaps the board for the home screen's living depot backdrop, themed for the level the player
+        /// is on. No level is loaded while it shows; <see cref="StartLevel"/> replaces it.
+        /// </summary>
+        public void ShowMenuScene(int progressIndex)
+        {
+            ClearLevel();
+            levelIndex = Mathf.Max(0, progressIndex);
+            menu = MenuDiorama.Create(materials);
+            Theme.Apply(levelIndex, materials, cam);
+            FitCamera();
+        }
+
+        public bool MenuSceneActive => menu != null;
+
+        /// <summary>Tears down whatever is on stage: the current level or the menu backdrop.</summary>
+        void ClearLevel()
+        {
+            fx?.LevelCleared();
+            tweener.Clear();
+            parcels.Clear();
+            trucks.Clear();
+            combo = 0;
+            craneArmed = false;
+            movedThisLevel = false;
+            session = null;
+            layout = null;
+            views = null;
+            if (levelRoot != null) Destroy(levelRoot.gameObject);
+            levelRoot = null;
+            if (menu != null) Destroy(menu.gameObject);
+            menu = null;
+        }
 
         /// <summary>Which level file a progress index plays: real order first, then a loop that skips the early ramp.</summary>
         public int ContentIndex(int index)
@@ -732,6 +763,11 @@ namespace CargoJam.Game
         {
             lastScreenWidth = ScreenInfo.Width;
             lastScreenHeight = ScreenInfo.Height;
+            if (menu != null)
+            {
+                CameraRig.Fit(cam, MenuDiorama.Bounds, MenuViewport);
+                return;
+            }
             if (layout == null) return;
             var viewport = hudLayout != null ? hudLayout.GameViewport : new Rect(0.03f, 0.03f, 0.94f, 0.85f);
             CameraRig.Fit(cam, layout.ContentBounds, viewport);
