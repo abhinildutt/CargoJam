@@ -16,12 +16,30 @@ namespace CargoJam.Game.Feel
         Win,
         Fail,
         Click,
+        /// <summary>Soft tick (intro drops).</summary>
+        Tick,
+        /// <summary>High twinkle (truck full, reveal).</summary>
+        Sparkle,
+        /// <summary>Undo booster.</summary>
+        Whoosh,
+        /// <summary>Extra Slot booster, pads popping in.</summary>
+        Pop,
+        /// <summary>Two bell notes (Extra Slot).</summary>
+        Chime,
+        /// <summary>Crane booster motor.</summary>
+        Whir,
+        /// <summary>Mystery tarp coming off, truck dust.</summary>
+        Puff,
+        /// <summary>Padlock click-clack.</summary>
+        Unlock,
+        /// <summary>Combo callout sting (pitched up per tier).</summary>
+        Callout,
     }
 
     /// <summary>Plays one-shot effects from a small pool of sources so overlapping sounds don't cut each other off.</summary>
     public sealed class AudioService : MonoBehaviour
     {
-        const int Voices = 10;
+        const int Voices = 14;
 
         // Major scale steps: consecutive loads climb do-re-mi and top out an octave up.
         static readonly int[] ComboSteps = { 0, 2, 4, 5, 7, 9, 11, 12 };
@@ -41,6 +59,7 @@ namespace CargoJam.Game.Feel
             }
         }
 
+        /// <summary>Plays a one-shot at a pitch and volume (silent when sound is off).</summary>
         public void Play(Sfx sfx, float pitch = 1f, float volume = 1f)
         {
             if (!Settings.SoundOn) return;
@@ -49,6 +68,13 @@ namespace CargoJam.Game.Feel
             source.pitch = pitch;
             source.PlayOneShot(clips[sfx], volume);
         }
+
+        /// <summary>
+        /// Plays with a random pitch within ±<paramref name="variance"/>, so frequent sounds don't
+        /// grate. Never use it for the combo load, whose pitch steps are musical.
+        /// </summary>
+        public void PlayVaried(Sfx sfx, float pitch = 1f, float volume = 1f, float variance = 0.04f) =>
+            Play(sfx, pitch * Random.Range(1f - variance, 1f + variance), volume);
 
         /// <summary>Pitch for the nth load in a combo streak (0-based).</summary>
         public static float ComboPitch(int streak)
