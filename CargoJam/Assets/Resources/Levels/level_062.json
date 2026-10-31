@@ -1,0 +1,20 @@
+{
+  "id": 62,
+  "hard": false,
+  "holdingSlots": 5,
+  "truckCapacity": 3,
+  "trucks": "RORYGYBRGROPY",
+  "rows": [
+    "YRPOBR",
+    "GRYGGR",
+    "rBGOR.",
+    "G.YY.O",
+    "RyRyOR",
+    "OPRBYR",
+    "pyRYOG"
+  ],
+  "straps": [
+    { "x": 2, "y": 5, "x2": 2, "y2": 6 },
+    { "x": 3, "y": 1, "x2": 4, "y2": 1 }
+  ]
+}

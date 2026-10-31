@@ -1,0 +1,27 @@
+{
+  "id": 69,
+  "hard": false,
+  "holdingSlots": 5,
+  "truckCapacity": 3,
+  "trucks": "PYRPGOYRPOBGBYB",
+  "rows": [
+    "GPGPOYP",
+    "YPRYPR.",
+    "YOOP.RY",
+    "####+##",
+    "YBBPOYG",
+    "GBRBGY.",
+    "BYRBPBP",
+    "BBRO.GO"
+  ],
+  "express": [
+    { "x": 3, "y": 2, "taps": 15 }
+  ],
+  "straps": [
+    { "x": 1, "y": 4, "x2": 2, "y2": 4 },
+    { "x": 2, "y": 5, "x2": 2, "y2": 6 }
+  ],
+  "gates": [
+    { "x": 4, "y": 3, "color": "P", "count": 3 }
+  ]
+}

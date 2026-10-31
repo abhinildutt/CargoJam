@@ -1,0 +1,19 @@
+{
+  "id": 66,
+  "hard": false,
+  "holdingSlots": 5,
+  "truckCapacity": 3,
+  "trucks": "GPGRGBGBGPYR",
+  "rows": [
+    "GGPGGP",
+    "RPRB.G",
+    "GGGPRR",
+    "GRBGPG",
+    "G.YBYP",
+    "G.BBYR",
+    "B.G..G"
+  ],
+  "express": [
+    { "x": 5, "y": 0, "taps": 15 }
+  ]
+}

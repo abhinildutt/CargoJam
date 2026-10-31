@@ -3,11 +3,11 @@
   "hard": false,
   "holdingSlots": 5,
   "truckCapacity": 3,
-  "trucks": "GBRB",
+  "trucks": "RBGRBG",
   "rows": [
-    "GBRG",
-    "BGRB",
-    "BRB.",
-    "...B"
+    "RRRBB",
+    "G#B#G",
+    "BRGRB",
+    "GBRGG"
   ]
 }

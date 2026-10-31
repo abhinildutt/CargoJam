@@ -5,44 +5,71 @@ using CargoJam.Core;
 namespace CargoJam.LevelGen
 {
     /// <summary>
-    /// Makes one candidate board for a plan. It first picks a legal "dig order" (each parcel free once the
-    /// ones before it are gone, padlocked parcels only after their key), then colors the parcels in
-    /// truck-sized groups along that order. With no noise the truck order follows the dig order exactly
-    /// and the level needs no dock at all; noise shuffles parcels away from their truck, which is what
-    /// makes the dock fill up.
+    /// Makes one candidate board for a plan. It lays out gate walls, bollards and holes, picks the
+    /// blockers (padlocks, mystery parcels, frozen crates), then picks a legal "dig order": each parcel is
+    /// free once the ones before it are gone, padlocked parcels come after their key, frozen crates after
+    /// <c>layers</c> of their neighbours, and each gate is a virtual cell "dug" when it opens. Then it
+    /// colors the parcels in truck-sized groups along that order and places the cargo that depends on
+    /// color or order (gate colors, express parcels, straps). With no noise the truck order follows the
+    /// dig order exactly and the level needs no dock at all; noise shuffles parcels away from their truck,
+    /// which is what makes the dock fill up.
     /// </summary>
     public static class BoardMaker
     {
+        const byte Hole = 0, Parcel = 1, Bollard = 2, Gate = 3;
+
         static readonly int[] DX = { 0, -1, 1, 0 };
         static readonly int[] DY = { -1, 0, 0, 1 };
 
         public static LevelData Make(LevelPlan plan, Random rng, double noise)
         {
             int w = plan.Width, h = plan.Height, n = w * h;
-            var filled = new bool[n];
-            for (int i = 0; i < n; i++) filled[i] = true;
+            var kind = new byte[n];
+            for (int i = 0; i < n; i++) kind[i] = Parcel;
 
-            // Holes never go in row 0, so every level opens on a full front row.
-            int holes = n - plan.Parcels;
-            while (holes > 0)
+            var gateCells = new List<int>();
+            if (plan.Gates > 0 && !PlaceGateWalls(plan, rng, kind, gateCells)) return null;
+            int bollards = PlaceBollards(plan, rng, kind);
+            if (bollards < 0) return null;
+
+            // Holes never go in row 0, so every level opens on a full front row. Bollards took some over.
+            int open = 0;
+            for (int i = 0; i < n; i++) if (kind[i] == Parcel) open++;
+            int parcels = (open - Math.Max(0, plan.Holes - bollards)) / LevelPlan.TruckCapacity * LevelPlan.TruckCapacity;
+            if (parcels < LevelPlan.TruckCapacity * plan.Colors) return null;
+            for (int holes = open - parcels, guard = 0; holes > 0; guard++)
             {
+                if (guard > 10_000) return null;
                 int i = w + rng.Next(n - w);
-                if (!filled[i]) continue;
-                filled[i] = false;
+                if (kind[i] != Parcel) continue;
+                kind[i] = Hole;
                 holes--;
             }
+            if (gateCells.Count > 0 && !EachGateWallsSomethingOff(w, h, kind, gateCells)) return null;
 
             var keyOf = new int[n];
             for (int i = 0; i < n; i++) keyOf[i] = -1;
             var lockCells = new List<int>();
-            if (!PickLocks(plan, rng, filled, keyOf, lockCells)) return null;
+            if (!PickLocks(plan, rng, kind, keyOf, lockCells)) return null;
+            var isKey = new bool[n];
+            foreach (int l in lockCells) isKey[keyOf[l]] = true;
 
-            var order = DigOrder(w, h, filled, keyOf, rng);
+            var mystery = PickMystery(plan, rng, kind, keyOf, lockCells);
+            if (mystery == null) return null;
+
+            var frost = PickFrost(plan, rng, kind, mystery, keyOf, isKey);
+            if (frost == null) return null;
+
+            var gateMin = new int[gateCells.Count];
+            for (int g = 0; g < gateMin.Length; g++)
+                gateMin[g] = LevelPlan.TruckCapacity * (g + 1 + (plan.GateMinCount > 3 ? 3 : 0) + rng.Next(plan.GateMaxCount > 3 ? 3 : 2));
+            var order = DigOrder(w, h, kind, keyOf, frost, gateCells, gateMin, rng);
             if (order == null) return null;
 
             // Noise moves a parcel up to `noise` places away from where the dig order wants it.
             var sortKey = new double[n];
             for (int i = 0; i < order.Count; i++) sortKey[order[i]] = i + noise * rng.NextDouble();
+            ClampBehindGates(w, h, kind, gateCells, sortKey);
             var sorted = new List<int>(order);
             sorted.Sort((a, b) => sortKey[a].CompareTo(sortKey[b]));
 
@@ -53,14 +80,49 @@ namespace CargoJam.LevelGen
                 if (ki > li) (sorted[li], sorted[ki]) = (sorted[ki], sorted[li]);
             }
 
-            var truckColors = TruckColors(plan, rng, plan.Parcels / LevelPlan.TruckCapacity);
+            // Gates leave the truck order; remember how many parcels board before each one opens.
+            var parcelsBefore = new int[gateCells.Count];
+            var truckOrder = new List<int>(parcels);
+            foreach (int c in sorted)
+            {
+                if (kind[c] == Gate) parcelsBefore[gateCells.IndexOf(c)] = truckOrder.Count;
+                else truckOrder.Add(c);
+            }
+
+            var truckColors = TruckColors(plan, rng, parcels / LevelPlan.TruckCapacity);
             var color = new int[n];
+            var group = new int[n];
             for (int i = 0; i < n; i++) color[i] = ParcelColors.None;
-            for (int i = 0; i < sorted.Count; i++) color[sorted[i]] = truckColors[i / LevelPlan.TruckCapacity];
+            for (int i = 0; i < truckOrder.Count; i++)
+            {
+                color[truckOrder[i]] = truckColors[i / LevelPlan.TruckCapacity];
+                group[truckOrder[i]] = i / LevelPlan.TruckCapacity;
+            }
 
-            var mystery = PickMystery(plan, rng, filled, keyOf, lockCells);
-            if (mystery == null) return null;
+            var gates = PickGateColors(plan, rng, truckColors, gateCells, parcelsBefore, w);
+            if (gates == null) return null;
 
+            var digOnly = new List<int>(parcels);
+            foreach (int c in order) if (kind[c] == Parcel) digOnly.Add(c);
+            var expressTaps = PickExpress(plan, rng, digOnly, mystery, keyOf, isKey, frost);
+            if (expressTaps == null) return null;
+
+            var straps = PickStraps(plan, rng, w, h, kind, color, group, mystery, keyOf, isKey, frost, expressTaps);
+            if (straps == null) return null;
+
+            var data = Build(plan, kind, color, mystery, truckColors, lockCells, keyOf, frost, expressTaps, straps, gates);
+            var errors = LevelDefinition.Validate(data, out var level);
+            if (errors.Count > 0) return null;
+            // A valid level can still open with nothing to tap (say, every free parcel frozen).
+            if (!new GameSession(level).HasLegalMove()) return null;
+            return data;
+        }
+
+        static LevelData Build(LevelPlan plan, byte[] kind, int[] color, bool[] mystery, int[] truckColors,
+                               List<int> lockCells, int[] keyOf, int[] frost, int[] expressTaps,
+                               List<(int a, int b)> straps, GateData[] gates)
+        {
+            int w = plan.Width, h = plan.Height;
             var rows = new string[h];
             var chars = new char[w];
             for (int y = 0; y < h; y++)
@@ -68,7 +130,13 @@ namespace CargoJam.LevelGen
                 for (int x = 0; x < w; x++)
                 {
                     int i = y * w + x;
-                    char c = filled[i] ? ParcelColors.ToCode(color[i]) : '.';
+                    char c = kind[i] switch
+                    {
+                        Parcel => ParcelColors.ToCode(color[i]),
+                        Bollard => '#',
+                        Gate => '+',
+                        _ => '.',
+                    };
                     chars[x] = mystery[i] ? char.ToLowerInvariant(c) : c;
                 }
                 rows[y] = new string(chars);
@@ -84,6 +152,20 @@ namespace CargoJam.LevelGen
                 locks[i] = new LockData { x = l % w, y = l / w, keyX = k % w, keyY = k / w };
             }
 
+            var frostData = new List<FrostData>();
+            var expressData = new List<ExpressData>();
+            for (int i = 0; i < kind.Length; i++)
+            {
+                if (frost[i] > 0) frostData.Add(new FrostData { x = i % w, y = i / w, layers = frost[i] });
+                if (expressTaps[i] > 0) expressData.Add(new ExpressData { x = i % w, y = i / w, taps = expressTaps[i] });
+            }
+            var strapData = new StrapData[straps.Count];
+            for (int i = 0; i < strapData.Length; i++)
+            {
+                var (a, b) = straps[i];
+                strapData[i] = new StrapData { x = a % w, y = a / w, x2 = b % w, y2 = b / w };
+            }
+
             return new LevelData
             {
                 id = plan.Id,
@@ -93,14 +175,143 @@ namespace CargoJam.LevelGen
                 trucks = new string(trucks),
                 rows = rows,
                 locks = locks.Length > 0 ? locks : null,
+                frost = frostData.Count > 0 ? frostData.ToArray() : null,
+                express = expressData.Count > 0 ? expressData.ToArray() : null,
+                straps = strapData.Length > 0 ? strapData : null,
+                gates = gates.Length > 0 ? gates : null,
             };
         }
 
-        /// <summary>Padlocks sit in the front three rows where they're seen; keys are anywhere in the top half.</summary>
-        static bool PickLocks(LevelPlan plan, Random rng, bool[] filled, int[] keyOf, List<int> lockCells)
+        // ---- layout -----------------------------------------------------------------------------
+
+        /// <summary>
+        /// Gate walls: a row of bollards across row r (2 &lt;= r &lt;= h-3) with the gate in its one gap. Each
+        /// gate gets its own wall, two rows apart at least, so each one opens its own region (rows 2 and 4
+        /// fit a 7-row yard).
+        /// </summary>
+        static bool PlaceGateWalls(LevelPlan plan, Random rng, byte[] kind, List<int> gateCells)
         {
             int w = plan.Width, h = plan.Height;
-            var used = new bool[filled.Length];
+            int lo = 2, hi = h - 3;
+            int spare = hi - lo - 2 * (plan.Gates - 1);
+            if (spare < 0) return false;
+            // Walls front to back; each takes a random share of the spare rows in front of it.
+            int r = lo;
+            for (int g = 0; g < plan.Gates; g++)
+            {
+                int skip = rng.Next(spare + 1);
+                r += skip;
+                spare -= skip;
+                int gx = rng.Next(w);
+                for (int x = 0; x < w; x++) kind[r * w + x] = x == gx ? Gate : Bollard;
+                gateCells.Add(r * w + gx);
+                r += 2;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Free-standing bollards, mirrored left-right; none in row 0 before L35. Each candidate must
+        /// leave every other cell reachable once the yard is dug (the dig-order legality check). Returns
+        /// how many were placed, or -1.
+        /// </summary>
+        static int PlaceBollards(LevelPlan plan, Random rng, byte[] kind)
+        {
+            int w = plan.Width, h = plan.Height, n = w * h;
+            int placed = 0, minRow = plan.BollardsInRow0 ? 0 : 1;
+            for (int attempt = 0; attempt < 400 && placed < plan.Bollards; attempt++)
+            {
+                int x = rng.Next(w), y = minRow + rng.Next(h - minRow);
+                int mx = w - 1 - x;
+                int a = y * w + x, b = y * w + mx;
+                if (kind[a] != Parcel || kind[b] != Parcel) continue;
+                // A single centre bollard only tops up an odd count.
+                if (a == b && plan.Bollards - placed != 1) continue;
+                if (a != b && plan.Bollards - placed < 2) continue;
+                // Never a whole front row of bollards.
+                if (y == 0 && FrontRowBollards(kind, w) + (a == b ? 1 : 2) >= w - 1) continue;
+                kind[a] = kind[b] = Bollard;
+                if (!AllReachable(w, h, kind))
+                {
+                    kind[a] = kind[b] = Parcel;
+                    continue;
+                }
+                placed += a == b ? 1 : 2;
+            }
+            return placed == plan.Bollards ? placed : -1;
+        }
+
+        static int FrontRowBollards(byte[] kind, int w)
+        {
+            int count = 0;
+            for (int x = 0; x < w; x++) if (kind[x] == Bollard) count++;
+            return count;
+        }
+
+        /// <summary>True when every non-bollard cell connects to the front row once everything else is gone (gates open).</summary>
+        static bool AllReachable(int w, int h, byte[] kind) => CountReachable(w, h, kind, gatesOpen: true, parcelsOnly: false) == CountCells(kind, b => b != Bollard);
+
+        /// <summary>
+        /// True when each gate walls something off on its own: with only that gate shut (the others open),
+        /// some parcel can't be reached.
+        /// </summary>
+        static bool EachGateWallsSomethingOff(int w, int h, byte[] kind, List<int> gateCells)
+        {
+            int parcels = CountCells(kind, b => b == Parcel);
+            var trial = new byte[kind.Length];
+            foreach (int shut in gateCells)
+            {
+                Array.Copy(kind, trial, kind.Length);
+                foreach (int g in gateCells) if (g != shut) trial[g] = Hole;
+                if (CountReachable(w, h, trial, gatesOpen: false, parcelsOnly: true) == parcels) return false;
+            }
+            return true;
+        }
+
+        static int CountCells(byte[] kind, Func<byte, bool> match)
+        {
+            int count = 0;
+            foreach (byte b in kind) if (match(b)) count++;
+            return count;
+        }
+
+        static int CountReachable(int w, int h, byte[] kind, bool gatesOpen, bool parcelsOnly)
+        {
+            bool Passable(int i) => kind[i] != Bollard && (gatesOpen || kind[i] != Gate);
+            var reach = new bool[kind.Length];
+            var queue = new Queue<int>();
+            for (int x = 0; x < w; x++)
+            {
+                if (!Passable(x)) continue;
+                reach[x] = true;
+                queue.Enqueue(x);
+            }
+            while (queue.Count > 0)
+            {
+                int c = queue.Dequeue();
+                for (int d = 0; d < 4; d++)
+                {
+                    int nx = c % w + DX[d], ny = c / w + DY[d];
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                    int ni = ny * w + nx;
+                    if (reach[ni] || !Passable(ni)) continue;
+                    reach[ni] = true;
+                    queue.Enqueue(ni);
+                }
+            }
+            int count = 0;
+            for (int i = 0; i < kind.Length; i++)
+                if (reach[i] && (!parcelsOnly || kind[i] == Parcel)) count++;
+            return count;
+        }
+
+        // ---- blockers ---------------------------------------------------------------------------
+
+        /// <summary>Padlocks sit in the front three rows where they're seen; keys are anywhere in the top half.</summary>
+        static bool PickLocks(LevelPlan plan, Random rng, byte[] kind, int[] keyOf, List<int> lockCells)
+        {
+            int w = plan.Width, h = plan.Height;
+            var used = new bool[kind.Length];
             for (int i = 0; i < plan.Locks; i++)
             {
                 int locked = -1, key = -1;
@@ -108,7 +319,7 @@ namespace CargoJam.LevelGen
                 {
                     int l = rng.Next(w * Math.Min(3, h));
                     int k = rng.Next(w * Math.Max(2, (h + 1) / 2));
-                    if (l == k || !filled[l] || !filled[k] || used[l] || used[k]) continue;
+                    if (l == k || kind[l] != Parcel || kind[k] != Parcel || used[l] || used[k]) continue;
                     // Keys right next to their lock make the lock pointless.
                     if (Math.Abs(l % w - k % w) + Math.Abs(l / w - k / w) < 2) continue;
                     locked = l;
@@ -122,44 +333,176 @@ namespace CargoJam.LevelGen
             return true;
         }
 
-        /// <summary>A random legal removal order, or null when the locks wall everything in.</summary>
-        static List<int> DigOrder(int w, int h, bool[] filled, int[] keyOf, Random rng)
+        /// <summary>Mystery parcels start buried (never free at the start) and stay clear of padlocks and keys.</summary>
+        static bool[] PickMystery(LevelPlan plan, Random rng, byte[] kind, int[] keyOf, List<int> lockCells)
+        {
+            int w = plan.Width, h = plan.Height, n = w * h;
+            var mystery = new bool[n];
+            if (plan.Mystery == 0) return mystery;
+
+            var excluded = new bool[n];
+            var free = new List<int>();
+            FreeCells(w, h, kind, new bool[n], free);
+            foreach (int i in free) excluded[i] = true;
+            foreach (int l in lockCells)
+            {
+                excluded[l] = true;
+                excluded[keyOf[l]] = true;
+            }
+
+            int placed = 0;
+            for (int attempt = 0; attempt < 500 && placed < plan.Mystery; attempt++)
+            {
+                int i = w + rng.Next(n - w);
+                if (kind[i] != Parcel || excluded[i] || mystery[i]) continue;
+                mystery[i] = true;
+                placed++;
+            }
+            return placed == plan.Mystery ? mystery : null;
+        }
+
+        /// <summary>
+        /// Frozen crates: 1..FrostMaxLayers layers, never more than the parcels next to them. They stay off
+        /// padlocks, keys and mystery parcels unless a twist asks for one, and out of the front row before
+        /// the row-0 twist (L35); the front row is never all frost. Returns layers per cell, or null.
+        /// </summary>
+        static int[] PickFrost(LevelPlan plan, Random rng, byte[] kind, bool[] mystery, int[] keyOf, bool[] isKey)
+        {
+            int w = plan.Width, h = plan.Height, n = w * h;
+            var frost = new int[n];
+            if (plan.Frost == 0) return frost;
+
+            var neighbours = new int[n];
+            for (int i = 0; i < n; i++) neighbours[i] = ParcelNeighbours(w, h, kind, i);
+
+            bool Plain(int i) => kind[i] == Parcel && !mystery[i] && keyOf[i] < 0 && !isKey[i];
+            bool TryFreeze(int i)
+            {
+                if (frost[i] > 0 || neighbours[i] == 0) return false;
+                frost[i] = Math.Min(neighbours[i], 1 + rng.Next(plan.FrostMaxLayers));
+                return true;
+            }
+
+            var twistCells = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                if (plan.FrostOnMystery && kind[i] == Parcel && mystery[i] && neighbours[i] > 0) twistCells.Add(i);
+                if (plan.FrostOnKey && isKey[i] && neighbours[i] > 0) twistCells.Add(i);
+            }
+            int placed = 0;
+            if (plan.FrostOnMystery || plan.FrostOnKey)
+            {
+                if (twistCells.Count == 0) return null;
+                if (TryFreeze(twistCells[rng.Next(twistCells.Count)])) placed++;
+            }
+            if (plan.FrostInRow0)
+            {
+                bool frozen = false;
+                for (int attempt = 0; attempt < 20 && !frozen; attempt++)
+                {
+                    int x = rng.Next(w);
+                    frozen = Plain(x) && TryFreeze(x);
+                }
+                if (!frozen) return null;
+                placed++;
+            }
+
+            bool row0 = plan.FrostInRow0 || plan.Id > 35;
+            for (int attempt = 0; attempt < 500 && placed < plan.Frost; attempt++)
+            {
+                int i = rng.Next(n);
+                if (!row0 && i < w) continue;
+                if (!Plain(i)) continue;
+                if (TryFreeze(i)) placed++;
+            }
+            if (placed < plan.Frost) return null;
+
+            int frontFrozen = 0, frontParcels = 0;
+            for (int x = 0; x < w; x++)
+            {
+                if (kind[x] != Parcel) continue;
+                frontParcels++;
+                if (frost[x] > 0) frontFrozen++;
+            }
+            return frontFrozen < frontParcels ? frost : null;
+        }
+
+        static int ParcelNeighbours(int w, int h, byte[] kind, int i)
+        {
+            int count = 0;
+            for (int d = 0; d < 4; d++)
+            {
+                int nx = i % w + DX[d], ny = i / w + DY[d];
+                if (nx >= 0 && nx < w && ny >= 0 && ny < h && kind[ny * w + nx] == Parcel) count++;
+            }
+            return count;
+        }
+
+        // ---- dig order --------------------------------------------------------------------------
+
+        /// <summary>
+        /// A random legal removal order, or null when nothing can move. A frozen crate becomes diggable
+        /// once <c>layers</c> of its starting neighbours are gone; a padlocked parcel after its key; gate g
+        /// is a virtual cell "dug" (opened) once <paramref name="gateMin"/>[g] parcels are gone.
+        /// </summary>
+        static List<int> DigOrder(int w, int h, byte[] kind, int[] keyOf, int[] frost, List<int> gateCells, int[] gateMin, Random rng)
         {
             int n = w * h;
             var gone = new bool[n];
-            for (int i = 0; i < n; i++) gone[i] = !filled[i];
             var order = new List<int>();
             var free = new List<int>();
-            int remaining = 0;
-            foreach (bool f in filled) if (f) remaining++;
+            int remaining = gateCells.Count, dug = 0;
+            foreach (byte b in kind) if (b == Parcel) remaining++;
 
             while (remaining > 0)
             {
-                FreeCells(w, h, gone, free);
+                FreeCells(w, h, kind, gone, free);
                 for (int i = free.Count - 1; i >= 0; i--)
                 {
-                    int key = keyOf[free[i]];
-                    if (key >= 0 && !gone[key]) free.RemoveAt(i);
+                    int c = free[i];
+                    int key = keyOf[c];
+                    if ((key >= 0 && !gone[key]) || (frost[c] > 0 && GoneNeighbours(w, h, kind, gone, c) < frost[c]))
+                        free.RemoveAt(i);
                 }
+                for (int g = 0; g < gateCells.Count; g++)
+                    if (!gone[gateCells[g]] && dug >= gateMin[g]) free.Add(gateCells[g]);
                 if (free.Count == 0) return null;
                 int pick = free[rng.Next(free.Count)];
                 gone[pick] = true;
                 order.Add(pick);
+                if (kind[pick] == Parcel) dug++;
                 remaining--;
             }
             return order;
         }
 
-        /// <summary>Filled cells with a path of empty cells to row 0 (or in row 0), like Board.GetFreeParcels.</summary>
-        static void FreeCells(int w, int h, bool[] gone, List<int> result)
+        static int GoneNeighbours(int w, int h, byte[] kind, bool[] gone, int i)
+        {
+            int count = 0;
+            for (int d = 0; d < 4; d++)
+            {
+                int nx = i % w + DX[d], ny = i / w + DY[d];
+                if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                int ni = ny * w + nx;
+                if (kind[ni] == Parcel && gone[ni]) count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// Parcels not yet gone with a path to row 0 (or in row 0), like Board.GetFreeParcels: holes and
+        /// gone cells are open, bollards and unopened gates are walls.
+        /// </summary>
+        static void FreeCells(int w, int h, byte[] kind, bool[] gone, List<int> result)
         {
             result.Clear();
             int n = w * h;
+            bool Open(int i) => kind[i] == Hole || ((kind[i] == Parcel || kind[i] == Gate) && gone[i]);
             var reach = new bool[n];
             var queue = new Queue<int>();
             for (int x = 0; x < w; x++)
             {
-                if (!gone[x]) continue;
+                if (!Open(x)) continue;
                 reach[x] = true;
                 queue.Enqueue(x);
             }
@@ -171,14 +514,14 @@ namespace CargoJam.LevelGen
                     int nx = c % w + DX[d], ny = c / w + DY[d];
                     if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
                     int ni = ny * w + nx;
-                    if (reach[ni] || !gone[ni]) continue;
+                    if (reach[ni] || !Open(ni)) continue;
                     reach[ni] = true;
                     queue.Enqueue(ni);
                 }
             }
             for (int i = 0; i < n; i++)
             {
-                if (gone[i]) continue;
+                if (kind[i] != Parcel || gone[i]) continue;
                 bool isFree = i < w;
                 for (int d = 0; d < 4 && !isFree; d++)
                 {
@@ -188,6 +531,61 @@ namespace CargoJam.LevelGen
                 if (isFree) result.Add(i);
             }
         }
+
+        /// <summary>
+        /// Noise must not pull a parcel that sits behind a gate ahead of that gate in the truck order (its
+        /// truck would wait on a gate that waits on later trucks). Opens the gates in sort order and pushes
+        /// each newly reachable region's parcels just behind the gate that opened it.
+        /// </summary>
+        static void ClampBehindGates(int w, int h, byte[] kind, List<int> gateCells, double[] sortKey)
+        {
+            if (gateCells.Count == 0) return;
+            var gates = new List<int>(gateCells);
+            gates.Sort((a, b) => sortKey[a].CompareTo(sortKey[b]));
+            var open = new byte[kind.Length];
+            Array.Copy(kind, open, kind.Length);
+            var before = Reachable(w, h, open);
+            foreach (int g in gates)
+            {
+                open[g] = Hole;
+                var after = Reachable(w, h, open);
+                for (int i = 0; i < kind.Length; i++)
+                {
+                    if (kind[i] == Parcel && after[i] && !before[i])
+                        sortKey[i] = Math.Max(sortKey[i], sortKey[g] + 0.5);
+                }
+                before = after;
+            }
+        }
+
+        /// <summary>Cells reachable from the front row through anything but bollards and closed gates.</summary>
+        static bool[] Reachable(int w, int h, byte[] kind)
+        {
+            var reach = new bool[kind.Length];
+            var queue = new Queue<int>();
+            for (int x = 0; x < w; x++)
+            {
+                if (kind[x] == Bollard || kind[x] == Gate) continue;
+                reach[x] = true;
+                queue.Enqueue(x);
+            }
+            while (queue.Count > 0)
+            {
+                int c = queue.Dequeue();
+                for (int d = 0; d < 4; d++)
+                {
+                    int nx = c % w + DX[d], ny = c / w + DY[d];
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                    int ni = ny * w + nx;
+                    if (reach[ni] || kind[ni] == Bollard || kind[ni] == Gate) continue;
+                    reach[ni] = true;
+                    queue.Enqueue(ni);
+                }
+            }
+            return reach;
+        }
+
+        // ---- color and order-dependent cargo ----------------------------------------------------
 
         /// <summary>Every color gets at least one truck, and the same color rarely comes twice in a row.</summary>
         static int[] TruckColors(LevelPlan plan, Random rng, int count)
@@ -210,34 +608,104 @@ namespace CargoJam.LevelGen
             return trucks;
         }
 
-        /// <summary>Mystery parcels start buried (never in row 0) and stay clear of padlocks and keys.</summary>
-        static bool[] PickMystery(LevelPlan plan, Random rng, bool[] filled, int[] keyOf, List<int> lockCells)
+        /// <summary>
+        /// Gate color C comes from the trucks that fill before the gate opens in the order; count = 3 x
+        /// those C trucks, capped (3 at the debut, 6 after). A bigger count is preferred up to the cap, and
+        /// two gates take two colors. Null when no truck fills before a gate.
+        /// </summary>
+        static GateData[] PickGateColors(LevelPlan plan, Random rng, int[] truckColors, List<int> gateCells, int[] parcelsBefore, int w)
         {
-            int w = plan.Width, h = plan.Height, n = w * h;
-            var mystery = new bool[n];
-            if (plan.Mystery == 0) return mystery;
-
-            var gone = new bool[n];
-            for (int i = 0; i < n; i++) gone[i] = !filled[i];
-            var free = new List<int>();
-            FreeCells(w, h, gone, free);
-            var excluded = new bool[n];
-            foreach (int i in free) excluded[i] = true;
-            foreach (int l in lockCells)
+            var gates = new GateData[gateCells.Count];
+            var used = new List<int>();
+            for (int g = 0; g < gates.Length; g++)
             {
-                excluded[l] = true;
-                excluded[keyOf[l]] = true;
+                int full = parcelsBefore[g] / LevelPlan.TruckCapacity;
+                var perColor = new int[ParcelColors.Count];
+                for (int t = 0; t < full; t++) perColor[truckColors[t]]++;
+                var candidates = new List<int>();
+                int best = 0;
+                for (int c = 0; c < perColor.Length; c++)
+                {
+                    if (perColor[c] == 0 || used.Contains(c)) continue;
+                    int count = Math.Min(plan.GateMaxCount, LevelPlan.TruckCapacity * perColor[c]);
+                    if (count > best)
+                    {
+                        best = count;
+                        candidates.Clear();
+                    }
+                    if (count == best) candidates.Add(c);
+                }
+                if (candidates.Count == 0 || best < plan.GateMinCount) return null;
+                int color = candidates[rng.Next(candidates.Count)];
+                used.Add(color);
+                int cell = gateCells[g];
+                gates[g] = new GateData { x = cell % w, y = cell / w, color = ParcelColors.ToCode(color).ToString(), count = best };
             }
+            return gates;
+        }
 
+        /// <summary>
+        /// Express parcels sit at dig position p (2 &lt;= p &lt;= min(12, n/3)) on a plain parcel, with
+        /// taps = p + 1 + slack and never less than p + 2. Returns taps per cell (0 = none), or null.
+        /// </summary>
+        static int[] PickExpress(LevelPlan plan, Random rng, List<int> digOrder, bool[] mystery, int[] keyOf, bool[] isKey, int[] frost)
+        {
+            var taps = new int[mystery.Length];
+            if (plan.Express == 0) return taps;
+            int last = Math.Min(12, digOrder.Count / 3);
+            if (last < 2) return null;
             int placed = 0;
-            for (int attempt = 0; attempt < 500 && placed < plan.Mystery; attempt++)
+            for (int attempt = 0; attempt < 200 && placed < plan.Express; attempt++)
             {
-                int i = w + rng.Next(n - w);
-                if (!filled[i] || excluded[i] || mystery[i]) continue;
-                mystery[i] = true;
+                int p = 2 + rng.Next(last - 1);
+                int c = digOrder[p];
+                if (taps[c] > 0 || mystery[c] || keyOf[c] >= 0 || isKey[c] || frost[c] > 0) continue;
+                taps[c] = Math.Min(LevelDefinition.MaxExpressTaps, Math.Max(p + 2, p + 1 + plan.ExpressSlack));
                 placed++;
             }
-            return placed == plan.Mystery ? mystery : null;
+            return placed == plan.Express ? taps : null;
+        }
+
+        /// <summary>
+        /// Straps join two orthogonally adjacent plain parcels of one color, preferably from the same
+        /// truck group. Null when there aren't enough pairs.
+        /// </summary>
+        static List<(int a, int b)> PickStraps(LevelPlan plan, Random rng, int w, int h, byte[] kind, int[] color, int[] group,
+                                               bool[] mystery, int[] keyOf, bool[] isKey, int[] frost, int[] express)
+        {
+            var straps = new List<(int a, int b)>();
+            if (plan.Straps == 0) return straps;
+            var strapped = new bool[kind.Length];
+            bool Plain(int i) => kind[i] == Parcel && !mystery[i] && keyOf[i] < 0 && !isKey[i] && frost[i] == 0 && express[i] == 0 && !strapped[i];
+
+            var same = new List<(int, int)>();
+            var any = new List<(int, int)>();
+            while (straps.Count < plan.Straps)
+            {
+                same.Clear();
+                any.Clear();
+                for (int i = 0; i < kind.Length; i++)
+                {
+                    if (!Plain(i)) continue;
+                    // Right and down neighbours, so each pair is seen once.
+                    int x = i % w, y = i / w;
+                    if (x + 1 < w) Consider(i, i + 1);
+                    if (y + 1 < h) Consider(i, i + w);
+                }
+                var pool = same.Count > 0 ? same : any;
+                if (pool.Count == 0) return null;
+                var pick = pool[rng.Next(pool.Count)];
+                strapped[pick.Item1] = strapped[pick.Item2] = true;
+                straps.Add(pick);
+            }
+            return straps;
+
+            void Consider(int a, int b)
+            {
+                if (!Plain(b) || color[a] != color[b]) return;
+                any.Add((a, b));
+                if (group[a] == group[b]) same.Add((a, b));
+            }
         }
 
         static void Shuffle<T>(IList<T> list, Random rng)
