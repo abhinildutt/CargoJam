@@ -17,6 +17,16 @@ namespace CargoJam.Game.Presentation
         bool Captures(Vector2 screenPosition);
     }
 
+    /// <summary>
+    /// What the UI tells the game about the home screen: where the 3D diorama should be framed.
+    /// Implemented by the real UI (GameFlow); without it the controller uses its own default.
+    /// </summary>
+    public interface IMenuLayout
+    {
+        /// <summary>The 0..1 viewport rect (origin bottom-left) the menu diorama is fitted into.</summary>
+        Rect MenuViewport { get; }
+    }
+
     public enum LandingSpot
     {
         Truck,
@@ -66,6 +76,21 @@ namespace CargoJam.Game.Presentation
         void ParcelUnlocked(ParcelView parcel, float at);
         void BoosterUsed(CargoJam.Meta.BoosterType booster, float at);
         void Win(float at, Vector3 center);
+
+        /// <summary>
+        /// Called right after <see cref="LevelBuilt"/> (and when the menu shows) with what the
+        /// environment now shows. On an arrival the FX layer plays the destination reveal.
+        /// </summary>
+        /// <returns>Extra seconds the board should wait for input (the reveal's length), else 0.</returns>
+        float EnvironmentChanged(EnvironmentInfo info);
+
+        /// <summary>
+        /// The win sequence's world side, scheduled from the last truck's departure: slow-down,
+        /// sparkle and the moment the UI's win card should rise.
+        /// </summary>
+        /// <param name="at">Time.time when the last truck starts to leave.</param>
+        /// <param name="lastTruck">Where it leaves from.</param>
+        void WinSequence(float at, Vector3 lastTruck);
         void Fail(float at, IReadOnlyList<ParcelView> needed, TruckView waiting);
         void LevelCleared();
     }

@@ -96,6 +96,36 @@ namespace CargoJam.Meta
         /// <summary>The multiplier the next win will pay (the streak counts that win, see <see cref="RecordWin"/>).</summary>
         public float NextWinMultiplier => EconomyConfig.StreakMultiplier(Data.winStreak + 1);
 
+        // ---- Streak tiers and journey (design v3 contract; stream C completes the rules) ----
+
+        /// <summary>Streak tier 0..3 of the current streak (0-2, 3-5, 6-9, 10+).</summary>
+        public int StreakTier => StreakTierFor(Data.winStreak);
+
+        /// <summary>Tier for a streak length (0-2 → 0, 3-5 → 1, 6-9 → 2, 10+ → 3).</summary>
+        public static int StreakTierFor(int streak) => streak >= 10 ? 3 : streak >= 6 ? 2 : streak >= 3 ? 1 : 0;
+
+        /// <summary>The streak a give-up leaves: the floor of the tier below (7 → 3, 12 → 6, 4 → 0).</summary>
+        public static int StreakFloorBelow(int streak)
+        {
+            int tier = StreakTierFor(streak);
+            return tier <= 1 ? 0 : tier == 2 ? 3 : 6;
+        }
+
+        /// <summary>The top tier's perk: one free Undo charge each level (not banked).</summary>
+        public bool TierPerkUndo => StreakTier >= 3;
+
+        public bool HasPostcard(int stop) =>
+            Data.postcards != null && stop >= 0 && stop < Data.postcards.Length && Data.postcards[stop];
+
+        /// <summary>Marks a destination's postcard earned. Returns true when it is new.</summary>
+        public bool MarkPostcard(int stop) => throw new NotImplementedException("stream C");
+
+        /// <summary>True when the level at <paramref name="levelIndex"/> starts a destination whose arrival reveal hasn't played.</summary>
+        public bool ShouldPlayArrival(int levelIndex) =>
+            Journey.IsArrival(levelIndex) && Journey.LegFor(levelIndex) > Data.lastArrivalShown;
+
+        public void MarkArrivalShown(int levelIndex) => throw new NotImplementedException("stream C");
+
         public int ChestProgress => Data.chestProgress;
         public bool ChestReady => Data.chestProgress >= EconomyConfig.ChestEvery;
         public bool NextChestIsBig => (Data.chestsOpened + 1) % EconomyConfig.BigChestEvery == 0;

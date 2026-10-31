@@ -240,7 +240,15 @@ namespace CargoJam.Game.Feel
             }
         }
 
+        // ---- Environment (design v3 contract; stream D implements the arrival reveal) ------------
+
+        public float EnvironmentChanged(EnvironmentInfo info) => 0f;
+
         // ---- Win and fail -------------------------------------------------------------------------
+
+        public void WinSequence(float at, Vector3 lastTruck)
+        {
+        }
 
         public void Win(float at, Vector3 center)
         {

@@ -271,11 +271,19 @@ Each stream works in its own git worktree, branched from `feature/v3-premium-jou
   - Members: `LevelsPerStop`, `StopCount`, `StopFor(levelIndex)`, `StepInStop`, `MoodFor`, `IsArrival`, `LevelsToNextStop`, `NameOf(stop)`, `MoodName(mood)`.
   - `Mood { Day, Dusk, Storm }`.
 - **`CargoJam.Meta.ProfileData` v2:**
-  - New fields: `bool[] postcards`, `int lastArrivalShown` (stop index whose reveal has played, −1 = none).
+  - New fields: `bool[] postcards`, `int lastArrivalShown` (the *leg*, `Journey.LegFor`, whose reveal has played, −1 = none, so loops replay reveals).
   - Streak tiers are derived from `winStreak`.
 - **`CargoJam.Meta.Progression`** (stream C implements):
-  - `StreakTier`, `StreakMultiplier`, `StreakTierFor(int streak)`, `StreakFloorBelow(int streak)`, `TierPerkUndo`.
-  - `MarkPostcard(int stop)`, `HasPostcard(int stop)`, `ShouldPlayArrival(int levelIndex)` / `MarkArrivalShown(int stop)`.
+  - `StreakTier`, `StreakMultiplier`, `StreakTierFor(int streak)`, `StreakFloorBelow(int streak)`, `TierPerkUndo`. The tier helpers are already implemented.
+  - `HasPostcard(int stop)` and `ShouldPlayArrival(int levelIndex)` are implemented.
+  - `MarkPostcard(int stop)` and `MarkArrivalShown(int levelIndex)` throw until stream C implements them.
+- **`GameController`** (orchestrator, already wired):
+  - Creates a persistent `WorldEnvironment`, and calls `ShowLevel` after `Scenery.Build` and `ShowMenu` in `ShowMenuScene`.
+  - Calls `fx.EnvironmentChanged(info)` after `LevelBuilt` and adds the returned seconds to the input delay.
+  - Calls `fx.WinSequence` just before `fx.Win`.
+  - Exposes `EnvironmentShown`, `MenuLayout` (an `IMenuLayout`), and `ShouldRevealArrival` (a `Predicate<int>` the UI sets to `Progression.ShouldPlayArrival`; the UI marks the reveal shown on `LevelStarted`).
+  - The camera has post-processing on.
+  - `LevelStartInfo.Route` is replaced by `Stop` and `Mood`.
 - **`CargoJam.Game.Presentation.Biome`:**
   - `BiomeDefinition` (Id, Name, palette, prop set id, lighting per mood) and `LightingPreset`.
   - `Biomes.For(int stop)`.
