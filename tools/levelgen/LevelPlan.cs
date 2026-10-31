@@ -66,16 +66,31 @@ namespace CargoJam.LevelGen
         public bool BollardsInRow0 => Id >= 35;
 
         /// <summary>
-        /// The fail rates a level must land in, whatever its target: debut and relief levels at most 0.05,
-        /// medium at most 0.40, HARD 0.55-0.72. The search keeps a small margin inside each band.
+        /// The fail rates a level must land in (design v4): debut and relief levels at most 0.05, medium at
+        /// most 0.40, HARD 0.55-0.72. <c>generate</c> and <c>grade</c> fail when a level is outside it.
+        /// </summary>
+        public (double Lo, double Hi) SpecBand => Kind switch
+        {
+            "HARD" => (0.55, 0.72),
+            "debut" or "relief" or "tutorial" => (0, 0.05),
+            "medium" => (0, 0.40),
+            _ => (0, 1),
+        };
+
+        /// <summary>
+        /// The band the search aims inside: <see cref="SpecBand"/> with a small margin for sampling noise.
+        /// The late ramp (L61-100) runs closer to the caps, so its margin is smaller.
         /// </summary>
         public (double Lo, double Hi) Band => Kind switch
         {
-            "HARD" => (0.565, 0.71),
+            "HARD" => (0.565, Id > LateRampStart ? 0.715 : 0.71),
             "debut" or "relief" or "tutorial" => (0, 0.045),
-            "medium" => (0, 0.385),
+            "medium" => (0, Id > LateRampStart ? 0.395 : 0.385),
             _ => (0, 1),
         };
+
+        /// <summary>Levels after this one ramp their fail targets up again towards the caps.</summary>
+        const int LateRampStart = 60;
 
         public static LevelPlan For(int id)
         {
@@ -137,6 +152,8 @@ namespace CargoJam.LevelGen
                 }
             }
 
+            if (id > LateRampStart) SetLateTarget(plan);
+
             plan.Colors = id <= 3 ? 2 : id <= 9 ? 3 : id <= 19 ? 4 : id <= 39 ? 5 : 6;
             if (plan.Hard) plan.Colors = Math.Min(6, plan.Colors + 1);
             if (plan.Kind == "relief" && id > 5) plan.Colors = Math.Max(3, plan.Colors - 1);
@@ -149,6 +166,23 @@ namespace CargoJam.LevelGen
             SetCargo(plan);
             SetSize(plan, id);
             return plan;
+        }
+
+        /// <summary>
+        /// Levels 61-100 have their full size and cargo, so without this the fail rate would sit on a plateau.
+        /// A gentle ramp inside the caps keeps them getting harder: easy 0.30 to 0.36, medium 0.34 to 0.385
+        /// (cap 0.40), harder 0.41 to 0.47 and HARD 0.64 to 0.70 (cap 0.72). Relief stays at 0.03.
+        /// </summary>
+        static void SetLateTarget(LevelPlan plan)
+        {
+            double r = (plan.Id - (LateRampStart + 1)) / (double)(LevelCount - LateRampStart - 1);
+            switch (plan.Kind)
+            {
+                case "easy": plan.TargetFail = 0.30 + 0.06 * r; break;
+                case "medium": plan.TargetFail = 0.34 + 0.045 * r; break;
+                case "harder": plan.TargetFail = 0.41 + 0.06 * r; break;
+                case "HARD": plan.TargetFail = 0.64 + 0.06 * r; break;
+            }
         }
 
         /// <summary>The ramp table of design v4 §4.</summary>
@@ -350,7 +384,10 @@ namespace CargoJam.LevelGen
             plan.RecountParcels();
         }
 
-        /// <summary>Parcels = (cells - holes - bollards - gates) / 3 * 3, with gate walls counted as bollards.</summary>
+        /// <summary>
+        /// Roughly (cells - holes - bollards - gate walls) / 3 * 3, where a gate wall's gap is left out. It only
+        /// sets the noise search range; <see cref="BoardMaker"/> counts the real open cells.
+        /// </summary>
         public void RecountParcels()
         {
             int cells = Width * Height;

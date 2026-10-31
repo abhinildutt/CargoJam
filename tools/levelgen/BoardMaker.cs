@@ -45,7 +45,7 @@ namespace CargoJam.LevelGen
                 kind[i] = Hole;
                 holes--;
             }
-            if (gateCells.Count > 0 && !WallsSomethingOff(w, h, kind)) return null;
+            if (gateCells.Count > 0 && !EachGateWallsSomethingOff(w, h, kind, gateCells)) return null;
 
             var keyOf = new int[n];
             for (int i = 0; i < n; i++) keyOf[i] = -1;
@@ -185,39 +185,27 @@ namespace CargoJam.LevelGen
         // ---- layout -----------------------------------------------------------------------------
 
         /// <summary>
-        /// Gate walls: a row of bollards across row r (2 &lt;= r &lt;= h-3) with the gate in its one gap. Two
-        /// gates get a wall each when the yard is tall enough, else they share one wall with two gaps.
+        /// Gate walls: a row of bollards across row r (2 &lt;= r &lt;= h-3) with the gate in its one gap. Each
+        /// gate gets its own wall, two rows apart at least, so each one opens its own region (rows 2 and 4
+        /// fit a 7-row yard).
         /// </summary>
         static bool PlaceGateWalls(LevelPlan plan, Random rng, byte[] kind, List<int> gateCells)
         {
             int w = plan.Width, h = plan.Height;
             int lo = 2, hi = h - 3;
-            if (hi < lo) return false;
-            if (plan.Gates == 1 || (h >= 8 && rng.NextDouble() < 0.6))
+            int spare = hi - lo - 2 * (plan.Gates - 1);
+            if (spare < 0) return false;
+            // Walls front to back; each takes a random share of the spare rows in front of it.
+            int r = lo;
+            for (int g = 0; g < plan.Gates; g++)
             {
-                int first = plan.Gates == 1 ? lo + rng.Next(hi - lo + 1) : lo + rng.Next(Math.Max(1, hi - 2 - lo + 1));
-                var wallRows = new List<int> { first };
-                if (plan.Gates == 2)
-                {
-                    if (first + 2 > hi) return false;
-                    wallRows.Add(first + 2 + rng.Next(hi - first - 1));
-                }
-                foreach (int r in wallRows)
-                {
-                    int gx = rng.Next(w);
-                    for (int x = 0; x < w; x++) kind[r * w + x] = x == gx ? Gate : Bollard;
-                    gateCells.Add(r * w + gx);
-                }
-            }
-            else
-            {
-                int r = lo + rng.Next(hi - lo + 1);
-                int g1 = rng.Next(w), g2;
-                do g2 = rng.Next(w); while (Math.Abs(g2 - g1) < 2);
-                if (g2 < g1) (g1, g2) = (g2, g1);
-                for (int x = 0; x < w; x++) kind[r * w + x] = x == g1 || x == g2 ? Gate : Bollard;
-                gateCells.Add(r * w + g1);
-                gateCells.Add(r * w + g2);
+                int skip = rng.Next(spare + 1);
+                r += skip;
+                spare -= skip;
+                int gx = rng.Next(w);
+                for (int x = 0; x < w; x++) kind[r * w + x] = x == gx ? Gate : Bollard;
+                gateCells.Add(r * w + gx);
+                r += 2;
             }
             return true;
         }
@@ -263,9 +251,22 @@ namespace CargoJam.LevelGen
         /// <summary>True when every non-bollard cell connects to the front row once everything else is gone (gates open).</summary>
         static bool AllReachable(int w, int h, byte[] kind) => CountReachable(w, h, kind, gatesOpen: true, parcelsOnly: false) == CountCells(kind, b => b != Bollard);
 
-        /// <summary>True when, with every gate shut, some parcel can never be reached.</summary>
-        static bool WallsSomethingOff(int w, int h, byte[] kind) =>
-            CountReachable(w, h, kind, gatesOpen: false, parcelsOnly: true) < CountCells(kind, b => b == Parcel);
+        /// <summary>
+        /// True when each gate walls something off on its own: with only that gate shut (the others open),
+        /// some parcel can't be reached.
+        /// </summary>
+        static bool EachGateWallsSomethingOff(int w, int h, byte[] kind, List<int> gateCells)
+        {
+            int parcels = CountCells(kind, b => b == Parcel);
+            var trial = new byte[kind.Length];
+            foreach (int shut in gateCells)
+            {
+                Array.Copy(kind, trial, kind.Length);
+                foreach (int g in gateCells) if (g != shut) trial[g] = Hole;
+                if (CountReachable(w, h, trial, gatesOpen: false, parcelsOnly: true) == parcels) return false;
+            }
+            return true;
+        }
 
         static int CountCells(byte[] kind, Func<byte, bool> match)
         {

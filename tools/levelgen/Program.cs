@@ -81,6 +81,7 @@ namespace CargoJam.LevelGen
                 File.WriteAllText(Path.Combine(o.Out, $"level_{r.Plan.Id:000}.json"), LevelJson.Write(r.Data));
             }
             PrintTable(results);
+            ok &= CheckGrades(results);
             Console.WriteLine($"{(o.DryRun ? "dry run, nothing written" : "wrote " + o.Out)} in {watch.Elapsed.TotalSeconds:0.0}s");
             return ok ? 0 : 1;
         }
@@ -580,6 +581,7 @@ namespace CargoJam.LevelGen
                 };
             });
             PrintTable(results);
+            ok &= CheckGrades(results);
             return ok ? 0 : 1;
         }
 
@@ -641,6 +643,33 @@ namespace CargoJam.LevelGen
                                   $"{Blank(l.Straps.Count)} | {gates} | {r.Plan.TargetFail:0.00} | {r.Stats.FailRate:0.000} | " +
                                   $"{r.Stats.StuckRate:0.000} | {expressFails} | {nodes} |");
             }
+        }
+
+        /// <summary>
+        /// Prints a FAIL line for every level outside its design fail band, stuck more than 1% of games,
+        /// missing too many express parcels, or past the solver's node limit. False when any did.
+        /// </summary>
+        static bool CheckGrades(Result[] results)
+        {
+            bool ok = true;
+            foreach (var r in results)
+            {
+                if (r == null) continue;
+                var problems = new List<string>();
+                var (lo, hi) = r.Plan.SpecBand;
+                double fail = r.Stats.FailRate;
+                if (fail < lo || fail > hi) problems.Add($"fail {fail:0.000} outside {r.Plan.Kind} band {lo:0.00}-{hi:0.00}");
+                if (r.Stats.StuckRate > 0.01) problems.Add($"stuck {r.Stats.StuckRate:0.000} > 0.01");
+                // A handful of fails says nothing about their mix, so the express share needs a few to count.
+                if (r.Stats.Fails >= 10 && r.Stats.ExpressShare > MaxExpressShare)
+                    problems.Add($"express misses are {r.Stats.ExpressShare:0.00} of fails");
+                if (r.HitNodeLimit) problems.Add("solver hit its node limit");
+                if (problems.Count == 0) continue;
+                ok = false;
+                Console.WriteLine($"FAIL level {r.Data.id}: {string.Join("; ", problems)}");
+            }
+            if (ok) Console.WriteLine("all levels inside their fail bands");
+            return ok;
         }
 
         static string Blank(int n) => n == 0 ? "" : n.ToString(CultureInfo.InvariantCulture);
