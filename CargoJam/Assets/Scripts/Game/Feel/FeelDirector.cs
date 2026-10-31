@@ -149,6 +149,7 @@ namespace CargoJam.Game.Feel
             particles.Clear();
             dockFx.End();
             music.ClearDuck();
+            music.SetTension(false);
         }
 
         // ---- Environment (design v3): ambience, music, and the arrival reveal --------------------
@@ -163,7 +164,9 @@ namespace CargoJam.Game.Feel
             string biome = info.Biome != null ? info.Biome.Id : Journey.IdOf(info.Stop);
             var area = views != null ? views.Layout.ContentBounds : MenuDiorama.Bounds;
             ambient.Show(AmbientLife.KindFor(biome, info.Mood), storm, area, views != null, cam);
-            music.PlayStop(info.Stop, storm);
+            // Calm base, livelier swaps (design v4 §7); the next level's cue renders in the background.
+            MusicSelector.Choose(info, views, out var cue, out var prefetch);
+            music.Play(cue, prefetch);
 
             float extra = 0f;
             if (views != null && info.Arrival) extra = PlayArrival(info);
@@ -380,7 +383,15 @@ namespace CargoJam.Game.Feel
 
         public void GateOpened(GateView gate, float at) { }
 
-        public void TensionChanged(bool tense, float at) { }
+        public void TensionChanged(bool tense, float at)
+        {
+            if (views == null || at <= views.Tweener.Now)
+            {
+                music.SetTension(tense);
+                return;
+            }
+            views.Tweener.At(at, () => music.SetTension(tense));
+        }
 
         // ---- Win and fail -------------------------------------------------------------------------
 
@@ -458,6 +469,7 @@ namespace CargoJam.Game.Feel
             music.Duck(at, 2.2f);
             views.Tweener.At(at, () =>
             {
+                music.SetTension(false);
                 overlay.SetFailMood(true);
                 sfx.Play(Sfx.Horn, 0.85f);
                 sfx.Play(Sfx.Fail);
