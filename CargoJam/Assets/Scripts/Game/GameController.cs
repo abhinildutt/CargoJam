@@ -17,13 +17,18 @@ namespace CargoJam.Game
         public readonly int Index;
         public readonly bool Hard;
         public readonly int ParcelCount;
+        /// <summary>The level's <see cref="LevelDefinition.CargoMask"/>: bit (1 &lt;&lt; (int)kind) per <see cref="CargoKind"/> used.</summary>
+        public readonly int CargoMask;
 
-        public LevelStartInfo(int index, bool hard, int parcelCount)
+        public LevelStartInfo(int index, bool hard, int parcelCount, int cargoMask = 0)
         {
             Index = index;
             Hard = hard;
             ParcelCount = parcelCount;
+            CargoMask = cargoMask;
         }
+
+        public bool Uses(CargoKind kind) => (CargoMask & (1 << (int)kind)) != 0;
 
         /// <summary>The number players see.</summary>
         public int Number => Index + 1;
@@ -65,6 +70,8 @@ namespace CargoJam.Game
         DockView dock;
         readonly Dictionary<int, ParcelView> parcels = new Dictionary<int, ParcelView>();
         readonly List<TruckView> trucks = new List<TruckView>();
+        readonly List<GateView> gates = new List<GateView>();
+        readonly List<StrapView> straps = new List<StrapView>();
         readonly List<Parcel> freeScratch = new List<Parcel>();
         int lastScreenWidth, lastScreenHeight;
         float inputBlockedUntil;
@@ -223,8 +230,24 @@ namespace CargoJam.Game
             dock = DockView.Create(levelRoot, layout, materials);
             foreach (var p in session.Board.Parcels)
             {
-                parcels[p.Id] = ParcelView.Create(p, levelRoot, layout, materials,
-                    hidden: session.IsHidden(p), locked: session.IsLocked(p), isKey: session.IsKey(p));
+                var look = new ParcelLook
+                {
+                    Hidden = session.IsHidden(p),
+                    Locked = session.IsLocked(p),
+                    IsKey = session.IsKey(p),
+                    Frost = session.FrostLeft(p),
+                    Express = session.ExpressLeft(p),
+                };
+                parcels[p.Id] = ParcelView.Create(p, levelRoot, layout, materials, look);
+            }
+            var level = session.Level;
+            for (int i = 0; i < level.Gates.Count; i++)
+                gates.Add(GateView.Create(i, level.Gates[i], session.GateLeft(i), levelRoot, layout, materials));
+            for (int i = 0; i < level.Straps.Count; i++)
+            {
+                var a = parcels[session.Board.Get(level.Straps[i].A).Id];
+                var b = parcels[session.Board.Get(level.Straps[i].B).Id];
+                straps.Add(StrapView.Create(i, a, b, materials));
             }
             foreach (var t in session.Trucks)
             {
@@ -248,6 +271,9 @@ namespace CargoJam.Game
                 Dock = dock,
                 Parcels = new List<ParcelView>(parcels.Values),
                 Trucks = trucks,
+                Gates = gates,
+                Straps = straps,
+                NextHard = IsHardLevel(levelIndex + 1),
                 Environment = environment,
             };
             float introSeconds = fx?.LevelBuilt(views) ?? 0f;
@@ -256,7 +282,7 @@ namespace CargoJam.Game
 
             ComboChanged?.Invoke(0);
             DockChanged?.Invoke(session.Dock.Count, session.Dock.Capacity);
-            LevelStarted?.Invoke(new LevelStartInfo(levelIndex, session.Level.Hard, session.Board.Count));
+            LevelStarted?.Invoke(new LevelStartInfo(levelIndex, session.Level.Hard, session.Board.Count, session.Level.CargoMask));
         }
 
         public void Restart() => StartLevel(levelIndex);
@@ -286,6 +312,8 @@ namespace CargoJam.Game
             tweener.Clear();
             parcels.Clear();
             trucks.Clear();
+            gates.Clear();
+            straps.Clear();
             combo = 0;
             craneArmed = false;
             movedThisLevel = false;
@@ -404,6 +432,16 @@ namespace CargoJam.Game
             if (best == null) return false;
             cell = best.Cell;
             return true;
+        }
+
+        /// <summary>
+        /// Where the hand should point to teach a cargo kind on its debut level (see design v4, section 5).
+        /// False when there is nothing to point at (e.g. bollards).
+        /// </summary>
+        public bool TryGetCargoHintCell(CargoKind kind, out Cell cell)
+        {
+            cell = default;
+            return false;
         }
 
         /// <summary>Screen position (origin bottom-left) of the top of the parcel at a cell.</summary>
@@ -570,8 +608,8 @@ namespace CargoJam.Game
                     Celebrate(now);
                     break;
 
-                case LevelFailed _:
-                    ExplainFail(now);
+                case LevelFailed failed:
+                    ExplainFail(now, failed.Reason);
                     break;
             }
         }
@@ -676,7 +714,7 @@ namespace CargoJam.Game
         /// Shows why the level was lost before the panel covers it: the waiting truck bounces, the dock
         /// shakes, and the buried parcels it needed pulse while the camera leans toward the dock.
         /// </summary>
-        void ExplainFail(float now)
+        void ExplainFail(float now, FailReason reason)
         {
             float at = now + Timing.FailExplainDelay;
             var truck = session.CurrentTruck;
@@ -697,7 +735,7 @@ namespace CargoJam.Game
                 }
             }
             tweener.At(at, () => dock.Flash(tweener));
-            fx?.Fail(at, needed, tv);
+            fx?.Fail(at, reason, needed, tv);
             PushCamera(layout.DockSlotCenter((layout.DockSlots - 1) / 2), 0.06f, at, 0.6f);
             LevelFailed?.Invoke(ParcelsLeft, at + Timing.FailOverlayDelay);
         }

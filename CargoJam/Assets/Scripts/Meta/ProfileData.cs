@@ -12,6 +12,12 @@ namespace CargoJam.Meta
         /// <summary>The save format this build writes. v2 added <see cref="postcards"/> and <see cref="lastArrivalShown"/>.</summary>
         public const int CurrentVersion = 2;
 
+        /// <summary>
+        /// Kinds of special cargo (the Core <c>CargoKind</c> enum, whose int values index
+        /// <see cref="cargoSeen"/>). Meta doesn't reference Core, so a test keeps the two in step.
+        /// </summary>
+        public const int CargoKinds = 7;
+
         /// <summary>Save format version; older saves are upgraded by <see cref="ProfileMigration.Upgrade"/>.</summary>
         public int version = CurrentVersion;
 
@@ -48,6 +54,14 @@ namespace CargoJam.Meta
         public bool[] postcards = new bool[Journey.StopCount];
         /// <summary>Progress leg (<see cref="Journey.LegFor"/>) whose arrival reveal has played; -1 = none yet.</summary>
         public int lastArrivalShown = -1;
+
+        // ---- design v4: cargo variety ----
+
+        /// <summary>
+        /// Cargo kinds whose "New cargo!" card the player has seen, indexed by <c>CargoKind</c>. An older
+        /// save loads this as null or short; readers must tolerate that.
+        /// </summary>
+        public bool[] cargoSeen = new bool[CargoKinds];
     }
 
     /// <summary>The local calendar date, injectable for tests.</summary>

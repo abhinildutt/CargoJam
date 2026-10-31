@@ -368,6 +368,20 @@ namespace CargoJam.Game.Feel
             }
         }
 
+        // ---- Cargo ---------------------------------------------------------------------------------
+
+        public void FrostCracked(ParcelView parcel, int left, float at) { }
+
+        public void ExpressTicked(ParcelView parcel, int left, float at) { }
+
+        public void StrapSnapped(StrapView strap, float at) { }
+
+        public void GateProgress(GateView gate, int left, float at) { }
+
+        public void GateOpened(GateView gate, float at) { }
+
+        public void TensionChanged(bool tense, float at) { }
+
         // ---- Win and fail -------------------------------------------------------------------------
 
         public void WinSequence(float at, Vector3 lastTruck)
@@ -436,7 +450,7 @@ namespace CargoJam.Game.Feel
             });
         }
 
-        public void Fail(float at, IReadOnlyList<ParcelView> needed, TruckView waiting)
+        public void Fail(float at, FailReason reason, IReadOnlyList<ParcelView> needed, TruckView waiting)
         {
             ResetTimeScale();
             if (views == null) return;

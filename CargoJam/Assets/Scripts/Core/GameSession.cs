@@ -41,6 +41,9 @@ namespace CargoJam.Core
         public int CurrentTruckIndex { get; private set; }
         public GameStatus Status { get; private set; }
 
+        /// <summary>Why the level was lost, or <see cref="Core.FailReason.None"/> while it isn't.</summary>
+        public FailReason FailReason { get; private set; }
+
         /// <summary>The truck at the loading bay, or null once every truck has left.</summary>
         public Truck CurrentTruck => CurrentTruckIndex < trucks.Count ? trucks[CurrentTruckIndex] : null;
 
@@ -97,6 +100,7 @@ namespace CargoJam.Core
         {
             Level = source.Level;
             Board = new Board(source.Board.Width, source.Board.Height);
+            Board.CopyObstaclesFrom(source.Board);
             foreach (var p in source.Board.Parcels) Board.Place(p);
             Dock = new HoldingDock(source.Dock.Capacity);
             for (int i = 0; i < source.Dock.Capacity; i++)
@@ -105,6 +109,7 @@ namespace CargoJam.Core
             foreach (var t in source.trucks) trucks.Add(t.Copy());
             CurrentTruckIndex = source.CurrentTruckIndex;
             Status = source.Status;
+            FailReason = source.FailReason;
 
             parcelsById = source.parcelsById;
             lockedIds = source.lockedIds;
@@ -129,6 +134,67 @@ namespace CargoJam.Core
         {
             foreach (int locked in lockedIds)
                 if (lockKey[locked] == parcel.Id) return true;
+            return false;
+        }
+
+        /// <summary>True while something holds the parcel in place even when it has a path: a padlock (or ice).</summary>
+        public bool IsRestrained(Parcel parcel) => IsLocked(parcel);
+
+        /// <summary>Layers of ice left on the parcel, or 0 when it isn't frozen.</summary>
+        public int FrostLeft(Parcel parcel) => 0;
+
+        /// <summary>
+        /// Moves left for an express parcel, counting the one that ships it; 0 means the parcel isn't
+        /// express. Once the parcel leaves the yard the count stops changing.
+        /// </summary>
+        public int ExpressLeft(Parcel parcel) => 0;
+
+        /// <summary>The parcel strapped to this one right now, or null when it isn't strapped.</summary>
+        public Parcel StrapPartner(Parcel parcel) => null;
+
+        /// <summary>Loads still needed to open gate <paramref name="gate"/> (an index into <see cref="LevelDefinition.Gates"/>); 0 once open.</summary>
+        public int GateLeft(int gate) => 0;
+
+        /// <summary>True once gate <paramref name="gate"/> has opened (gates never close again).</summary>
+        public bool IsGateOpen(int gate) => true;
+
+        // ---- Moves ------------------------------------------------------------------------------
+
+        /// <summary>True when the parcel, or its strap partner, has a path out of the yard.</summary>
+        public bool IsUnitFree(Parcel parcel) => Board.IsFree(parcel.Cell);
+
+        /// <summary>
+        /// Fills <paramref name="result"/> with one parcel per unit that can be tapped now: free and not
+        /// restrained. For a strapped pair this is its free member, listed once. Whether the truck or
+        /// dock can take it is <see cref="CanTake"/>'s question.
+        /// </summary>
+        public void GetMoves(List<Parcel> result)
+        {
+            Board.GetFreeParcels(result);
+            int kept = 0;
+            for (int i = 0; i < result.Count; i++)
+                if (!IsRestrained(result[i])) result[kept++] = result[i];
+            result.RemoveRange(kept, result.Count - kept);
+        }
+
+        /// <summary>
+        /// True when the parcel's unit can leave the yard now: the loading truck accepts it, or the dock
+        /// has a free slot. <paramref name="extraSlots"/> pretends the dock is that much bigger (to ask
+        /// whether Extra Slot would help).
+        /// </summary>
+        public bool CanTake(Parcel parcel, int extraSlots = 0)
+        {
+            var truck = CurrentTruck;
+            if (truck != null && truck.Accepts(parcel)) return true;
+            return Dock.Capacity - Dock.Count + extraSlots >= 1;
+        }
+
+        /// <summary>True when some unit from <see cref="GetMoves"/> passes <see cref="CanTake"/>.</summary>
+        public bool HasLegalMove()
+        {
+            GetMoves(freeScratch);
+            foreach (var p in freeScratch)
+                if (CanTake(p)) return true;
             return false;
         }
 
@@ -212,6 +278,7 @@ namespace CargoJam.Core
             Dock.AddSlot();
             events.Add(new DockExpanded(Dock.Capacity));
             Status = GameStatus.Playing;
+            FailReason = FailReason.None;
             return events;
         }
 
@@ -371,8 +438,10 @@ namespace CargoJam.Core
             }
             else if (Dock.IsFull ? !HasFreeMatch() : !HasTappableParcel())
             {
+                // With room in the dock, only padlocks can leave nothing to tap; another slot won't help.
                 Status = GameStatus.Failed;
-                events.Add(new LevelFailed());
+                FailReason = Dock.IsFull ? FailReason.OutOfSpace : FailReason.Stuck;
+                events.Add(new LevelFailed(FailReason));
             }
         }
 

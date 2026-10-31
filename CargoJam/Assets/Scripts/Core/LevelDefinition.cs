@@ -31,6 +31,15 @@ namespace CargoJam.Core
         /// <summary>Padlocks, in file order. Every locked and key cell holds a parcel and there are no cycles.</summary>
         public IReadOnlyList<ParcelLock> Locks { get; }
 
+        /// <summary>Strapped pairs, in file order. Each parcel is in at most one.</summary>
+        public IReadOnlyList<ParcelStrap> Straps { get; }
+
+        /// <summary>Customs gates, in file order; a gate index (as in <see cref="GateProgress"/>) indexes this list.</summary>
+        public IReadOnlyList<ParcelGate> Gates { get; }
+
+        /// <summary>Bit (1 &lt;&lt; (int)kind) is set for every <see cref="CargoKind"/> this level uses.</summary>
+        public int CargoMask { get; }
+
         readonly int[] colors;
         readonly bool[] mystery;
 
@@ -44,8 +53,15 @@ namespace CargoJam.Core
             TruckCapacity = data.truckCapacity;
             Trucks = trucks;
             Locks = locks;
+            Straps = Array.Empty<ParcelStrap>();
+            Gates = Array.Empty<ParcelGate>();
             this.colors = colors;
             this.mystery = mystery;
+
+            int mask = 0;
+            if (Array.IndexOf(mystery, true) >= 0) mask |= 1 << (int)CargoKind.Mystery;
+            if (locks.Length > 0) mask |= 1 << (int)CargoKind.Lock;
+            CargoMask = mask;
         }
 
         /// <summary>Color at a cell, or <see cref="ParcelColors.None"/> when empty.</summary>
@@ -53,6 +69,21 @@ namespace CargoJam.Core
 
         /// <summary>True when the cell holds a mystery parcel (a lowercase letter in the file).</summary>
         public bool IsMystery(int x, int y) => mystery[y * Width + x];
+
+        /// <summary>True when the cell is a bollard ('#' in the file), a permanent obstacle.</summary>
+        public bool IsBollard(int x, int y) => false;
+
+        /// <summary>True when the cell is a customs gate ('+' in the file); see <see cref="Gates"/>.</summary>
+        public bool IsGateCell(int x, int y) => false;
+
+        /// <summary>Starting layers of ice on the parcel at a cell, or 0 when it isn't frozen.</summary>
+        public int FrostAt(int x, int y) => 0;
+
+        /// <summary>Starting moves for the express parcel at a cell, or 0 when it isn't express.</summary>
+        public int ExpressAt(int x, int y) => 0;
+
+        /// <summary>True when the level uses this kind of cargo (see <see cref="CargoMask"/>).</summary>
+        public bool Uses(CargoKind kind) => (CargoMask & (1 << (int)kind)) != 0;
 
         public static LevelDefinition Parse(LevelData data)
         {

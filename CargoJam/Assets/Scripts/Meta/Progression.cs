@@ -112,6 +112,35 @@ namespace CargoJam.Meta
         /// <summary>The multiplier the next win will pay (the streak counts that win, see <see cref="RecordWin"/>).</summary>
         public float NextWinMultiplier => EconomyConfig.StreakMultiplier(Data.winStreak + 1);
 
+        // ---- Cargo introductions (docs/design-v4-cargo-variety.md, section 5) ----
+
+        /// <summary>
+        /// Whether the player has been introduced to a cargo kind (an int <c>CargoKind</c>). For now every
+        /// kind counts as seen, so no "New cargo!" card shows; the real answer reads
+        /// <see cref="ProfileData.cargoSeen"/>.
+        /// </summary>
+        public bool HasSeenCargo(int kind) => true;
+
+        /// <summary>
+        /// Records that the player has seen a cargo kind's card. Returns true when it is new (and raises
+        /// <see cref="Changed"/>). Out-of-range kinds are ignored.
+        /// </summary>
+        public bool MarkCargoSeen(int kind)
+        {
+            if (kind < 0 || kind >= ProfileData.CargoKinds) return false;
+            var seen = Data.cargoSeen;
+            if (seen == null || seen.Length < ProfileData.CargoKinds)
+            {
+                var sized = new bool[ProfileData.CargoKinds];
+                if (seen != null) Array.Copy(seen, sized, seen.Length);
+                Data.cargoSeen = seen = sized;
+            }
+            if (seen[kind]) return false;
+            seen[kind] = true;
+            RaiseChanged();
+            return true;
+        }
+
         // ---- Streak tiers (docs/design-v3-premium-journey.md, section 6) ----
 
         /// <summary>

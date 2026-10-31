@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace CargoJam.Core
@@ -12,6 +13,8 @@ namespace CargoJam.Core
         static readonly int[] DY = { -1, 0, 0, 1 };
 
         readonly Parcel[] cells;
+        // Bollards and closed gates. Nothing sets these yet, so paths don't consult them.
+        readonly bool[] obstacles;
 
         public int Width { get; }
         public int Height { get; }
@@ -22,6 +25,7 @@ namespace CargoJam.Core
             Width = width;
             Height = height;
             cells = new Parcel[width * height];
+            obstacles = new bool[width * height];
         }
 
         public bool InBounds(Cell c) => c.X >= 0 && c.X < Width && c.Y >= 0 && c.Y < Height;
@@ -36,6 +40,14 @@ namespace CargoJam.Core
                     if (p != null) yield return p;
             }
         }
+
+        /// <summary>True when the cell is a bollard or a closed gate: never a parcel, never part of a path.</summary>
+        public bool IsObstacle(Cell c) => InBounds(c) && obstacles[Index(c)];
+
+        internal void SetObstacle(Cell c, bool value) => obstacles[Index(c)] = value;
+
+        /// <summary>Copies another board's obstacles (same size), for session clones.</summary>
+        internal void CopyObstaclesFrom(Board source) => Array.Copy(source.obstacles, obstacles, obstacles.Length);
 
         internal void Place(Parcel parcel)
         {

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CargoJam.Core;
 using UnityEngine;
 
 namespace CargoJam.Game.Presentation
@@ -51,6 +52,12 @@ namespace CargoJam.Game.Presentation
         public DockView Dock;
         public IReadOnlyList<ParcelView> Parcels;
         public IReadOnlyList<TruckView> Trucks;
+        /// <summary>Customs gates, indexed like <see cref="LevelDefinition.Gates"/>.</summary>
+        public IReadOnlyList<GateView> Gates;
+        /// <summary>Strap bands, indexed like <see cref="LevelDefinition.Straps"/>.</summary>
+        public IReadOnlyList<StrapView> Straps;
+        /// <summary>The level after this one is a HARD level (lets the music prefetch its cue).</summary>
+        public bool NextHard;
         /// <summary>The persistent scenery (reveal points for the arrival pan, the current biome).</summary>
         public WorldEnvironment Environment;
     }
@@ -93,7 +100,23 @@ namespace CargoJam.Game.Presentation
         /// <param name="at">Time.time when the last truck starts to leave.</param>
         /// <param name="lastTruck">Where it leaves from.</param>
         void WinSequence(float at, Vector3 lastTruck);
-        void Fail(float at, IReadOnlyList<ParcelView> needed, TruckView waiting);
+
+        /// <summary>A frozen crate lost a layer of ice; <paramref name="left"/> layers remain (0 = thawed).</summary>
+        void FrostCracked(ParcelView parcel, int left, float at);
+        /// <summary>An express parcel's count went down to <paramref name="left"/>.</summary>
+        void ExpressTicked(ParcelView parcel, int left, float at);
+        /// <summary>The Crane cut a strap.</summary>
+        void StrapSnapped(StrapView strap, float at);
+        /// <summary>A load counted a gate down to <paramref name="left"/>.</summary>
+        void GateProgress(GateView gate, int left, float at);
+        void GateOpened(GateView gate, float at);
+        /// <summary>The board became tense (dock one short of full, or an express parcel nearly out) or relaxed.</summary>
+        void TensionChanged(bool tense, float at);
+
+        /// <param name="reason">Why the level was lost.</param>
+        /// <param name="needed">Parcels the waiting truck needed (pulsing), possibly empty.</param>
+        /// <param name="waiting">The truck at the bay, or null.</param>
+        void Fail(float at, FailReason reason, IReadOnlyList<ParcelView> needed, TruckView waiting);
         void LevelCleared();
     }
 }

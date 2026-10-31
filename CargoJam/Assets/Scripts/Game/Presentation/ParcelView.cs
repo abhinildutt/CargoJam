@@ -51,8 +51,9 @@ namespace CargoJam.Game.Presentation
             keyBadge = null;
         }
 
+        /// <summary>A yard parcel at its cell, dressed for its starting state (<paramref name="look"/>).</summary>
         public static ParcelView Create(Parcel parcel, Transform parent, Layout layout, MaterialBank materials,
-            bool hidden = false, bool locked = false, bool isKey = false)
+            in ParcelLook look)
         {
             var go = new GameObject($"Parcel {parcel.Id} {ParcelColors.ToCode(parcel.Color)}");
             go.transform.SetParent(parent, false);
@@ -64,9 +65,9 @@ namespace CargoJam.Game.Presentation
             view.materials = materials;
             view.body = MeshKit.Show("Body", go.transform, BoxMesh(parcel.Color), materials.ParcelSkin(parcel.Color, false));
             view.bodyFilter = view.body.GetComponent<MeshFilter>();
-            if (hidden) view.Hide();
-            if (locked) view.AddPadlock();
-            if (isKey) view.AddKeyBadge();
+            if (look.Hidden) view.Hide();
+            if (look.Locked) view.AddPadlock();
+            if (look.IsKey) view.AddKeyBadge();
             return view;
         }
 
