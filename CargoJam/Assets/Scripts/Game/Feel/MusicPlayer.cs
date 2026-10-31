@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using CargoJam.Game.Meta;
@@ -12,10 +13,12 @@ namespace CargoJam.Game.Feel
     /// tension layer: it is started with <see cref="AudioSource.PlayScheduled"/> on the same DSP tick
     /// as the main loop (whose length is an exact multiple of it), so the two stay beat-locked, and
     /// <see cref="SetTension"/> only fades its volume.
-    /// Loops render lazily, and never while music is off: the requested cue first, then the prefetch
-    /// at a low per-frame budget. At most <see cref="CacheLimit"/> cues (main + tension clip, evicted
-    /// together) and <see cref="CacheBudgetBytes"/> of clip data are kept; the playing, wanted and
-    /// prefetched cues are never evicted.
+    ///
+    /// Loops render lazily, one at a time and never while music is off: the requested cue first, then
+    /// the prefetch at a low per-frame budget. Only cues in use stay cached (main + tension clip,
+    /// released together): the playing loop, one still fading out, the wanted cue and the prefetch.
+    /// That is at most four, and in steady play two (playing + prefetch); a loop is released the moment
+    /// its crossfade ends.
     /// </summary>
     public sealed class MusicPlayer : MonoBehaviour
     {
@@ -25,14 +28,16 @@ namespace CargoJam.Game.Feel
         const float TensionLevel = 0.8f;
         const float TensionInSeconds = 0.5f;
         const float TensionOutSeconds = 1.5f;
+        /// <summary>An audible tension layer ramps out this fast before a cue swap restarts it.</summary>
+        const float SwapRampSeconds = 0.08f;
         const float DuckLevel = 0.35f;
         const float PollInterval = 0.5f;
         const float CrossfadeSeconds = 1.6f;
-        const int CacheLimit = 4;
-        /// <summary>Clip memory the cache may hold beyond the protected cues (float PCM, 4 bytes a sample).</summary>
-        const long CacheBudgetBytes = 9L * 1024 * 1024;
-        /// <summary>DSP lead for scheduled starts, so the main loop and its tension layer start on the same sample.</summary>
-        const double ScheduleLead = 0.06;
+        /// <summary>
+        /// Least DSP lead for scheduled starts; the real lead is at least two mixer buffers, so the loop
+        /// and its tension layer always start on the same future sample.
+        /// </summary>
+        const double MinScheduleLead = 0.06;
         /// <summary>Sample writes per frame for the wanted loop while nothing is audible (a few ms on a mid-range phone).</summary>
         const int ForegroundBudget = 60000;
         /// <summary>Sample writes per frame otherwise (prefetches, or a missed prefetch while music plays).</summary>
@@ -44,14 +49,14 @@ namespace CargoJam.Game.Feel
         {
             public AudioClip Main;
             public AudioClip Tension;
-            public long Bytes;
         }
 
         readonly AudioSource[] sources = new AudioSource[2];
         readonly int[] sourceKey = { -1, -1 };
         readonly float[] gains = new float[2];
         readonly Dictionary<int, Cached> cache = new Dictionary<int, Cached>();
-        readonly List<int> recent = new List<int>(CacheLimit + 3);
+        /// <summary>The cache's keys, for eviction without enumerating the dictionary.</summary>
+        readonly List<int> cachedKeys = new List<int>(6);
         AudioSource tensionSource;
 
         int active = -1;
@@ -65,6 +70,10 @@ namespace CargoJam.Game.Feel
         float duckFrom = -1f, duckUntil = -1f;
         bool tense;
         float tensionGain;
+        /// <summary>A cue swap waiting for the audible tension layer to ramp out (-1 = none).</summary>
+        int pendingKey = -1;
+        Cached pending;
+        float swapRamp = 1f;
 
         void Awake()
         {
@@ -89,6 +98,7 @@ namespace CargoJam.Game.Feel
         {
             foreach (var entry in cache.Values) Release(entry);
             cache.Clear();
+            cachedKeys.Clear();
         }
 
         /// <summary>
@@ -100,12 +110,15 @@ namespace CargoJam.Game.Feel
             int key = cue.Key;
             desiredKey = key;
             prefetchKey = prefetch.Key;
-            bool playing = active >= 0 && sourceKey[active] == key;
-            if (!playing && cache.TryGetValue(key, out var entry))
+            bool current = active >= 0 && sourceKey[active] == key;
+            if (current) CancelPending();
+            else if (key != pendingKey)
             {
-                Touch(key);
-                Crossfade(key, entry);
+                // A swap still waiting on its ramp is superseded.
+                CancelPending();
+                if (cache.TryGetValue(key, out var entry)) BeginCrossfade(key, entry);
             }
+            Evict();
             Pump();
         }
 
@@ -127,6 +140,7 @@ namespace CargoJam.Game.Feel
                 // A half-faded previous loop is simply dropped.
                 StopSource(1 - active);
                 StartActive();
+                Evict();
             }
             Pump();
         }
@@ -158,6 +172,18 @@ namespace CargoJam.Game.Feel
             duck = Mathf.MoveTowards(duck, ducking ? DuckLevel : 1f, dt * (ducking ? 4f : 0.9f));
             tensionGain = Mathf.MoveTowards(tensionGain, tense ? 1f : 0f, dt / (tense ? TensionInSeconds : TensionOutSeconds));
 
+            // A swap waits a few frames for an audible tension layer to ramp out, then happens.
+            swapRamp = Mathf.MoveTowards(swapRamp, pendingKey >= 0 ? 0f : 1f, dt / SwapRampSeconds);
+            if (pendingKey >= 0 && swapRamp <= 0f)
+            {
+                int key = pendingKey;
+                var entry = pending;
+                CancelPending();
+                Crossfade(key, entry);
+                swapRamp = 1f;
+            }
+
+            bool released = false;
             for (int i = 0; i < sources.Length; i++)
             {
                 var source = sources[i];
@@ -166,9 +192,9 @@ namespace CargoJam.Game.Feel
                 gains[i] = Mathf.MoveTowards(gains[i], i == active ? 1f : 0f, step);
                 if (i != active && gains[i] <= 0f)
                 {
-                    // Faded out: stop it and let its clips be evicted.
+                    // Faded out: stop it and release its clips right away.
                     StopSource(i);
-                    Evict();
+                    released = true;
                     continue;
                 }
                 // Equal-power-ish crossfade.
@@ -177,15 +203,37 @@ namespace CargoJam.Game.Feel
                 // Paused rather than left playing silently, so a disabled toggle costs nothing.
                 if (fade <= 0f && source.isPlaying) source.Pause();
             }
+            if (released) Evict();
 
             // The layer rides on the active loop's crossfade; it keeps running silently when relaxed so
             // it never has to be re-synced.
             if (tensionSource.clip != null)
             {
                 float g = Mathf.Sin(gains[active] * Mathf.PI * 0.5f);
-                tensionSource.volume = Volume * TensionLevel * fade * duck * g * tensionGain;
+                tensionSource.volume = Volume * TensionLevel * fade * duck * g * tensionGain * swapRamp;
                 if (fade <= 0f && tensionSource.isPlaying) tensionSource.Pause();
             }
+        }
+
+        /// <summary>Crossfades now, or once an audible tension layer has ramped out (it restarts with the new loop).</summary>
+        void BeginCrossfade(int key, Cached entry)
+        {
+            bool audible = active >= 0 && tensionSource.clip != null && tensionSource.isPlaying
+                           && tensionGain * fade * swapRamp > 0.001f;
+            if (!audible)
+            {
+                CancelPending();
+                Crossfade(key, entry);
+                return;
+            }
+            pendingKey = key;
+            pending = entry;
+        }
+
+        void CancelPending()
+        {
+            pendingKey = -1;
+            pending = default;
         }
 
         void Crossfade(int key, Cached entry)
@@ -212,13 +260,21 @@ namespace CargoJam.Game.Feel
         /// <summary>Starts the active loop and its tension layer on the same future DSP sample.</summary>
         void StartActive()
         {
-            double at = AudioSettings.dspTime + ScheduleLead;
+            double at = AudioSettings.dspTime + ScheduleLead();
             var main = sources[active];
             main.Stop();
             main.PlayScheduled(at);
             if (tensionSource.clip == null) return;
             tensionSource.Stop();
             tensionSource.PlayScheduled(at);
+        }
+
+        /// <summary>Two mixer buffers (Android "best performance" buffers can be long), at least <see cref="MinScheduleLead"/>.</summary>
+        static double ScheduleLead()
+        {
+            AudioSettings.GetDSPBufferSize(out int bufferLength, out _);
+            int rate = AudioSettings.outputSampleRate;
+            return rate > 0 ? Math.Max(MinScheduleLead, 2.0 * bufferLength / rate) : MinScheduleLead;
         }
 
         void StopSource(int i)
@@ -252,7 +308,8 @@ namespace CargoJam.Game.Feel
             while (wanted && (key = NextToRender()) >= 0)
             {
                 // Full speed only while silent; with a loop audible, a missed prefetch renders at the
-                // gentle budget so it never costs frames during an arrival pan.
+                // gentle budget so it never costs frames during an arrival pan. (Render itself does no
+                // work on this frame, which may be the one that starts the pan.)
                 bool silent = active < 0 || sources[active].clip == null || fade <= 0f;
                 int budget = key == desiredKey && silent ? ForegroundBudget : BackgroundBudget;
                 int k = key;
@@ -262,38 +319,27 @@ namespace CargoJam.Game.Feel
                     main = m;
                     tension = t;
                 });
-                var entry = new Cached { Main = main, Tension = tension, Bytes = 4L * (main.samples + tension.samples) };
+                var entry = new Cached { Main = main, Tension = tension };
                 cache[k] = entry;
-                Touch(k);
+                if (!cachedKeys.Contains(k)) cachedKeys.Add(k);
+                if (k == desiredKey && (active < 0 || sourceKey[active] != k)) BeginCrossfade(k, entry);
+                // A render that is no longer wanted (the player moved on) is dropped here.
                 Evict();
-                if (k == desiredKey && (active < 0 || sourceKey[active] != k)) Crossfade(k, entry);
             }
             rendering = false;
         }
 
-        void Touch(int key)
-        {
-            recent.Remove(key);
-            recent.Add(key);
-        }
-
-        /// <summary>Drops least-recently-used cues past the count or byte limit, never one in use or wanted.</summary>
+        /// <summary>Releases every cached cue that is not playing, fading out, wanted or prefetched.</summary>
         void Evict()
         {
-            long bytes = 0;
-            foreach (var entry in cache.Values) bytes += entry.Bytes;
-            for (int i = 0; i < recent.Count && (cache.Count > CacheLimit || bytes > CacheBudgetBytes); i++)
+            for (int i = cachedKeys.Count - 1; i >= 0; i--)
             {
-                int key = recent[i];
-                if (key == desiredKey || key == prefetchKey || key == sourceKey[0] || key == sourceKey[1]) continue;
-                if (cache.TryGetValue(key, out var entry))
-                {
-                    bytes -= entry.Bytes;
-                    Release(entry);
-                }
+                int key = cachedKeys[i];
+                if (key == desiredKey || key == prefetchKey || key == pendingKey || key == sourceKey[0] || key == sourceKey[1])
+                    continue;
+                if (cache.TryGetValue(key, out var entry)) Release(entry);
                 cache.Remove(key);
-                recent.RemoveAt(i);
-                i--;
+                cachedKeys.RemoveAt(i);
             }
         }
 

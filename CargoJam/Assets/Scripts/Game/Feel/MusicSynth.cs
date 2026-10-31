@@ -17,12 +17,18 @@ namespace CargoJam.Game.Feel
     /// Each loop comes with a 2-bar tension clip at the same tempo and swing (16th hats, a woodblock
     /// two octaves above the tonic, a sub pulse) that the player layers on beat-locked.
     ///
-    /// Mono, 22.05 kHz, 35–51 s per loop. Rendering is spread over frames with a per-frame sample
-    /// budget so it never hitches; the pad is rendered once for the A half and copied into the B half.
+    /// Mono, 16 kHz, 35–51 s per loop (2.3–3.2 MB as float PCM). Rendering is spread over frames with
+    /// a per-frame sample budget so it never hitches: composing, clearing, synthesis (the pad is
+    /// rendered once for the A half and copied into the B half), normalization and the upload into the
+    /// clip all run in budgeted slices, in one persistent buffer, so a render allocates no large garbage.
     /// </summary>
     public static class MusicSynth
     {
-        public const int Rate = 22050;
+        /// <summary>
+        /// Sample rate. 16 kHz keeps two resident cues (playing + prefetch, 7.3 MB at worst) inside the
+        /// audio memory budget; the content is soft pads and plucks, and 8 kHz of air is enough for hats.
+        /// </summary>
+        public const int Rate = 16000;
         const int Bars = 16;
         const int HalfBars = Bars / 2;
         const int Steps = 16;
@@ -256,13 +262,30 @@ namespace CargoJam.Game.Feel
         /// <summary>Length of a loop in seconds.</summary>
         public static float LoopSeconds(MusicCue cue) => LoopSamples(cue) / (float)Rate;
 
+        /// <summary>The render buffer, sized once for the longest loop and shared by every render.</summary>
+        static float[] buffer;
+        /// <summary>One beat of samples, copied into the clip per <see cref="AudioClip.SetData(float[], int)"/> call.</summary>
+        static float[] beat;
+
+        /// <summary>The longest loop over every cue (the slowest style's calm loop), in samples.</summary>
+        static int MaxLoopSamples()
+        {
+            int max = 0;
+            for (int key = 0; key < MusicCue.KeyCount; key++) max = Math.Max(max, LoopSamples(MusicCue.FromKey(key)));
+            return max;
+        }
+
         /// <summary>
-        /// Renders a cue's loop and its tension clip over several frames (at most
-        /// <paramref name="budget"/> sample writes per frame), then hands both clips to
-        /// <paramref name="done"/> (main, tension).
+        /// Renders a cue's loop and its tension clip over several frames (about
+        /// <paramref name="budget"/> sample writes per frame, never any work on the calling frame), then
+        /// hands both clips to <paramref name="done"/> (main, tension). Renders share one buffer, so only
+        /// one may run at a time (<see cref="MusicPlayer"/> renders strictly one after another).
         /// </summary>
         public static IEnumerator Render(MusicCue cue, int budget, Action<AudioClip, AudioClip> done)
         {
+            // Nothing on the caller's frame (it may be the one that starts an arrival pan).
+            yield return null;
+
             var style = StyleFor(cue.Style);
             var rhythm = RhythmFor(cue.Variant);
             int step = StepSamples(cue);
@@ -277,9 +300,25 @@ namespace CargoJam.Game.Feel
             ComposePad(style, cue, step, transpose, pads);
             ComposeArp(style, cue, step, swing, transpose, notes);
             ComposeRhythm(style, rhythm, step, swing, transpose, notes, kicks);
+            // The one large allocation, made once for the longest loop.
+            if (buffer == null) buffer = new float[MaxLoopSamples()];
+            if (beat == null || beat.Length != 4 * step) beat = new float[4 * step];
+            yield return null;
 
-            var data = new float[total];
+            var data = buffer;
             int left = budget;
+            // Clearing is a memset: a few samples' worth of budget per slice.
+            for (int from = 0; from < total;)
+            {
+                int count = Math.Min(total - from, left * 8);
+                Array.Clear(data, from, count);
+                from += count;
+                if ((left -= count / 8 + 1) <= 0)
+                {
+                    left = budget;
+                    yield return null;
+                }
+            }
 
             // The pad repeats every half, so it is rendered once (wrapping within the A half)...
             foreach (var note in pads)
@@ -312,6 +351,11 @@ namespace CargoJam.Game.Feel
             if (rhythm.Pump > 0f && kicks.Count > 0)
             {
                 var pump = new Pump(rhythm.Pump, kicks, total);
+                if ((left -= Pump.WarmupSamples(total) / 2) <= 0)
+                {
+                    left = budget;
+                    yield return null;
+                }
                 for (int from = 0; from < total;)
                 {
                     int count = Math.Min(total - from, left * 2);
@@ -342,30 +386,52 @@ namespace CargoJam.Game.Feel
             }
 
             float target = cue.Variant == MusicVariant.Calm ? CalmRms : cue.Variant == MusicVariant.Groove ? GrooveRms : DriveRms;
-            yield return Normalize(data, target, budget);
+            yield return Normalize(data, total, target, budget);
             var main = AudioClip.Create(cue.ToString(), total, 1, Rate, false);
-            main.SetData(data, 0);
-            data = null;
+            yield return Upload(main, data, total, budget);
 
-            // The tension layer: small, so it renders in one or two slices.
-            var tension = new float[step * Steps * TensionBars];
+            // The tension layer reuses the start of the buffer: 2 bars, a few slices.
+            int length = step * Steps * TensionBars;
+            Array.Clear(data, 0, length);
             notes.Clear();
             ComposeTension(style, step, swing, transpose, notes);
+            left = budget - length / 8;
             foreach (var note in notes)
             {
                 var osc = new Osc();
-                Synthesize(tension, tension.Length, note, ref osc, 0, note.Length);
+                Synthesize(data, length, note, ref osc, 0, note.Length);
                 if ((left -= note.Length) <= 0)
                 {
                     left = budget;
                     yield return null;
                 }
             }
-            yield return Normalize(tension, TensionRms, budget);
-            var layer = AudioClip.Create(cue + "-tension", tension.Length, 1, Rate, false);
-            layer.SetData(tension, 0);
+            yield return Normalize(data, length, TensionRms, budget);
+            var layer = AudioClip.Create(cue + "-tension", length, 1, Rate, false);
+            yield return Upload(layer, data, length, budget);
 
             done(main, layer);
+        }
+
+        /// <summary>
+        /// Copies <paramref name="length"/> samples into <paramref name="clip"/> a beat at a time
+        /// (<see cref="AudioClip.SetData(float[], int)"/> with an offset), within the frame budget.
+        /// Loops and tension clips are whole numbers of beats.
+        /// </summary>
+        static IEnumerator Upload(AudioClip clip, float[] data, int length, int budget)
+        {
+            int chunk = beat.Length;
+            int left = budget;
+            for (int from = 0; from < length; from += chunk)
+            {
+                Array.Copy(data, from, beat, 0, chunk);
+                clip.SetData(beat, from);
+                if ((left -= chunk / 2) <= 0)
+                {
+                    left = budget;
+                    yield return null;
+                }
+            }
         }
 
         // ---- Composition ----------------------------------------------------------------------------
@@ -714,7 +780,7 @@ namespace CargoJam.Game.Feel
                 next = 0;
 
                 // Warm up over the loop's last two seconds so the state at sample 0 matches its end.
-                int warm = Mathf.Min(total, Rate * 2);
+                int warm = WarmupSamples(total);
                 int k = 0;
                 while (k < kicks.Count && kicks[k] < total - warm) k++;
                 for (int i = total - warm; i < total; i++)
@@ -727,6 +793,9 @@ namespace CargoJam.Game.Feel
                     Tick();
                 }
             }
+
+            /// <summary>Samples of loop tail the constructor runs through (charged to the frame budget).</summary>
+            public static int WarmupSamples(int total) => Mathf.Min(total, Rate * 2);
 
             void Tick()
             {
@@ -759,34 +828,35 @@ namespace CargoJam.Game.Feel
         /// busy loops sit at a similar loudness without clipping. Drum loops have a high crest factor
         /// and would otherwise be held quieter than the calm ones by their kick transients, so first
         /// the loop is driven up to <see cref="ClipHeadroom"/>× past its peak limit into a soft knee
-        /// that rounds off only those transients. Spread over frames like the render.
+        /// that rounds off only those transients. Works on the first <c>length</c> samples, spread over
+        /// frames like the render.
         /// </summary>
-        static IEnumerator Normalize(float[] data, float targetRms, int budget)
+        static IEnumerator Normalize(float[] data, int length, float targetRms, int budget)
         {
             int slice = budget * 4;
             double sum = 0.0;
             float peak = 0.0001f;
-            for (int from = 0; from < data.Length; from += slice)
+            for (int from = 0; from < length; from += slice)
             {
-                Measure(data, from, Math.Min(data.Length, from + slice), ref sum, ref peak);
+                Measure(data, from, Math.Min(length, from + slice), ref sum, ref peak);
                 yield return null;
             }
-            float drive = Mathf.Min(targetRms / Rms(sum, data.Length), ClipHeadroom * MaxPeak / peak);
+            float drive = Mathf.Min(targetRms / Rms(sum, length), ClipHeadroom * MaxPeak / peak);
 
             // Drive into the knee and re-measure in the same pass.
             sum = 0.0;
             peak = 0.0001f;
-            for (int from = 0; from < data.Length; from += slice)
+            for (int from = 0; from < length; from += slice)
             {
-                int end = Math.Min(data.Length, from + slice);
+                int end = Math.Min(length, from + slice);
                 for (int i = from; i < end; i++) data[i] = SoftClip(data[i] * drive);
                 Measure(data, from, end, ref sum, ref peak);
                 yield return null;
             }
-            float gain = Mathf.Min(targetRms / Rms(sum, data.Length), MaxPeak / peak);
-            for (int from = 0; from < data.Length; from += slice)
+            float gain = Mathf.Min(targetRms / Rms(sum, length), MaxPeak / peak);
+            for (int from = 0; from < length; from += slice)
             {
-                int end = Math.Min(data.Length, from + slice);
+                int end = Math.Min(length, from + slice);
                 for (int i = from; i < end; i++) data[i] *= gain;
                 yield return null;
             }
