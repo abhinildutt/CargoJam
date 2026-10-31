@@ -38,8 +38,32 @@ namespace CargoJam.Game.Feel
                 case Sfx.Puff: return Puff();
                 case Sfx.Unlock: return Clip("unlock", 0.22f, Unlock);
                 case Sfx.Callout: return Notes("callout", new[] { 79, 84, 88 }, 0.06f, 0.3f, 0.3f);
+                case Sfx.Stamp: return Clip("stamp", 0.2f, Stamp);
+                case Sfx.Thunder: return Thunder();
                 default: throw new ArgumentOutOfRangeException(nameof(sfx));
             }
+        }
+
+        // A rubber stamp pressed onto card: a dull low thump with a short papery slap on top.
+        static float Stamp(float t, float d)
+        {
+            float body = Sine(Sweep(t, d, 150f, 80f)) * Decay(t, 26f);
+            float slap = Noise(t) * Decay(t, 90f) * 0.45f;
+            return (body + slap) * Mathf.Min(1f, t * 600f) * 0.55f;
+        }
+
+        // Far-off thunder: heavily low-passed noise that swells and rolls away, with a slow wobble.
+        static AudioClip Thunder()
+        {
+            float lp = 0f, lp2 = 0f;
+            return Clip("thunder", 1.8f, (t, d) =>
+            {
+                lp += 0.02f * (Noise(t) - lp);
+                lp2 += 0.05f * (lp - lp2);
+                float swell = Mathf.Min(1f, t / 0.12f) * Decay(t, 1.9f);
+                float roll = 0.7f + 0.3f * Sine(t * 3.1f);
+                return lp2 * swell * roll * 7.5f;
+            });
         }
 
         // A low thunk with a short noisy attack, like a box dropping onto a truck bed.

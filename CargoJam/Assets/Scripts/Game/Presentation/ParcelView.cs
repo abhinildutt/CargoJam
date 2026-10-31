@@ -5,9 +5,28 @@ namespace CargoJam.Game.Presentation
 {
     public sealed class ParcelView : MonoBehaviour
     {
+        /// <summary>Edge chamfer of the parcel box, in unit-box space.</summary>
+        const float Bevel = 0.08f;
+        /// <summary>Half width of the packing tape running front to back over the lid, in unit-box space.</summary>
+        const float TapeHalfWidth = 0.075f;
+        /// <summary>How far the tape sits proud of the box, so it never z-fights.</summary>
+        const float TapeLift = 0.004f;
+        /// <summary>The shipping label on the lid: paper size, thickness, and the symbol's scale on it.</summary>
+        const float LabelSize = 0.66f;
+        const float LabelThickness = 0.012f;
+        const float StampScale = 0.78f;
+        /// <summary>A small hand-applied tilt per color, so labels don't read as a printed grid.</summary>
+        static readonly float[] LabelYaw = { -7f, 5f, -4f, 6f, -5f, 3f };
+
+        static readonly Mesh[] boxMeshes = new Mesh[6];
+        static Mesh plainMesh;
+        static Mesh mysteryMesh;
+        static Mesh shackleMesh;
+        static Mesh keyMesh;
+
         MeshRenderer body;
+        MeshFilter bodyFilter;
         MaterialBank materials;
-        Transform symbol;
         Transform tarpMark;
         Transform padlock;
         Transform keyBadge;
@@ -43,13 +62,23 @@ namespace CargoJam.Game.Presentation
             var view = go.AddComponent<ParcelView>();
             view.Parcel = parcel;
             view.materials = materials;
-            view.body = MaterialBank.Box("Body", go.transform, Vector3.zero, Vector3.one, materials.Parcel(parcel.Color, false))
-                .GetComponent<MeshRenderer>();
-            view.symbol = Symbols.Create(parcel.Color, go.transform, new Vector3(0f, 0.5f, 0f), 1f, materials.Symbol(parcel.Color));
+            view.body = MeshKit.Show("Body", go.transform, BoxMesh(parcel.Color), materials.ParcelSkin(parcel.Color, false));
+            view.bodyFilter = view.body.GetComponent<MeshFilter>();
             if (hidden) view.Hide();
             if (locked) view.AddPadlock();
             if (isKey) view.AddKeyBadge();
             return view;
+        }
+
+        /// <summary>
+        /// A decorative parcel (menu stacks, loaded trucks): the same taped box with its symbol, one
+        /// draw call. Its local scale is <see cref="Layout.ParcelSize"/> × <paramref name="scale"/>.
+        /// </summary>
+        public static Transform CreateCrate(int color, Transform parent, MaterialBank materials, float scale = 1f)
+        {
+            var r = MeshKit.Show("Crate", parent, BoxMesh(color), materials.ParcelSkin(color, true));
+            r.transform.localScale = Layout.ParcelSize * scale;
+            return r.transform;
         }
 
         /// <summary>Free parcels are brighter and lifted so players can read the board at a glance.</summary>
@@ -75,7 +104,7 @@ namespace CargoJam.Game.Presentation
         }
 
         /// <summary>Shows the parcel at full color even while blocked, to point it out.</summary>
-        public void Highlight() => body.sharedMaterial = hidden ? materials.Tarp : materials.Parcel(Parcel.Color, true);
+        public void Highlight() => body.sharedMaterial = hidden ? materials.Tarp : materials.ParcelSkin(Parcel.Color, true);
 
         public void MarkLeftYard()
         {
@@ -95,6 +124,7 @@ namespace CargoJam.Game.Presentation
         public void Reveal(Tweener tweener, float at)
         {
             if (!hidden) return;
+            var flip = body.transform;
             tweener.Run(at, 0.3f, t =>
             {
                 if (!this) return;
@@ -103,13 +133,12 @@ namespace CargoJam.Game.Presentation
                 {
                     hidden = false;
                     if (tarpMark) Destroy(tarpMark.gameObject);
-                    symbol.gameObject.SetActive(true);
+                    bodyFilter.sharedMesh = BoxMesh(Parcel.Color);
                     ApplyMaterial();
                     angle -= 180f;
                 }
-                body.transform.localRotation = Quaternion.Euler(0f, 0f, angle);
-                symbol.localRotation = body.transform.localRotation;
-            }, null, () => { if (this) body.transform.localRotation = symbol.localRotation = Quaternion.identity; });
+                flip.localRotation = Quaternion.Euler(0f, 0f, angle);
+            }, null, () => { if (this) flip.localRotation = Quaternion.identity; });
         }
 
         /// <summary>The padlock springs up and away.</summary>
@@ -130,24 +159,19 @@ namespace CargoJam.Game.Presentation
         void ApplyMaterial(bool forceBright = false)
         {
             bool bright = forceBright || free == true;
-            body.sharedMaterial = hidden ? (bright ? materials.Tarp : materials.TarpDim) : materials.Parcel(Parcel.Color, bright);
+            body.sharedMaterial = hidden ? (bright ? materials.Tarp : materials.TarpDim) : materials.ParcelSkin(Parcel.Color, bright);
         }
 
         void Hide()
         {
             hidden = true;
-            symbol.gameObject.SetActive(false);
+            // The plain box: the symbol's relief must not show through the tarp.
+            bodyFilter.sharedMesh = PlainMesh();
             ApplyMaterial();
             // A blocky "?" made of five bars on the lid.
-            tarpMark = new GameObject("Mystery").transform;
-            tarpMark.SetParent(transform, false);
+            var mark = MeshKit.Show("Mystery", transform, MysteryMesh(), materials.Symbol(-1), castShadows: false);
+            tarpMark = mark.transform;
             tarpMark.localPosition = new Vector3(0f, 0.5f, 0f);
-            var m = materials.Symbol(-1);
-            MaterialBank.Box("Top", tarpMark, new Vector3(0f, 0f, 0.22f), new Vector3(0.36f, 0.04f, 0.1f), m);
-            MaterialBank.Box("Right", tarpMark, new Vector3(0.15f, 0f, 0.12f), new Vector3(0.1f, 0.04f, 0.26f), m);
-            MaterialBank.Box("Middle", tarpMark, new Vector3(0.05f, 0f, 0.02f), new Vector3(0.24f, 0.04f, 0.1f), m);
-            MaterialBank.Box("Stem", tarpMark, new Vector3(-0.02f, 0f, -0.08f), new Vector3(0.1f, 0.04f, 0.14f), m);
-            MaterialBank.Box("Dot", tarpMark, new Vector3(-0.02f, 0f, -0.26f), new Vector3(0.1f, 0.04f, 0.1f), m);
         }
 
         void AddPadlock()
@@ -157,20 +181,115 @@ namespace CargoJam.Game.Presentation
             padlock.localPosition = new Vector3(0f, 0.7f, -0.05f);
             padlock.localScale = Vector3.one * 1.35f;
             MaterialBank.Box("Body", padlock, Vector3.zero, new Vector3(0.46f, 0.3f, 0.34f), materials.Gold);
-            MaterialBank.Box("Shackle L", padlock, new Vector3(-0.15f, 0.24f, 0f), new Vector3(0.07f, 0.24f, 0.07f), materials.Steel);
-            MaterialBank.Box("Shackle R", padlock, new Vector3(0.15f, 0.24f, 0f), new Vector3(0.07f, 0.24f, 0.07f), materials.Steel);
-            MaterialBank.Box("Shackle Top", padlock, new Vector3(0f, 0.36f, 0f), new Vector3(0.37f, 0.07f, 0.07f), materials.Steel);
+            MeshKit.Show("Shackle", padlock, ShackleMesh(), materials.Steel);
             MaterialBank.Box("Keyhole", padlock, new Vector3(0f, -0.02f, -0.172f), new Vector3(0.07f, 0.12f, 0.01f), materials.Wheel);
         }
 
         void AddKeyBadge()
         {
-            var key = keyBadge = new GameObject("Key").transform;
-            key.SetParent(transform, false);
-            key.localPosition = new Vector3(0.3f, 0.54f, 0.3f);
-            MaterialBank.Box("Bow", key, Vector3.zero, new Vector3(0.2f, 0.06f, 0.2f), materials.Gold);
-            MaterialBank.Box("Blade", key, new Vector3(-0.16f, 0f, -0.16f), new Vector3(0.24f, 0.06f, 0.07f), materials.Gold)
-                .transform.localRotation = Quaternion.Euler(0f, 45f, 0f);
+            var r = MeshKit.Show("Key", transform, KeyMesh(), materials.Gold);
+            keyBadge = r.transform;
+            keyBadge.localPosition = new Vector3(0.3f, 0.54f, 0.3f);
+        }
+
+        // ---- Cached meshes -----------------------------------------------------------------------
+
+        /// <summary>The unit parcel box for a color: beveled body, packing tape and the color's symbol.</summary>
+        static Mesh BoxMesh(int color)
+        {
+            int i = Mathf.Clamp(color, 0, boxMeshes.Length - 1);
+            if (boxMeshes[i] != null) return boxMeshes[i];
+            var b = new MeshBuilder();
+            MeshKit.AddBox(b, 0, Matrix4x4.identity, Bevel, new Vector2(MaterialBank.SkinBodyU, 0.5f));
+            AddTape(b, new Vector2(MaterialBank.SkinTapeU, 0.5f));
+            // A paper shipping label over the tape, with the color's symbol stamped on it in ink.
+            var label = Matrix4x4.TRS(new Vector3(0f, 0.5f + TapeLift * 2f + LabelThickness * 0.5f, 0f),
+                Quaternion.Euler(0f, LabelYaw[i % LabelYaw.Length], 0f), Vector3.one);
+            MeshKit.AddBox(b, 0, label * Matrix4x4.Scale(new Vector3(LabelSize, LabelThickness, LabelSize)), 0f,
+                new Vector2(MaterialBank.SkinLabelU, 0.5f));
+            Symbols.Append(b, 0, i, label * Matrix4x4.Translate(new Vector3(0f, LabelThickness * 0.5f, 0f)) * Matrix4x4.Scale(Vector3.one * StampScale),
+                new Vector2(MaterialBank.SkinSymbolU, 0.5f));
+            boxMeshes[i] = b.ToMesh($"Parcel Box {i}");
+            return boxMeshes[i];
+        }
+
+        static Mesh PlainMesh()
+        {
+            if (plainMesh != null) return plainMesh;
+            var b = new MeshBuilder();
+            MeshKit.AddBox(b, 0, Matrix4x4.identity, Bevel, new Vector2(MaterialBank.SkinBodyU, 0.5f));
+            plainMesh = b.ToMesh("Parcel Box Plain");
+            return plainMesh;
+        }
+
+        /// <summary>A strip of tape over the lid, the two lid chamfers and down the front and back faces.</summary>
+        static void AddTape(MeshBuilder b, Vector2 uv)
+        {
+            const float h = 0.5f;
+            const float i = h - Bevel;
+            const float w = TapeHalfWidth;
+            const float e = TapeLift;
+            var diag = new Vector3(0f, 1f, 1f).normalized;
+            var diagDown = new Vector3(0f, -1f, 1f).normalized;
+            for (int s = -1; s <= 1; s += 2)
+            {
+                // Front (s = -1) and back (s = +1) faces.
+                var n = new Vector3(0f, 0f, s);
+                b.Polygon(0, n, uv,
+                    new Vector3(-w, -i, s * (h + e)), new Vector3(w, -i, s * (h + e)),
+                    new Vector3(w, i, s * (h + e)), new Vector3(-w, i, s * (h + e)));
+                // Lid chamfer, offset along its normal.
+                var nTop = new Vector3(0f, diag.y, s * diag.z);
+                var off = nTop * e;
+                b.Polygon(0, nTop, uv,
+                    new Vector3(-w, h, s * i) + off, new Vector3(w, h, s * i) + off,
+                    new Vector3(w, i, s * h) + off, new Vector3(-w, i, s * h) + off);
+                // Bottom chamfer.
+                var nBottom = new Vector3(0f, diagDown.y, s * diagDown.z);
+                off = nBottom * e;
+                b.Polygon(0, nBottom, uv,
+                    new Vector3(-w, -h, s * i) + off, new Vector3(w, -h, s * i) + off,
+                    new Vector3(w, -i, s * h) + off, new Vector3(-w, -i, s * h) + off);
+            }
+            b.Polygon(0, Vector3.up, uv,
+                new Vector3(-w, h + e, -i), new Vector3(w, h + e, -i),
+                new Vector3(w, h + e, i), new Vector3(-w, h + e, i));
+        }
+
+        static Mesh MysteryMesh()
+        {
+            if (mysteryMesh != null) return mysteryMesh;
+            var b = new MeshBuilder();
+            void Bar(Vector3 p, Vector3 s) => MeshKit.AddBox(b, 0, Matrix4x4.TRS(p, Quaternion.identity, s), 0f, Vector2.zero);
+            Bar(new Vector3(0f, 0f, 0.22f), new Vector3(0.36f, 0.04f, 0.1f));
+            Bar(new Vector3(0.15f, 0f, 0.12f), new Vector3(0.1f, 0.04f, 0.26f));
+            Bar(new Vector3(0.05f, 0f, 0.02f), new Vector3(0.24f, 0.04f, 0.1f));
+            Bar(new Vector3(-0.02f, 0f, -0.08f), new Vector3(0.1f, 0.04f, 0.14f));
+            Bar(new Vector3(-0.02f, 0f, -0.26f), new Vector3(0.1f, 0.04f, 0.1f));
+            mysteryMesh = b.ToMesh("Mystery Mark");
+            return mysteryMesh;
+        }
+
+        static Mesh ShackleMesh()
+        {
+            if (shackleMesh != null) return shackleMesh;
+            var b = new MeshBuilder();
+            void Bar(Vector3 p, Vector3 s) => MeshKit.AddBox(b, 0, Matrix4x4.TRS(p, Quaternion.identity, s), 0f, Vector2.zero);
+            Bar(new Vector3(-0.15f, 0.24f, 0f), new Vector3(0.07f, 0.24f, 0.07f));
+            Bar(new Vector3(0.15f, 0.24f, 0f), new Vector3(0.07f, 0.24f, 0.07f));
+            Bar(new Vector3(0f, 0.36f, 0f), new Vector3(0.37f, 0.07f, 0.07f));
+            shackleMesh = b.ToMesh("Padlock Shackle");
+            return shackleMesh;
+        }
+
+        static Mesh KeyMesh()
+        {
+            if (keyMesh != null) return keyMesh;
+            var b = new MeshBuilder();
+            MeshKit.AddBox(b, 0, Matrix4x4.Scale(new Vector3(0.2f, 0.06f, 0.2f)), 0f, Vector2.zero);
+            MeshKit.AddBox(b, 0, MeshKit.TRS(new Vector3(-0.16f, 0f, -0.16f), 45f, new Vector3(0.24f, 0.06f, 0.07f)), 0f, Vector2.zero);
+            keyMesh = b.ToMesh("Key Badge");
+            return keyMesh;
         }
     }
 }

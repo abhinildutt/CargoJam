@@ -4,7 +4,7 @@ using UnityEngine.UIElements;
 
 namespace CargoJam.Game.UI
 {
-    /// <summary>"Buy Undo for 120?" with the booster explained, or "Not enough coins".</summary>
+    /// <summary>"Buy Undo?" with the booster explained and a price, or "Not enough coins".</summary>
     public sealed class BuyBoosterPopup : Popup
     {
         readonly Icon icon;
@@ -12,31 +12,30 @@ namespace CargoJam.Game.UI
         readonly CandyButton buy;
         readonly Label priceLabel;
         readonly Label poor;
-        BoosterType booster;
         Func<bool> tryBuy;
         Action bought;
 
-        public BuyBoosterPopup(UiContext ctx) : base(ctx, "Buy Undo?", "cj-ribbon--secondary", true)
+        public BuyBoosterPopup(UiContext ctx) : base(ctx, "Buy Undo?", PopupKind.Card, true)
         {
             var disc = Ui.El(Body, "cj-booster-disc");
             icon = Ui.Icon(disc, IconKind.Undo, "cj-booster-disc__icon");
-            icon.Tint = IconPainter.Hex(0x4A90F0);
+            icon.Tint = UiPalette.Ink;
             help = Ui.Text(Body, "", "cj-popup__text");
 
-            buy = new CandyButton("Buy", "cj-btn--primary cj-btn--big");
+            var actions = Ui.El(Body, "cj-popup__actions");
+            buy = new CandyButton("Buy", "cj-btn--primary cj-btn--l cj-btn--wide");
             var price = Ui.El(buy.Content, "cj-price");
             Ui.Icon(price, IconKind.Coin, "cj-price__coin");
-            priceLabel = Ui.Text(price, "120", "cj-price__label cj-txt");
+            priceLabel = Ui.Text(price, "120", "cj-price__label");
             buy.Clicked += OnBuy;
-            Body.Add(buy);
-            poor = Ui.Text(Body, "Not enough coins", "cj-fail__poor");
+            actions.Add(buy);
+            poor = Ui.Text(actions, "Not enough coins", "cj-popup__note");
         }
 
         /// <param name="buyAction">Spends the coins; false when it couldn't.</param>
         /// <param name="boughtAction">Runs after a successful purchase, once the popup has closed.</param>
         public void Show(BoosterType type, bool affordable, Func<bool> buyAction, Action boughtAction)
         {
-            booster = type;
             tryBuy = buyAction;
             bought = boughtAction;
             string name = UiText.BoosterName(type);
@@ -47,7 +46,6 @@ namespace CargoJam.Game.UI
             buy.Greyed = !affordable;
             Ui.Show(poor, !affordable);
             OpenPopup();
-            Anim.PopIn(icon, 0.2f, 0.45f);
         }
 
         void OnBuy()

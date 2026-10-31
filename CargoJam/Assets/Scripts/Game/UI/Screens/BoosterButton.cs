@@ -5,8 +5,9 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// One round booster button: its icon plus a count badge, a price tag (none owned), or a lock
-    /// with "Lv N" (not unlocked yet). The Crane also shows an armed state while waiting for a tap.
+    /// One 156-unit glass booster disc with a white icon plus a count badge, a price chip (none
+    /// owned), a lock chip with "Lv N" (not unlocked yet), or a "Free" badge (the top streak tier's
+    /// Undo). While the Crane is armed the disc turns light with an ink icon and a slow ring.
     /// </summary>
     public sealed class BoosterButton : VisualElement
     {
@@ -15,7 +16,6 @@ namespace CargoJam.Game.UI
         readonly VisualElement badge;
         readonly Label badgeLabel;
         readonly VisualElement priceTag;
-        readonly Label priceLabel;
         readonly VisualElement lockTag;
         readonly VisualElement ring;
         UiTween ringLoop;
@@ -33,40 +33,46 @@ namespace CargoJam.Game.UI
             pickingMode = PickingMode.Ignore;
 
             ring = Ui.El(this, "cj-booster__ring");
-            button = new CandyButton(null, "cj-btn--white cj-btn--booster", UiText.BoosterIcon(booster));
+            button = new CandyButton(null, "cj-btn--glass cj-btn--disc", UiText.BoosterIcon(booster));
             icon = button.Icon;
-            icon.Tint = IconPainter.Hex(0x4A90F0);
+            icon.Tint = UiPalette.OnGlass;
             button.Clicked += () => Clicked?.Invoke(Booster);
             Add(button);
 
             badge = Ui.El(button, "cj-booster__badge");
-            badgeLabel = Ui.Text(badge, "0", "cj-booster__badge-label cj-txt");
+            badgeLabel = Ui.Text(badge, "0", "cj-booster__badge-label");
 
-            priceTag = Ui.El(button, "cj-booster__price");
-            Ui.Icon(priceTag, IconKind.Coin, "cj-booster__price-coin");
-            priceLabel = Ui.Text(priceTag, EconomyConfig.BoosterPrice(booster).ToString(), "cj-booster__price-label cj-txt");
+            // Chips hang centered under the disc: a full-width row holds each pill.
+            priceTag = Ui.El(button, "cj-booster__chip");
+            var pricePill = Ui.El(priceTag, "cj-booster__pill");
+            Ui.Icon(pricePill, IconKind.Coin, "cj-booster__chip-icon");
+            Ui.Text(pricePill, Anim.Format(EconomyConfig.BoosterPrice(booster)), "cj-booster__chip-label");
 
-            lockTag = Ui.El(button, "cj-booster__lock");
-            Ui.Text(lockTag, "Lv " + EconomyConfig.UnlockLevel(booster), "cj-booster__lock-label cj-txt");
+            lockTag = Ui.El(button, "cj-booster__chip");
+            var lockPill = Ui.El(lockTag, "cj-booster__pill");
+            var lockIcon = Ui.Icon(lockPill, IconKind.Lock, "cj-booster__chip-icon");
+            lockIcon.Tint = UiPalette.Ink2;
+            Ui.Text(lockPill, "Lv " + EconomyConfig.UnlockLevel(booster), "cj-booster__chip-label");
 
             Ui.Show(ring, false);
         }
 
-        /// <summary>Shakes the button: "can't do that right now".</summary>
-        public void Reject() => Anim.Shake(button, 14f, 0.35f);
+        /// <summary>Shakes the disc: "can't do that right now".</summary>
+        public void Reject() => Anim.Shake(button, 12f, 0.3f);
 
-        public void Refresh(bool unlocked, int count, bool usable, bool armed)
+        /// <param name="count">Usable charges (owned plus any free charge).</param>
+        /// <param name="free">The count includes a free tier charge: show "Free" instead of the number.</param>
+        public void Refresh(bool unlocked, int count, bool usable, bool armed, bool free = false)
         {
-            button.Greyed = !unlocked;
-            icon.Kind = unlocked ? UiText.BoosterIcon(Booster) : IconKind.Lock;
-            icon.Tint = unlocked ? IconPainter.Hex(0x4A90F0) : IconPainter.Hex(0x8F877C);
+            EnableInClassList("cj-booster--locked", !unlocked);
             EnableInClassList("cj-booster--unusable", unlocked && !usable && !armed);
+            EnableInClassList("cj-booster--free", unlocked && free);
 
             Ui.Show(lockTag, !unlocked);
             Ui.Show(badge, unlocked && count > 0);
             Ui.Show(priceTag, unlocked && count <= 0);
-            badgeLabel.text = count.ToString();
-            if (lastCount >= 0 && count != lastCount && count > 0) Anim.Punch(badge, 0.35f);
+            badgeLabel.text = free ? "Free" : count.ToString();
+            if (lastCount >= 0 && count > lastCount) Anim.PopInReward(badge, 0f, 0.36f);
             lastCount = count;
 
             SetArmed(armed);
@@ -76,17 +82,18 @@ namespace CargoJam.Game.UI
         {
             bool wasArmed = ringLoop != null;
             EnableInClassList("cj-booster--armed", armed);
+            icon.Tint = armed ? UiPalette.Ink : UiPalette.OnGlass;
             if (armed == wasArmed) return;
             if (armed)
             {
                 Ui.Show(ring, true);
+                // A state indicator, not decoration: a slow ring widening and fading while armed.
                 ringLoop = UiTween.Loop(time =>
                 {
-                    float k = (time * 1.6f) % 1f;
-                    Anim.SetScale(ring, 1f + k * 0.35f);
-                    ring.style.opacity = 1f - k;
+                    float k = (time / 1.4f) % 1f;
+                    Anim.SetScale(ring, 1f + Easing.OutQuint(k) * 0.22f);
+                    ring.style.opacity = 0.9f * (1f - k);
                 });
-                Anim.Punch(button, 0.15f);
             }
             else
             {

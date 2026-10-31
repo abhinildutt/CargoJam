@@ -1,3 +1,4 @@
+using CargoJam.Game.UI;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -95,8 +96,8 @@ namespace CargoJam.Game.Presentation.Fx
     /// <summary>A green badge with a white tick, drawn with the vector API so it stays crisp.</summary>
     public sealed class CheckBadge : VisualElement
     {
-        static readonly Color Fill = new Color(0.23f, 0.79f, 0.36f);
-        static readonly Color Rim = new Color(0.16f, 0.59f, 0.27f);
+        static readonly Color Fill = UiPalette.Primary;
+        static readonly Color Rim = UiPalette.PrimaryPress;
 
         /// <summary>Creates a badge of <paramref name="size"/> panel units, centered on its left/top position.</summary>
         public CheckBadge(float size)

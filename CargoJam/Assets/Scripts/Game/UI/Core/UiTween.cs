@@ -4,7 +4,10 @@ using UnityEngine.UIElements;
 
 namespace CargoJam.Game.UI
 {
-    /// <summary>Easing curves over t in 0..1.</summary>
+    /// <summary>
+    /// Easing curves over t in 0..1. Design v3: OutQuint for everyday motion (no overshoot);
+    /// <see cref="OutBack"/> (overshoot 1.2) is reserved for reward moments.
+    /// </summary>
     public static class Easing
     {
         public static float Linear(float t) => t;
@@ -15,29 +18,24 @@ namespace CargoJam.Game.UI
             return 1f - u * u * u;
         }
 
+        /// <summary>Fast start, long soft settle, no overshoot: presses, panels, sheets.</summary>
+        public static float OutQuint(float t)
+        {
+            float u = 1f - t;
+            return 1f - u * u * u * u * u;
+        }
+
         public static float InCubic(float t) => t * t * t;
+
+        public static float InQuad(float t) => t * t;
 
         public static float InOutSine(float t) => -(Mathf.Cos(Mathf.PI * t) - 1f) * 0.5f;
 
-        /// <summary>Overshoots past 1 and settles back: the "pop" for panels and buttons.</summary>
-        public static float OutBack(float t) => Back(t, 1.70158f);
+        public static float InOutCubic(float t) =>
+            t < 0.5f ? 4f * t * t * t : 1f - Mathf.Pow(-2f * t + 2f, 3f) * 0.5f;
 
-        /// <summary>A bigger overshoot, for the bounce after a button is released.</summary>
-        public static float OutBackStrong(float t) => Back(t, 3.2f);
-
-        public static float InBack(float t)
-        {
-            const float c1 = 1.70158f, c3 = c1 + 1f;
-            return c3 * t * t * t - c1 * t * t;
-        }
-
-        public static float OutElastic(float t)
-        {
-            if (t <= 0f) return 0f;
-            if (t >= 1f) return 1f;
-            const float c4 = 2f * Mathf.PI / 3f;
-            return Mathf.Pow(2f, -10f * t) * Mathf.Sin((t * 10f - 0.75f) * c4) + 1f;
-        }
+        /// <summary>A gentle overshoot (1.2) for reward moments only: coins, chest, stamp, tier-up.</summary>
+        public static float OutBack(float t) => Back(t, 1.2f);
 
         static float Back(float t, float c1)
         {

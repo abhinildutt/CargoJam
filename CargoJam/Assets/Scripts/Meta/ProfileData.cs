@@ -9,7 +9,11 @@ namespace CargoJam.Meta
     [Serializable]
     public class ProfileData
     {
-        public int version = 1;
+        /// <summary>The save format this build writes. v2 added <see cref="postcards"/> and <see cref="lastArrivalShown"/>.</summary>
+        public const int CurrentVersion = 2;
+
+        /// <summary>Save format version; older saves are upgraded by <see cref="ProfileMigration.Upgrade"/>.</summary>
+        public int version = CurrentVersion;
 
         public int coins = EconomyConfig.StartingCoins;
         /// <summary>0-based index of the level to play next.</summary>
@@ -37,6 +41,13 @@ namespace CargoJam.Meta
         public int totalGiveUps;
         /// <summary>Lifetime coins granted (wins, chests, daily rewards, AddCoins); spending doesn't lower it.</summary>
         public int coinsEarned;
+
+        // ---- v2 (design v3: journey) ----
+
+        /// <summary>Postcards earned, indexed by <see cref="Journey"/> stop. A save from v1 loads this as null or empty.</summary>
+        public bool[] postcards = new bool[Journey.StopCount];
+        /// <summary>Progress leg (<see cref="Journey.LegFor"/>) whose arrival reveal has played; -1 = none yet.</summary>
+        public int lastArrivalShown = -1;
     }
 
     /// <summary>The local calendar date, injectable for tests.</summary>

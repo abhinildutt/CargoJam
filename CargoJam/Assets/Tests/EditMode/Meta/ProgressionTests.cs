@@ -176,9 +176,9 @@ namespace CargoJam.Meta.Tests
         [Test]
         public void StreakMultiplierCountsTheWinBeingRecorded()
         {
-            // Wins 1-2 ×1, wins 3-5 ×1.5, wins 6+ ×2: the 3rd win in a row already pays the bonus.
-            var expected = new[] { 40, 40, 60, 60, 60, 80, 80, 80 };
-            var multipliers = new[] { 1f, 1f, 1.5f, 1.5f, 1.5f, 2f, 2f, 2f };
+            // Wins 1-2 ×1, wins 3-5 ×1.5, wins 6-9 ×2, wins 10+ ×2.5: the 3rd win in a row already pays the bonus.
+            var expected = new[] { 40, 40, 60, 60, 60, 80, 80, 80, 80, 100, 100 };
+            var multipliers = new[] { 1f, 1f, 1.5f, 1.5f, 1.5f, 2f, 2f, 2f, 2f, 2.5f, 2.5f };
             for (int i = 0; i < expected.Length; i++)
             {
                 var r = p.RecordWin(false);
@@ -227,6 +227,12 @@ namespace CargoJam.Meta.Tests
             Assert.That(r.ChestReady, Is.False);
             Assert.That(r.Unlocked, Is.Null);
             Assert.That(r.NewLevelIndex, Is.EqualTo(1));
+            Assert.That(r.TierBefore, Is.EqualTo(0));
+            Assert.That(r.TierAfter, Is.EqualTo(0));
+            Assert.That(r.TierUp, Is.False);
+            Assert.That(r.NextTierAt, Is.EqualTo(3));
+            Assert.That(r.ArrivedAt, Is.EqualTo(-1));
+            Assert.That(r.PostcardEarned, Is.EqualTo(-1));
         }
 
         [Test]
@@ -241,16 +247,26 @@ namespace CargoJam.Meta.Tests
         }
 
         [Test]
-        public void GiveUpResetsStreakButKeepsBest()
+        public void GiveUpInTierOneResetsStreakButKeepsBest()
         {
             for (int i = 0; i < 4; i++) p.RecordWin(false);
             p.RecordGiveUp();
             Assert.That(changes, Is.EqualTo(5));
-            Assert.That(p.WinStreak, Is.EqualTo(0));
+            Assert.That(p.WinStreak, Is.EqualTo(0), "tier 1 drops to tier 0's floor");
             Assert.That(p.BestStreak, Is.EqualTo(4));
             Assert.That(p.Data.totalGiveUps, Is.EqualTo(1));
             Assert.That(p.LevelIndex, Is.EqualTo(4), "giving up doesn't move the level");
             Assert.That(p.RecordWin(false).Multiplier, Is.EqualTo(1f));
+        }
+
+        [Test]
+        public void GiveUpHigherUpDropsOnlyOneTier()
+        {
+            for (int i = 0; i < 7; i++) p.RecordWin(false);
+            p.RecordGiveUp();
+            Assert.That(p.WinStreak, Is.EqualTo(3), "7 drops to the floor of tier 1");
+            Assert.That(p.BestStreak, Is.EqualTo(7));
+            Assert.That(p.RecordWin(false).Multiplier, Is.EqualTo(1.5f), "the next win still pays the lower tier");
         }
 
         [Test]

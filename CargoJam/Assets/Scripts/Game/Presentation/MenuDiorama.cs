@@ -5,25 +5,30 @@ using UnityEngine;
 namespace CargoJam.Game.Presentation
 {
     /// <summary>
-    /// The living backdrop behind the home screen: a depot with a warehouse, a road where a convoy of
-    /// loaded trucks keeps rolling past, and stacks of crates in the foreground that hop now and then.
-    /// Built from the same parts as a level, so it always matches the current route theme.
+    /// The living backdrop behind the home screen: a depot with a loading dock, two loaded flatbeds
+    /// parked in its yard, a road where a convoy keeps rolling past, and parcel stacks in the
+    /// foreground that hop now and then. Built from the shared materials, so it takes the biome's
+    /// colors; the destination's landmark, props, ground and light come from
+    /// <see cref="WorldEnvironment.ShowMenu"/>, which dresses around <see cref="Bounds"/>.
     /// </summary>
     public sealed class MenuDiorama : MonoBehaviour
     {
-        const float RoadZ = 0f;
-        const float TruckSpeed = 2.4f;
-        const float LoopHalfWidth = 11f;
-        const int TruckCount = 4;
+        /// <summary>The convoy road (along x).</summary>
+        public const float RoadZ = -1.3f;
+        const float TruckSpeed = 2.2f;
+        const float LoopHalfWidth = 12f;
+        const int ConvoyCount = 3;
         const float CrateScale = 0.82f;
+        const float YardFarZ = 3.05f;
+        const float DepotZ = 3.7f;
 
-        /// <summary>What the camera keeps in view.</summary>
+        /// <summary>What the camera keeps in view (the environment leaves this area to the diorama).</summary>
         public static Bounds Bounds
         {
             get
             {
                 var b = new Bounds();
-                b.SetMinMax(new Vector3(-4.4f, 0f, -3.3f), new Vector3(4.4f, 1.8f, 3.4f));
+                b.SetMinMax(new Vector3(-4.6f, 0f, -3.5f), new Vector3(4.6f, 2.2f, 4.4f));
                 return b;
             }
         }
@@ -32,6 +37,7 @@ namespace CargoJam.Game.Presentation
         readonly List<Transform> truckBodies = new List<Transform>();
         readonly List<Transform> hoppers = new List<Transform>();
         readonly List<Vector3> hopperRest = new List<Vector3>();
+        Mesh depotMesh;
         float clock;
 
         public static MenuDiorama Create(MaterialBank materials)
@@ -45,56 +51,86 @@ namespace CargoJam.Game.Presentation
         void Build(MaterialBank m)
         {
             var root = transform;
-            MaterialBank.Box("Ground", root, new Vector3(0f, -0.06f, 0f), new Vector3(60f, 0.1f, 60f), m.Ground);
-            MaterialBank.Box("Road", root, new Vector3(0f, -0.005f, RoadZ), new Vector3(60f, 0.02f, 1.8f), m.Road);
-            for (float x = -14f; x <= 14f; x += 1.6f)
-                MaterialBank.Box("Lane", root, new Vector3(x, 0.01f, RoadZ), new Vector3(0.7f, 0.01f, 0.08f), m.Symbol(0));
-
-            BuildWarehouse(root, m);
+            Scenery.BuildRoad(root, RoadZ, m);
+            BuildDepot(root, m);
+            BuildParked(root, m);
             BuildConvoy(root, m);
 
-            // Foreground crate stacks, a pyramid either side, in the parcel colors.
-            BuildStack(root, m, new Vector3(-2.75f, 0f, -2.35f), new[] { 0, 1, 3, 4, 2, 5 }, 8f);
-            BuildStack(root, m, new Vector3(2.75f, 0f, -2.35f), new[] { 2, 5, 1, 0, 3, 4 }, -6f);
-            // A couple of loose crates by the dock.
-            Crate(root, m, 3, new Vector3(-0.9f, 0f, 1.75f), 0.7f, 12f);
-            Crate(root, m, 1, new Vector3(-0.15f, 0f, 1.85f), 0.7f, -9f);
+            // Foreground parcel stacks, a pyramid either side.
+            BuildStack(root, m, new Vector3(-3f, 0f, -2.9f), new[] { 0, 1, 3, 4, 2, 5 }, 8f);
+            BuildStack(root, m, new Vector3(3f, 0f, -2.9f), new[] { 2, 5, 1, 0, 3, 4 }, -6f);
         }
 
-        void BuildWarehouse(Transform root, MaterialBank m)
+        /// <summary>The yard apron, loading dock and warehouse, as one mesh (one draw per material).</summary>
+        void BuildDepot(Transform root, MaterialBank m)
         {
-            var depot = new GameObject("Warehouse").transform;
-            depot.SetParent(root, false);
-            depot.localPosition = new Vector3(0f, 0f, 2.9f);
-            MaterialBank.Box("Dock", depot, new Vector3(0f, 0.12f, -0.55f), new Vector3(7.6f, 0.24f, 1.3f), m.Tile);
-            MaterialBank.Box("Hall", depot, new Vector3(0f, 0.85f, 0.35f), new Vector3(7f, 1.5f, 1.2f), m.Steel);
-            MaterialBank.Box("Roof", depot, new Vector3(0f, 1.66f, 0.3f), new Vector3(7.5f, 0.18f, 1.5f), m.Road);
-            MaterialBank.Box("Sign", depot, new Vector3(0f, 1.95f, 0.1f), new Vector3(2.4f, 0.42f, 0.12f), m.Gold);
+            // Submeshes: 0 apron, 1 walls, 2 roof, 3 safety yellow, 4 doors, 5 lamps, 6 sign.
+            var b = new MeshBuilder(7);
+            float yardNear = RoadZ + Scenery.RoadHalfWidth + 0.64f;
+            Box(b, 0, new Vector3(0f, -0.017f, (yardNear + YardFarZ) * 0.5f), new Vector3(9.6f, 0.03f, YardFarZ - yardNear));
+
+            // Loading dock platform with a yellow safety edge.
+            Box(b, 0, new Vector3(0f, 0.14f, DepotZ - 0.35f), new Vector3(7.6f, 0.28f, 0.7f));
+            Box(b, 3, new Vector3(0f, 0.285f, DepotZ - 0.67f), new Vector3(7.6f, 0.03f, 0.07f));
+            // Warehouse hall and roof.
+            Box(b, 1, new Vector3(0f, 0.85f, DepotZ + 0.65f), new Vector3(7.2f, 1.7f, 1.3f), 0.01f);
+            Box(b, 2, new Vector3(0f, 1.77f, DepotZ + 0.62f), new Vector3(7.6f, 0.16f, 1.6f));
             for (int i = 0; i < 3; i++)
             {
-                float x = -2.3f + i * 2.3f;
-                MaterialBank.Box("Door", depot, new Vector3(x, 0.72f, -0.26f), new Vector3(1.3f, 1.05f, 0.04f), m.Wheel);
-                MaterialBank.Box("Stripe", depot, new Vector3(x, 1.28f, -0.27f), new Vector3(1.4f, 0.08f, 0.04f), m.Edge);
+                float x = -2.4f + i * 2.4f;
+                Box(b, 4, new Vector3(x, 0.86f, DepotZ - 0.01f), new Vector3(1.45f, 1.1f, 0.04f));
+                Box(b, 3, new Vector3(x, 1.48f, DepotZ - 0.02f), new Vector3(1.55f, 0.08f, 0.04f));
+                Box(b, 5, new Vector3(x, 1.6f, DepotZ - 0.1f), new Vector3(0.34f, 0.06f, 0.16f));
             }
+            Box(b, 6, new Vector3(0f, 2.1f, DepotZ + 0.2f), new Vector3(2.8f, 0.5f, 0.12f), 0.04f);
+            Box(b, 2, new Vector3(-1.1f, 1.92f, DepotZ + 0.25f), new Vector3(0.08f, 0.3f, 0.08f));
+            Box(b, 2, new Vector3(1.1f, 1.92f, DepotZ + 0.25f), new Vector3(0.08f, 0.3f, 0.08f));
+
+            depotMesh = b.ToMesh("Depot");
+            var r = MeshKit.Show("Depot", root, depotMesh, m.Apron);
+            r.sharedMaterials = new[] { m.Apron, m.Steel, m.Road, m.Edge, m.Wheel, m.Glow, m.Gold };
+        }
+
+        static void Box(MeshBuilder b, int submesh, Vector3 center, Vector3 size, float bevel = 0f) =>
+            MeshKit.AddBox(b, submesh, Matrix4x4.TRS(center, Quaternion.identity, size), bevel, Vector2.zero);
+
+        /// <summary>Two loaded flatbeds parked in the yard at easy angles.</summary>
+        void BuildParked(Transform root, MaterialBank m)
+        {
+            Park(root, m, 1, new Vector3(-2.15f, 0f, 1.45f), 188f, new[] { 1, 1, 1 });
+            Park(root, m, 5, new Vector3(2.25f, 0f, 1.6f), -8f, new[] { 5, 5, -1 });
+        }
+
+        static void Park(Transform root, MaterialBank m, int color, Vector3 position, float yaw, int[] load)
+        {
+            var view = TruckView.Create(new Truck(100 + color, color, 3), root, m);
+            view.transform.localPosition = position;
+            view.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+            Load(view, m, load);
         }
 
         void BuildConvoy(Transform root, MaterialBank m)
         {
-            float spacing = LoopHalfWidth * 2f / TruckCount;
-            for (int i = 0; i < TruckCount; i++)
+            float spacing = LoopHalfWidth * 2f / ConvoyCount;
+            for (int i = 0; i < ConvoyCount; i++)
             {
-                // Real truck views, so the convoy looks exactly like the trucks in a level.
-                int color = (i * 2) % ParcelColors.Count;
+                int color = (i * 2 + 2) % ParcelColors.Count;
                 var view = TruckView.Create(new Truck(i, color, 3), root, m);
                 view.transform.localPosition = new Vector3(-LoopHalfWidth + i * spacing, 0f, RoadZ);
-                for (int slot = 0; slot < 3; slot++)
-                {
-                    int crateColor = slot == 1 ? color : (color + slot + 1) % ParcelColors.Count;
-                    var crate = Crate(view.Body, m, crateColor, Vector3.zero, Layout.InTruckScale, 0f);
-                    crate.localPosition = view.SlotLocal(slot) - Vector3.up * Layout.ParcelSize.y * Layout.InTruckScale * 0.5f;
-                }
+                Load(view, m, new[] { color, color, color });
                 trucks.Add(view.transform);
                 truckBodies.Add(view.Body);
+            }
+        }
+
+        /// <summary>Parcels on a truck's bed slots (-1 leaves a slot empty).</summary>
+        static void Load(TruckView view, MaterialBank m, int[] colors)
+        {
+            for (int slot = 0; slot < colors.Length; slot++)
+            {
+                if (colors[slot] < 0) continue;
+                var crate = ParcelView.CreateCrate(colors[slot], view.Body, m, Layout.InTruckScale);
+                crate.localPosition = view.SlotLocal(slot);
             }
         }
 
@@ -110,7 +146,9 @@ namespace CargoJam.Game.Presentation
                 for (int i = 0; i < count; i++)
                 {
                     var pos = center + new Vector3((i - (count - 1) * 0.5f) * step, row * h, row * 0.05f);
-                    var crate = Crate(root, m, colors[c++ % colors.Length], pos, CrateScale, yaw * 0.4f + (i - 1) * 2f);
+                    var crate = ParcelView.CreateCrate(colors[c++ % colors.Length], root, m, CrateScale);
+                    crate.localPosition = pos + Vector3.up * h * 0.5f;
+                    crate.localRotation = Quaternion.Euler(0f, yaw * 0.4f + (i - 1) * 2f, 0f);
                     if (row == 2 || (row == 1 && i == 0))
                     {
                         hoppers.Add(crate);
@@ -118,19 +156,6 @@ namespace CargoJam.Game.Presentation
                     }
                 }
             }
-        }
-
-        /// <summary>A parcel-style crate with its color symbol, resting on <paramref name="bottomCenter"/>.</summary>
-        static Transform Crate(Transform parent, MaterialBank m, int color, Vector3 bottomCenter, float scale, float yaw)
-        {
-            var crate = new GameObject("Crate").transform;
-            crate.SetParent(parent, false);
-            crate.localScale = Layout.ParcelSize * scale;
-            crate.localPosition = bottomCenter + Vector3.up * Layout.ParcelSize.y * scale * 0.5f;
-            crate.localRotation = Quaternion.Euler(0f, yaw, 0f);
-            MaterialBank.Box("Body", crate, Vector3.zero, Vector3.one, m.Parcel(color, true));
-            Symbols.Create(color, crate, new Vector3(0f, 0.5f, 0f), 1f, m.Symbol(color));
-            return crate;
         }
 
         void Update()
@@ -145,7 +170,7 @@ namespace CargoJam.Game.Presentation
                 if (p.x > LoopHalfWidth) p.x -= span;
                 t.localPosition = p;
                 // A little road rumble, out of step between trucks.
-                truckBodies[i].localPosition = new Vector3(0f, 0.025f * Mathf.Abs(Mathf.Sin(clock * 11f + i * 1.7f)), 0f);
+                truckBodies[i].localPosition = new Vector3(0f, 0.02f * Mathf.Abs(Mathf.Sin(clock * 11f + i * 1.7f)), 0f);
             }
 
             for (int i = 0; i < hoppers.Count; i++)
@@ -159,6 +184,11 @@ namespace CargoJam.Game.Presentation
                 var s = Layout.ParcelSize * CrateScale;
                 hoppers[i].localScale = new Vector3(s.x * (1f + squash * 0.5f), s.y * (1f - squash), s.z * (1f + squash * 0.5f));
             }
+        }
+
+        void OnDestroy()
+        {
+            if (depotMesh != null) Destroy(depotMesh);
         }
     }
 }
