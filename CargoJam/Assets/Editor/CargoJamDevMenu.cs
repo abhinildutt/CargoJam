@@ -89,6 +89,12 @@ namespace CargoJam.EditorTools
             EditorSceneManager.OpenScene(MainScene);
             SessionState.SetInt(StartLevelKey, Mathf.Max(1, number) - 1);
             EditorApplication.isPlaying = true;
+            // If Play mode is refused (compile errors, say), drop the request: left behind, it would
+            // wipe the save on the next ordinary Play.
+            EditorApplication.delayCall += () =>
+            {
+                if (!EditorApplication.isPlayingOrWillChangePlaymode) SessionState.EraseInt(StartLevelKey);
+            };
         }
 
         [MenuItem("Cargo Jam/Reset Progress Now", priority = 2)]
