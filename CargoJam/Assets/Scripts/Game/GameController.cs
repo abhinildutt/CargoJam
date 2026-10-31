@@ -78,6 +78,8 @@ namespace CargoJam.Game
         readonly List<GateView> gates = new List<GateView>();
         readonly List<StrapView> straps = new List<StrapView>();
         readonly List<Parcel> freeScratch = new List<Parcel>();
+        /// <summary>The level's express parcels (fixed by their start cells), for the tension check.</summary>
+        readonly List<Parcel> expressParcels = new List<Parcel>();
         readonly HashSet<int> freeIds = new HashSet<int>();
         /// <summary>
         /// Parcels the rules have freed that must still look blocked until a time: ice still on show, or a
@@ -109,10 +111,14 @@ namespace CargoJam.Game
         /// <summary>The parcel that most recently started to leave the yard, and when (ice cracks as it goes).</summary>
         int lastLeaveId;
         float lastLeaveAt;
-        /// <summary>A strapped pair on its way out: its band slips off as the lead starts; the trail follows one cell behind.</summary>
+        /// <summary>
+        /// A strapped pair on its way out: its band slips off as the lead starts; the trail starts with it
+        /// at the lead's pace (when, how long and over how many points the lead slid).
+        /// </summary>
         StrapView pairStrap;
         int pairLeadId = -1, pairTrailId = -1;
-        float pairTrailAt;
+        float pairTrailAt, pairLeadSlide;
+        int pairLeadPoints;
         /// <summary>Gates that opened in this batch (parcels behind them wait for the boom).</summary>
         readonly List<int> gatesOpened = new List<int>();
         /// <summary>Express parcels that ran out of moves in this batch.</summary>
@@ -282,6 +288,7 @@ namespace CargoJam.Game
                     Express = session.IsExpress(p) ? session.ExpressLeft(p) : 0,
                 };
                 parcels[p.Id] = ParcelView.Create(p, levelRoot, layout, materials, look);
+                if (session.IsExpress(p)) expressParcels.Add(p);
             }
             for (int i = 0; i < level.Gates.Count; i++)
                 gates.Add(GateView.Create(i, level.Gates[i], session.GateLeft(i), levelRoot, layout, materials));
@@ -368,6 +375,7 @@ namespace CargoJam.Game
             gates.Clear();
             straps.Clear();
             heldDownUntil.Clear();
+            expressParcels.Clear();
             gateCountAt = gateClearAt = Array.Empty<float>();
             ResetBatch(0f);
             combo = 0;
@@ -655,10 +663,11 @@ namespace CargoJam.Game
             fx?.TensionChanged(tense, Mathf.Max(at, tweener.Now));
         }
 
+        /// <summary>An express parcel still in the yard has <see cref="ParcelView.ExpressUrgent"/> moves or fewer left.</summary>
         bool ExpressNearlyOut()
         {
-            foreach (var p in session.Board.Parcels)
-                if (session.IsExpress(p) && session.ExpressLeft(p) <= ParcelView.ExpressUrgent) return true;
+            foreach (var p in expressParcels)
+                if (session.Board.Get(p.Cell) == p && session.ExpressLeft(p) <= ParcelView.ExpressUrgent) return true;
             return false;
         }
 
@@ -873,6 +882,8 @@ namespace CargoJam.Game
             pairStrap = null;
             pairLeadId = pairTrailId = -1;
             pairTrailAt = now;
+            pairLeadSlide = 0f;
+            pairLeadPoints = 0;
             gatesOpened.Clear();
             missedExpress.Clear();
             tensionAt = now;
@@ -888,13 +899,16 @@ namespace CargoJam.Game
         /// <summary>
         /// Slides a parcel out of the yard and returns when it may hop on: as it reaches the edge, but not
         /// before <paramref name="hopReady"/> (its truck has pulled in, or its dock slot is clear). A
-        /// parcel waits on its cell so it arrives just in time; a strapped pair's trail instead follows
-        /// its lead one cell behind, and waits at the edge if it must.
+        /// parcel waits on its cell so it arrives just in time; a strapped pair's trail instead starts with
+        /// its lead at the lead's pace (its path is one cell longer, so it stays one cell behind), and
+        /// waits at the edge if it must.
         /// </summary>
         float LeaveYard(ParcelView pv, List<Vector3> path, float slide, bool lifted, float hopReady, float now)
         {
             int id = pv.Parcel.Id;
-            float start = id == pairTrailId ? pairTrailAt : Mathf.Max(now, hopReady - slide);
+            bool trail = id == pairTrailId && pairLeadPoints > 0;
+            if (trail) slide = pairLeadSlide * path.Count / pairLeadPoints;
+            float start = trail ? pairTrailAt : Mathf.Max(now, hopReady - slide);
             pv.MarkLeftYard();
             tweener.Punch(pv.transform, Layout.ParcelSize, new Vector3(-0.12f, 0.18f, -0.12f), start, Timing.TapPunch);
             tweener.MoveAlong(pv.transform, path, start, slide);
@@ -909,8 +923,9 @@ namespace CargoJam.Game
                 pairStrap?.Release(start);
                 pairStrap = null;
                 pairLeadId = -1;
-                // One cell of the lead's pace behind it (the trail's path is one cell longer).
-                pairTrailAt = start + slide / Mathf.Max(1, path.Count);
+                pairTrailAt = start;
+                pairLeadSlide = slide;
+                pairLeadPoints = path.Count;
             }
             else if (id == pairTrailId)
             {
