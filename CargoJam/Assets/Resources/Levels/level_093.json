@@ -3,18 +3,18 @@
   "hard": false,
   "holdingSlots": 5,
   "truckCapacity": 3,
-  "trucks": "YBGPGROBGRYBPOY",
+  "trucks": "BYGBPBOPPBORPOP",
   "rows": [
-    "PBYYGBP",
-    "OOGBRPG",
-    "RRgYGOY",
-    "GRGRBRO",
-    ".bGG.YB",
-    "+######",
-    "B.YPPYP",
-    ".bbOyOY"
+    "PBYBBBY",
+    "bGOGgBp",
+    "Pp.RY.B",
+    "#+#####",
+    "BbOBPBO",
+    "PROPPPP",
+    ".BOPPOO",
+    "POO.RPP"
   ],
   "gates": [
-    { "x": 0, "y": 5, "color": "B", "count": 3 }
+    { "x": 1, "y": 3, "color": "B", "count": 6 }
   ]
 }

@@ -15,9 +15,6 @@ namespace CargoJam.Core.Tests
         /// <summary>The level each cargo kind first appears on (design v4 §4), indexed by <see cref="CargoKind"/>.</summary>
         static readonly int[] DebutLevel = { 5, 7, 12, 17, 22, 27, 42 };
 
-        /// <summary>Levels that unlock a booster; a debut never shares the screen with one.</summary>
-        static readonly int[] BoosterLevels = { 6, 11, 16 };
-
         static string[] Files() => Directory.GetFiles(LevelsFolder, "*.json").OrderBy(f => f).ToArray();
 
         static LevelData Read(string file) => JsonUtility.FromJson<LevelData>(File.ReadAllText(file));
@@ -108,8 +105,11 @@ namespace CargoJam.Core.Tests
                 string name = $"level {id} ({(CargoKind)k} debut)";
 
                 Assert.That(data.hard, Is.False, $"{name} is HARD");
+                Assert.That(data.holdingSlots, Is.EqualTo(5), $"{name} must have 5 slots");
                 Assert.That(id % CargoJam.Meta.Journey.LevelsPerStop, Is.Not.EqualTo(1), $"{name} is an arrival level");
-                Assert.That(BoosterLevels, Has.No.Member(id), $"{name} unlocks a booster");
+                // A debut never shares the screen with a booster unlock.
+                foreach (CargoJam.Meta.BoosterType booster in System.Enum.GetValues(typeof(CargoJam.Meta.BoosterType)))
+                    Assert.That(CargoJam.Meta.EconomyConfig.UnlockLevel(booster), Is.Not.EqualTo(id), $"{name} unlocks {booster}");
 
                 var colors = new HashSet<int>();
                 for (int y = 0; y < level.Height; y++)
