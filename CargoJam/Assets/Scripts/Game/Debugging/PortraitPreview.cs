@@ -27,19 +27,40 @@ namespace CargoJam.Game.Debugging
 
         public static bool Active { get; private set; }
 
-        // Domain reload is off for Play mode, so statics survive between sessions: start each one clean.
+        // Domain reload is off for Play mode, so statics survive between sessions: start each one
+        // clean. Begin edits the PanelSettings *assets* (target texture, clear color), so a session that
+        // ended without End gets them put back first; otherwise the UI would keep clearing the 3D view.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
         {
+            if (Active) End();
             Active = false;
             camera = null;
             panels.Clear();
         }
 
+#if UNITY_EDITOR
+        static bool exitHooked;
+
+        /// <summary>Restores the assets whenever Play mode exits, even if no tool called End.</summary>
+        static void HookPlayModeExit()
+        {
+            if (exitHooked) return;
+            exitHooked = true;
+            UnityEditor.EditorApplication.playModeStateChanged += state =>
+            {
+                if (state == UnityEditor.PlayModeStateChange.ExitingPlayMode) End();
+            };
+        }
+#endif
+
         public static void Begin()
         {
             if (Active) return;
             Active = true;
+#if UNITY_EDITOR
+            HookPlayModeExit();
+#endif
             ScreenInfo.Override(Width, Height, SafeArea);
 
             if (cameraTexture == null) cameraTexture = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32);
