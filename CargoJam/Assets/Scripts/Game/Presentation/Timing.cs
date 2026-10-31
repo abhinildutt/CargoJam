@@ -20,6 +20,11 @@ namespace CargoJam.Game.Presentation
         public const float CraneLift = 0.45f;
         public const float BlockedShake = 0.22f;
 
+        /// <summary>From a parcel starting to slide away to the ice cracking on its frozen neighbours.</summary>
+        public const float CrackDelay = 0.05f;
+        /// <summary>From a gate's sign reaching 0 to its boom starting to lift.</summary>
+        public const float GateOpenDelay = 0.05f;
+
         public const float WinCelebrateDelay = 0.1f;
         /// <summary>From the confetti to the win card.</summary>
         public const float WinOverlayDelay = 1.1f;

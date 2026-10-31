@@ -55,9 +55,12 @@ namespace CargoJam.Game.UI
         DailyPopup daily;
         VisualElement splash;
         const string SplashSeenKey = "cj.splashSeen";
-        /// <summary>When the HARD banner starts, in seconds after the level starts: late on an arrival level (after the destination card).</summary>
-        const float ArrivalBannerAt = 2.5f;
+        /// <summary>When the HARD banner starts on an ordinary level, in seconds after the level starts (as the board drops in).</summary>
         const float BannerAt = 0.3f;
+        /// <summary>On an arrival level the HARD banner waits for the destination reveal and card, then this long.</summary>
+        const float ArrivalBannerGap = 0.6f;
+        /// <summary>From the board being ready (or the HARD banner ending) to the first cargo card.</summary>
+        const float CargoCardGap = 0.25f;
 
         State state = State.Home;
         int continuesUsed;
@@ -470,13 +473,16 @@ namespace CargoJam.Game.UI
             if (state == State.Playing)
             {
                 bool arrival = controller.EnvironmentShown.Arrival;
-                if (info.Hard) banner.Play(arrival ? ArrivalBannerAt : BannerAt);
+                float readyAt = BoardReadyAt(arrival);
+                float bannerAt = arrival ? readyAt - Time.time + ArrivalBannerGap : BannerAt;
+                if (info.Hard) banner.Play(bannerAt);
                 QueueCargoCards(info);
                 if (cargoQueue.Count > 0)
                 {
-                    // The cards come first; the hand follows the last one.
+                    // The cards come first (after the HARD banner, if any); the hand follows the last one.
                     tutorial.Stop();
-                    ShowCargoCardsAt(Time.time + CargoCardDelay(arrival, info.Hard), cargoToken);
+                    float cardsAt = info.Hard ? Time.time + bannerAt + HardBanner.Duration : readyAt;
+                    ShowCargoCardsAt(cardsAt + CargoCardGap, cargoToken);
                 }
                 else
                 {
@@ -513,13 +519,14 @@ namespace CargoJam.Game.UI
         }
 
         /// <summary>
-        /// Seconds after a level starts until a card may open: the board has landed, and any arrival
-        /// card or HARD banner has played out.
+        /// Time.time when the level that just started is ready to be looked at: the board has landed
+        /// (<see cref="GameController.IntroEndsAt"/>, which includes any destination reveal) and, on an
+        /// arrival level, the destination card has gone (it plays even when there is nothing to pan over).
         /// </summary>
-        static float CargoCardDelay(bool arrival, bool hard)
+        float BoardReadyAt(bool arrival)
         {
-            if (hard) return (arrival ? ArrivalBannerAt : BannerAt) + HardBanner.Duration + 0.25f;
-            return arrival ? ArrivalBannerAt + 0.25f : LevelIntro.InputDelay + 0.25f;
+            float ready = Mathf.Max(Time.time, controller.IntroEndsAt);
+            return arrival ? Mathf.Max(ready, Time.time + ArrivalCard.Life) : ready;
         }
 
         /// <summary>Opens the cards at a time, waiting while a pause or settings sheet is up.</summary>
