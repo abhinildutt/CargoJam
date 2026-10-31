@@ -1,4 +1,4 @@
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEBUG
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -34,7 +34,8 @@ namespace CargoJam.Game.Debugging
             ScreenInfo.Override(Width, Height, SafeArea);
 
             if (cameraTexture == null) cameraTexture = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32);
-            if (uiTexture == null) uiTexture = new RenderTexture(Width, Height, 0, RenderTextureFormat.ARGB32);
+            // Depth 24 includes a stencil buffer, which UI Toolkit needs to clip rounded overflow (bars).
+            if (uiTexture == null) uiTexture = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32);
 
             camera = Camera.main;
             if (camera != null) camera.targetTexture = cameraTexture;

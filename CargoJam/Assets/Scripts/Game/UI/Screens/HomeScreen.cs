@@ -5,8 +5,9 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// The home screen over the dimmed live board: route and progress, the pulsing "Level N" button
-    /// (with HARD badge), the streak flame, the chest bar, the daily reward button and settings.
+    /// The home screen (main menu) over the living depot backdrop: the CARGO JAM logo, route and
+    /// progress, the pulsing "Level N" button (with HARD badge), the streak flame, the chest bar, the
+    /// daily reward button and settings.
     /// </summary>
     public sealed class HomeScreen
     {
@@ -14,6 +15,7 @@ namespace CargoJam.Game.UI
         readonly VisualElement scrim;
         readonly VisualElement topRow;
         readonly VisualElement header;
+        readonly Logo logo;
         readonly VisualElement chestCard;
         readonly VisualElement playWrap;
         readonly CandyButton play;
@@ -61,6 +63,8 @@ namespace CargoJam.Game.UI
             Ui.El(topRow, "cj-hud__coin-space");
 
             header = Ui.El(safe, "cj-home__header");
+            logo = new Logo();
+            header.Add(logo);
             routeLabel = Ui.Text(header, "Route 1 · Harbor", "cj-home__route cj-txt");
             routeBar = new ProgressBar("cj-bar--route");
             header.Add(routeBar);
@@ -141,6 +145,7 @@ namespace CargoJam.Game.UI
             Anim.Fade(scrim, 0f, 1f, 0.3f);
             Anim.SlideIn(topRow, 0f, -120f, 0.4f);
             Anim.SlideIn(header, 0f, -80f, 0.45f, 0.05f);
+            logo.PlayIntro();
             Anim.SlideIn(chestCard, 0f, 120f, 0.45f, 0.1f);
             Anim.PopIn(play, 0.18f, 0.45f);
             pulse?.Cancel();
@@ -157,6 +162,7 @@ namespace CargoJam.Game.UI
             visible = false;
             pulse?.Cancel();
             pulse = null;
+            logo.Stop();
             Anim.Fade(scrim, 1f, 0f, 0.25f);
             Anim.SlideOut(topRow, 0f, -120f, 0.22f);
             Anim.SlideOut(header, 0f, -80f, 0.22f);

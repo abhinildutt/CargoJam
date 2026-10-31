@@ -129,7 +129,8 @@
 /* ---- Home ----------------------------------------------------------------------------------- */
 
 .cj-home__scrim {
-    background-color: rgba(20, 16, 30, 0.38);
+    /* The depot backdrop is meant to be seen; only a light wash keeps the top chips readable. */
+    background-color: rgba(255, 255, 255, 0);
 }
 
 .cj-home__top {
@@ -144,11 +145,39 @@
 
 .cj-home__header {
     align-items: center;
-    margin-top: 40px;
+    margin-top: 10px;
 }
 
 .cj-home__route {
-    font-size: 76px;
+    font-size: 54px;
+    margin-top: 6px;
+    margin-bottom: 4px;
+}
+
+/* ---- Logo ----------------------------------------------------------------------------------- */
+
+.cj-logo {
+    align-items: center;
+}
+
+.cj-logo__row {
+    flex-direction: row;
+    justify-content: center;
+}
+
+.cj-logo__letter {
+    font-size: 156px;
+    -unity-font-style: bold;
+    -unity-text-outline-width: 8px;
+    -unity-text-outline-color: rgb(59, 47, 42);
+    text-shadow: 0 12px 0 rgba(40, 30, 25, 0.35);
+    margin: 0 -1px;
+    padding: 0;
+}
+
+.cj-logo__letter--big {
+    font-size: 210px;
+    margin-top: -44px;
 }
 
 .cj-home__chest {

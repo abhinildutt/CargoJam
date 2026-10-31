@@ -260,9 +260,15 @@
 }
 
 .cj-chip__tag {
-    font-size: 34px;
-    color: var(--coin);
-    margin-left: 12px;
+    /* A separate gold pill, so "3" and "x1.5 coins" never read as one number. */
+    font-size: 28px;
+    color: var(--text-dark);
+    background-color: var(--coin);
+    border-radius: 22px;
+    padding: 4px 14px;
+    margin-left: 14px;
+    -unity-text-outline-width: 0;
+    text-shadow: 0 0 0 rgba(0, 0, 0, 0);
 }
 
 .cj-chip--cold .cj-chip__icon {
