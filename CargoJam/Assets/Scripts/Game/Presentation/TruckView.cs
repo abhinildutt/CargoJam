@@ -69,7 +69,7 @@ namespace CargoJam.Game.Presentation
                 view.frontAxle.localPosition = model.FrontPivot;
                 view.rearAxle = MeshKit.Show("Rear Axle", b, model.RearAxle, materials.TruckChassis).transform;
                 view.rearAxle.localPosition = model.RearPivot;
-                Symbols.Create(truck.Color, b, model.Roof + Vector3.up * 0.012f, SymbolSize, materials.Symbol(truck.Color));
+                AddRoofLabel(b, truck.Color, model.Roof, SymbolSize, materials);
             }
             else
             {
@@ -113,7 +113,16 @@ namespace CargoJam.Game.Presentation
         {
             MaterialBank.Box("Bed", b, new Vector3(-0.4f, 0.36f, 0f), new Vector3(1.8f, 0.32f, 1.1f), materials.TruckBody(color));
             MaterialBank.Box("Cab", b, new Vector3(0.95f, 0.55f, 0f), new Vector3(0.75f, 0.72f, 1.05f), materials.TruckCab(color));
-            Symbols.Create(color, b, new Vector3(0.95f, 0.91f, 0f), 0.95f, materials.Symbol(color));
+            AddRoofLabel(b, color, new Vector3(0.95f, 0.9f, 0f), 0.95f, materials);
+        }
+
+        /// <summary>The same stamped shipping label the parcels carry, on the cab roof.</summary>
+        static void AddRoofLabel(Transform b, int color, Vector3 roof, float size, MaterialBank materials)
+        {
+            const float thickness = 0.012f;
+            var paper = MaterialBank.Box("Label", b, roof + Vector3.up * (thickness * 0.5f), new Vector3(size * 0.86f, thickness, size * 0.86f), materials.Label);
+            paper.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            Symbols.Create(color, b, roof + Vector3.up * (thickness + 0.004f), size * 0.64f, materials.LabelInk(color));
         }
 
         // ---- The baked model (shared by every truck) -------------------------------------------------

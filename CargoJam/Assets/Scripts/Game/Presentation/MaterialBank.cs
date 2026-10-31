@@ -22,10 +22,17 @@ namespace CargoJam.Game.Presentation
         static readonly Color SymbolLight = new Color(0.98f, 0.98f, 0.98f);
         static readonly Color SymbolDark = new Color(0.22f, 0.19f, 0.14f);
 
-        /// <summary>Texel centers (u) of the 4×1 parcel skin texture: body, tape, symbol.</summary>
+        /// <summary>Shipping-label paper, and the same paper on a blocked (dimmed) parcel.</summary>
+        static readonly Color LabelPaper = new Color(0.96f, 0.93f, 0.86f);
+        static readonly Color LabelPaperDim = new Color(0.84f, 0.81f, 0.75f);
+        /// <summary>Stamp ink: the UI's ink navy, which each color's stamp leans toward.</summary>
+        static readonly Color InkBase = new Color(0.10f, 0.13f, 0.19f);
+
+        /// <summary>Texel centers (u) of the 4×1 parcel skin texture: body, tape, stamp ink, label paper.</summary>
         public const float SkinBodyU = 0.125f;
         public const float SkinTapeU = 0.375f;
         public const float SkinSymbolU = 0.625f;
+        public const float SkinLabelU = 0.875f;
 
         const string CarKitColormap = "Env/Cars/Textures/colormap";
 
@@ -37,6 +44,7 @@ namespace CargoJam.Game.Presentation
         readonly Material[] skinBright;
         readonly Material[] skinDim;
         readonly Material[] truckPaint;
+        readonly Material[] labelInk;
         Texture carKit;
         bool carKitLoaded;
         Material truckChassis;
@@ -76,14 +84,17 @@ namespace CargoJam.Game.Presentation
             skinBright = new Material[Swatches.Length];
             skinDim = new Material[Swatches.Length];
             truckPaint = new Material[Swatches.Length];
+            labelInk = new Material[Swatches.Length];
             for (int i = 0; i < Swatches.Length; i++)
             {
                 bright[i] = Make(Swatches[i]);
                 dim[i] = Make(Dim(Swatches[i]));
                 truckBody[i] = Make(Color.Lerp(Swatches[i], Color.white, 0.25f));
-                skinBright[i] = MakeSkin(Swatches[i], SymbolColor(i), $"Parcel {i}");
-                skinDim[i] = MakeSkin(Dim(Swatches[i]), SymbolColor(i), $"Parcel {i} dim");
+                skinBright[i] = MakeSkin(Swatches[i], InkFor(i), LabelPaper, $"Parcel {i}");
+                skinDim[i] = MakeSkin(Dim(Swatches[i]), InkFor(i), LabelPaperDim, $"Parcel {i} dim");
+                labelInk[i] = Make(InkFor(i));
             }
+            Label = Make(LabelPaper);
             symbolLight = Make(SymbolLight);
             symbolDark = Make(SymbolDark);
 
@@ -166,6 +177,18 @@ namespace CargoJam.Game.Presentation
 
         public static Color SymbolColor(int color) => color == YellowIndex ? SymbolDark : SymbolLight;
 
+        /// <summary>
+        /// The stamp ink for a parcel color: dark, but leaning toward its parcel's hue, so a label still
+        /// says which color it belongs to while its shape does the work for colorblind players.
+        /// </summary>
+        public static Color InkFor(int color) => Color.Lerp(Swatches[color], InkBase, 0.62f);
+
+        /// <summary>Shipping-label paper (truck roof labels).</summary>
+        public Material Label { get; }
+
+        /// <summary>The stamp ink of a color (truck roof labels).</summary>
+        public Material LabelInk(int color) => labelInk[color];
+
         /// <summary>Recolors the ground, yard tiles and road.</summary>
         public void SetEnvironment(Color ground, Color tile, Color road)
         {
@@ -237,8 +260,8 @@ namespace CargoJam.Game.Presentation
             return m;
         }
 
-        /// <summary>Body, tape and symbol colors in a 4×1 point-filtered texture under a white base color.</summary>
-        Material MakeSkin(Color body, Color symbol, string name)
+        /// <summary>Body, tape, stamp ink and label paper in a 4×1 point-filtered texture under a white base color.</summary>
+        Material MakeSkin(Color body, Color ink, Color paper, string name)
         {
             // Packing tape: a slightly darker, slightly greyer band of the body color.
             float luma = 0.299f * body.r + 0.587f * body.g + 0.114f * body.b;
@@ -250,7 +273,7 @@ namespace CargoJam.Game.Presentation
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp,
             };
-            tex.SetPixels(new[] { body, tape, symbol, body });
+            tex.SetPixels(new[] { body, tape, ink, paper });
             tex.Apply(false, true);
             var m = Make(Color.white);
             m.name = name;

@@ -11,6 +11,12 @@ namespace CargoJam.Game.Presentation
         const float TapeHalfWidth = 0.075f;
         /// <summary>How far the tape sits proud of the box, so it never z-fights.</summary>
         const float TapeLift = 0.004f;
+        /// <summary>The shipping label on the lid: paper size, thickness, and the symbol's scale on it.</summary>
+        const float LabelSize = 0.66f;
+        const float LabelThickness = 0.012f;
+        const float StampScale = 0.78f;
+        /// <summary>A small hand-applied tilt per color, so labels don't read as a printed grid.</summary>
+        static readonly float[] LabelYaw = { -7f, 5f, -4f, 6f, -5f, 3f };
 
         static readonly Mesh[] boxMeshes = new Mesh[6];
         static Mesh plainMesh;
@@ -196,7 +202,13 @@ namespace CargoJam.Game.Presentation
             var b = new MeshBuilder();
             MeshKit.AddBox(b, 0, Matrix4x4.identity, Bevel, new Vector2(MaterialBank.SkinBodyU, 0.5f));
             AddTape(b, new Vector2(MaterialBank.SkinTapeU, 0.5f));
-            Symbols.Append(b, 0, i, Matrix4x4.Translate(new Vector3(0f, 0.5f, 0f)), new Vector2(MaterialBank.SkinSymbolU, 0.5f));
+            // A paper shipping label over the tape, with the color's symbol stamped on it in ink.
+            var label = Matrix4x4.TRS(new Vector3(0f, 0.5f + TapeLift * 2f + LabelThickness * 0.5f, 0f),
+                Quaternion.Euler(0f, LabelYaw[i % LabelYaw.Length], 0f), Vector3.one);
+            MeshKit.AddBox(b, 0, label * Matrix4x4.Scale(new Vector3(LabelSize, LabelThickness, LabelSize)), 0f,
+                new Vector2(MaterialBank.SkinLabelU, 0.5f));
+            Symbols.Append(b, 0, i, label * Matrix4x4.Translate(new Vector3(0f, LabelThickness * 0.5f, 0f)) * Matrix4x4.Scale(Vector3.one * StampScale),
+                new Vector2(MaterialBank.SkinSymbolU, 0.5f));
             boxMeshes[i] = b.ToMesh($"Parcel Box {i}");
             return boxMeshes[i];
         }

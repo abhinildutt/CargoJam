@@ -226,7 +226,7 @@ All UI sizes are in panel units at the 1080×1920 reference (PanelSettings: Scal
   - Parcels sit visibly on the flatbed's 3 slots, so keep the bed-slot logic and positions.
   - The wheels spin while driving, and the body keeps the dip, punch and squash animations through the existing "Body" child pattern.
   - `truck` (box) and `delivery` are available for scenery traffic.
-- Parcels get a beveled box mesh with a tape stripe. Keep the white symbol and size. The symbols (circle, square, plus, diamond, cross and two bars, one per color) exist so colorblind players and grayscale ad clips can tell colors apart, so they stay.
+- Parcels get a beveled box mesh with a tape stripe. Keep the white symbol and size. The symbols (circle, square, plus, diamond, cross and two bars, one per color) exist so colorblind players and grayscale ad clips can tell colors apart, so they stay. They are stamped on a cream **shipping label** on the lid, slightly tilted per color, in a dark ink that leans toward the parcel's hue (user choice after the mockup). Trucks carry the same label on the cab roof.
 
 ## 6. Engagement
 
