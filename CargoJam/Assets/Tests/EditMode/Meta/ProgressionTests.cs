@@ -596,5 +596,39 @@ namespace CargoJam.Meta.Tests
             }
             Assert.That(Picks(7), Is.EqualTo(Picks(7)));
         }
+
+        // ---- Cargo introductions ----
+
+        [Test]
+        public void CargoStartsUnseenAndMarkingIsOneShot()
+        {
+            Assert.That(p.HasSeenCargo(0), Is.False);
+            Assert.That(p.MarkCargoSeen(0), Is.True);
+            Assert.That(p.HasSeenCargo(0), Is.True);
+            Assert.That(p.HasSeenCargo(1), Is.False);
+            Assert.That(p.MarkCargoSeen(0), Is.False, "already seen");
+            Assert.That(changes, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void OutOfRangeCargoIsIgnored()
+        {
+            Assert.That(p.MarkCargoSeen(-1), Is.False);
+            Assert.That(p.MarkCargoSeen(ProfileData.CargoKinds), Is.False);
+            Assert.That(p.HasSeenCargo(ProfileData.CargoKinds), Is.True, "unknown kinds never queue a card");
+            Assert.That(p.HasSeenCargo(-1), Is.True);
+        }
+
+        [Test]
+        public void MarkingCargoRepairsAShortArray()
+        {
+            var data = new ProfileData { cargoSeen = null };
+            var q = new Progression(data, clock);
+            data.cargoSeen = new bool[2];
+            Assert.That(q.HasSeenCargo(5), Is.False);
+            Assert.That(q.MarkCargoSeen(5), Is.True);
+            Assert.That(data.cargoSeen.Length, Is.EqualTo(ProfileData.CargoKinds));
+            Assert.That(q.HasSeenCargo(5), Is.True);
+        }
     }
 }
