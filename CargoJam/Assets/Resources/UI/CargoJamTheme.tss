@@ -1,1 +1,6 @@
 @import url("unity-theme://default");
+
+/* Nunito for every element on this panel, including the FX overlay's callouts (design v3). */
+:root {
+    -unity-font-definition: resource("UI/Fonts/Nunito-ExtraBold SDF");
+}
