@@ -49,8 +49,13 @@ namespace CargoJam.Game
     public sealed class GameController : MonoBehaviour
     {
         const float HitRadius = 0.75f;
-        /// <summary>Levels before this index are never repeated when the content loops (tutorials, ramp).</summary>
-        const int LoopStart = 20;
+        /// <summary>
+        /// Levels before this index are never repeated when the content loops (tutorials, cargo debuts,
+        /// ramp). Used once there are more level files than this (the 100-level set loops 61–100).
+        /// </summary>
+        const int LoopStart = 60;
+        /// <summary>Where the loop starts with <see cref="LoopStart"/> level files or fewer (the 60-level set loops 21–60).</summary>
+        const int ShortLoopStart = 20;
 
         Camera cam;
         Light sun;
@@ -372,7 +377,7 @@ namespace CargoJam.Game
         {
             int count = levels.Count;
             if (index < count) return index;
-            int loopStart = Mathf.Min(LoopStart, count - 1);
+            int loopStart = count > LoopStart ? LoopStart : Mathf.Min(ShortLoopStart, count - 1);
             return loopStart + (index - count) % (count - loopStart);
         }
 
