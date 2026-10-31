@@ -7,7 +7,9 @@ namespace CargoJam.Game.Meta
     /// <summary>
     /// Loads and saves the player's <see cref="ProfileData"/> as JSON (JsonUtility) in PlayerPrefs.
     /// Never throws on bad data: a corrupt save is replaced by a fresh profile with a warning.
-    /// Wrap the loaded data in a <see cref="Progression"/>, which repairs out-of-range values.
+    /// Older save versions are upgraded on load (<see cref="ProfileMigration.Upgrade"/>; v1 → v2 adds
+    /// the journey postcards) and written back. Wrap the loaded data in a <see cref="Progression"/>,
+    /// which repairs out-of-range values.
     /// </summary>
     public static class ProfileStore
     {
@@ -30,7 +32,16 @@ namespace CargoJam.Game.Meta
             try
             {
                 var data = JsonUtility.FromJson<ProfileData>(PlayerPrefs.GetString(ProfileKey, ""));
-                if (data != null) return data;
+                if (data != null)
+                {
+                    int from = data.version;
+                    if (ProfileMigration.Upgrade(data))
+                    {
+                        Debug.Log($"ProfileStore: upgraded the saved profile from v{from} to v{data.version}.");
+                        Save(data);
+                    }
+                    return data;
+                }
                 Debug.LogWarning("ProfileStore: saved profile was empty; starting a fresh one.");
             }
             catch (Exception e)
@@ -75,7 +86,13 @@ namespace CargoJam.Game.Meta
         {
             var data = new ProfileData();
             if (PlayerPrefs.HasKey(LegacyLevelKey))
+            {
                 data.levelIndex = Math.Max(0, PlayerPrefs.GetInt(LegacyLevelKey, 0));
+                // Like a migrated save: no reveal for the destination the player is already in.
+                data.lastArrivalShown = Journey.LegFor(data.levelIndex);
+            }
+            // Harbor Town (and any destination a legacy index reached) is earned on first launch.
+            ProfileMigration.MarkReachedPostcards(data);
             return data;
         }
     }

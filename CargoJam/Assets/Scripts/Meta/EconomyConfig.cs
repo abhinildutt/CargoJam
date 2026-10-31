@@ -8,7 +8,8 @@ namespace CargoJam.Meta
     }
 
     /// <summary>
-    /// Every economy number in one place (docs/design-v2-polish-and-retention.md, section 3).
+    /// Every economy number in one place (docs/design-v2-polish-and-retention.md, section 3; the
+    /// streak tiers follow docs/design-v3-premium-journey.md, section 6).
     /// Level numbers here are 1-based, as players see them; level indexes elsewhere are 0-based.
     /// </summary>
     public static class EconomyConfig
@@ -27,7 +28,57 @@ namespace CargoJam.Meta
 
         public const int UnlockGift = 2;
 
-        public static float StreakMultiplier(int streak) => streak >= 6 ? 2f : streak >= 3 ? 1.5f : 1f;
+        // ---- Streak tiers (docs/design-v3-premium-journey.md, section 6) ----
+
+        /// <summary>The highest streak tier; it carries the free-Undo perk.</summary>
+        public const int MaxStreakTier = 3;
+        /// <summary>Win streak at which tier 1 starts (×1.5).</summary>
+        public const int StreakTier1At = 3;
+        /// <summary>Win streak at which tier 2 starts (×2).</summary>
+        public const int StreakTier2At = 6;
+        /// <summary>Win streak at which tier 3 starts (×2.5 and one free Undo per level).</summary>
+        public const int StreakTier3At = 10;
+
+        public const float StreakTier0Multiplier = 1f;
+        public const float StreakTier1Multiplier = 1.5f;
+        public const float StreakTier2Multiplier = 2f;
+        public const float StreakTier3Multiplier = 2.5f;
+
+        /// <summary>The tier whose perk is one free Undo charge per level (not banked).</summary>
+        public const int FreeUndoTier = MaxStreakTier;
+        /// <summary>Free Undo charges a level gets at <see cref="FreeUndoTier"/>.</summary>
+        public const int FreeUndoPerLevel = 1;
+
+        /// <summary>Streak tier 0..<see cref="MaxStreakTier"/> for a win streak (0-2, 3-5, 6-9, 10+).</summary>
+        public static int StreakTierFor(int streak) =>
+            streak >= StreakTier3At ? 3 : streak >= StreakTier2At ? 2 : streak >= StreakTier1At ? 1 : 0;
+
+        /// <summary>The lowest streak in a tier (tier 0 starts at 0). Tiers are clamped to 0..<see cref="MaxStreakTier"/>.</summary>
+        public static int StreakTierStart(int tier)
+        {
+            switch (tier)
+            {
+                case 1: return StreakTier1At;
+                case 2: return StreakTier2At;
+                case 3: return StreakTier3At;
+                default: return tier > MaxStreakTier ? StreakTier3At : 0;
+            }
+        }
+
+        /// <summary>The coin multiplier of a tier (×1, ×1.5, ×2, ×2.5). Tiers are clamped to 0..<see cref="MaxStreakTier"/>.</summary>
+        public static float StreakTierMultiplier(int tier)
+        {
+            switch (tier)
+            {
+                case 1: return StreakTier1Multiplier;
+                case 2: return StreakTier2Multiplier;
+                case 3: return StreakTier3Multiplier;
+                default: return tier > MaxStreakTier ? StreakTier3Multiplier : StreakTier0Multiplier;
+            }
+        }
+
+        /// <summary>The coin multiplier for a win streak: the multiplier of its tier.</summary>
+        public static float StreakMultiplier(int streak) => StreakTierMultiplier(StreakTierFor(streak));
 
         public static int BoosterPrice(BoosterType booster)
         {

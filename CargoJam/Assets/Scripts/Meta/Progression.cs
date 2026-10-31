@@ -9,12 +9,19 @@ namespace CargoJam.Meta
     {
         /// <summary>Coins before the streak multiplier: <see cref="EconomyConfig.WinCoins"/> or <see cref="EconomyConfig.HardWinCoins"/>.</summary>
         public int BaseCoins;
-        /// <summary>The streak multiplier applied, from <see cref="StreakAfter"/>.</summary>
+        /// <summary>The streak multiplier applied: the multiplier of <see cref="TierAfter"/>.</summary>
         public float Multiplier;
         /// <summary>Coins actually granted (BaseCoins × Multiplier, rounded).</summary>
         public int CoinsEarned;
         public int StreakBefore;
         public int StreakAfter;
+        /// <summary>Streak tier (0..<see cref="EconomyConfig.MaxStreakTier"/>) before and after this win.</summary>
+        public int TierBefore;
+        public int TierAfter;
+        /// <summary>This win moved the streak into a higher tier (play the tier-up moment).</summary>
+        public bool TierUp;
+        /// <summary>The streak at which the next tier starts, or -1 at the top tier.</summary>
+        public int NextTierAt = -1;
         /// <summary>Chest bar before and after, in wins (0..ChestEvery).</summary>
         public int ChestBefore;
         public int ChestAfter;
@@ -22,6 +29,13 @@ namespace CargoJam.Meta
         /// <summary>A booster unlocked by reaching the next level (its gift is already granted).</summary>
         public BoosterType? Unlocked;
         public int NewLevelIndex;
+        /// <summary>
+        /// The destination (<see cref="Journey"/> stop) this win arrived at, or -1 when the next level
+        /// is not the first of a destination. Set on every arrival, including later loops.
+        /// </summary>
+        public int ArrivedAt = -1;
+        /// <summary>The stop whose postcard this win earned for the first time, or -1 for none.</summary>
+        public int PostcardEarned = -1;
     }
 
     /// <summary>The contents of an opened chest (already granted).</summary>
@@ -45,10 +59,11 @@ namespace CargoJam.Meta
     }
 
     /// <summary>
-    /// The rules of the meta game: coins, streaks, chests, boosters, unlocks and the daily calendar.
-    /// Engine-free and deterministic given the clock and random seed. Raises <see cref="Changed"/>
-    /// after every mutation so the UI and the save layer can react.
-    /// See docs/design-v2-polish-and-retention.md, section 3.
+    /// The rules of the meta game: coins, streak tiers, chests, boosters, unlocks, the daily calendar
+    /// and journey postcards. Engine-free and deterministic given the clock and random seed. Raises
+    /// <see cref="Changed"/> after every mutation so the UI and the save layer can react.
+    /// See docs/design-v2-polish-and-retention.md, section 3, and docs/design-v3-premium-journey.md,
+    /// sections 2 and 6.
     /// </summary>
     public sealed class Progression
     {
@@ -80,6 +95,7 @@ namespace CargoJam.Meta
             Data = data ?? new ProfileData();
             this.clock = clock ?? new SystemClock();
             random = new Random(seed);
+            ProfileMigration.Upgrade(Data);
             Normalize(Data);
             ApplyUnlocks(Data.levelIndex);
         }
@@ -96,35 +112,130 @@ namespace CargoJam.Meta
         /// <summary>The multiplier the next win will pay (the streak counts that win, see <see cref="RecordWin"/>).</summary>
         public float NextWinMultiplier => EconomyConfig.StreakMultiplier(Data.winStreak + 1);
 
-        // ---- Streak tiers and journey (design v3 contract; stream C completes the rules) ----
+        // ---- Streak tiers (docs/design-v3-premium-journey.md, section 6) ----
+
+        /// <summary>
+        /// Raised when a win or give-up moves the streak to another tier, as (from, to), after
+        /// <see cref="Changed"/>.
+        /// </summary>
+        public event Action<int, int> StreakTierChanged;
 
         /// <summary>Streak tier 0..3 of the current streak (0-2, 3-5, 6-9, 10+).</summary>
         public int StreakTier => StreakTierFor(Data.winStreak);
 
         /// <summary>Tier for a streak length (0-2 → 0, 3-5 → 1, 6-9 → 2, 10+ → 3).</summary>
-        public static int StreakTierFor(int streak) => streak >= 10 ? 3 : streak >= 6 ? 2 : streak >= 3 ? 1 : 0;
+        public static int StreakTierFor(int streak) => EconomyConfig.StreakTierFor(streak);
 
-        /// <summary>The streak a give-up leaves: the floor of the tier below (7 → 3, 12 → 6, 4 → 0).</summary>
+        /// <summary>The coin multiplier of a tier (×1, ×1.5, ×2, ×2.5), for tier chips.</summary>
+        public static float TierMultiplier(int tier) => EconomyConfig.StreakTierMultiplier(tier);
+
+        /// <summary>The streak at which the tier after <paramref name="streak"/>'s starts (3, 6, 10), or -1 at the top tier.</summary>
+        public static int NextTierThreshold(int streak)
+        {
+            int tier = StreakTierFor(streak);
+            return tier >= EconomyConfig.MaxStreakTier ? -1 : EconomyConfig.StreakTierStart(tier + 1);
+        }
+
+        /// <summary>The streak a give-up leaves: the floor of the tier below (7 → 3, 12 → 6, 4 → 0, 2 → 0).</summary>
         public static int StreakFloorBelow(int streak)
         {
             int tier = StreakTierFor(streak);
-            return tier <= 1 ? 0 : tier == 2 ? 3 : 6;
+            return tier <= 0 ? 0 : EconomyConfig.StreakTierStart(tier - 1);
         }
 
+        /// <summary>The streak at which the next tier starts, or -1 at the top tier.</summary>
+        public int NextTierAt => NextTierThreshold(Data.winStreak);
+
+        /// <summary>What <see cref="RecordGiveUp"/> would leave the streak at right now.</summary>
+        public int StreakAfterGiveUp => StreakFloorBelow(Data.winStreak);
+
+        /// <summary>The tier a give-up would leave.</summary>
+        public int TierAfterGiveUp => StreakTierFor(StreakAfterGiveUp);
+
+        /// <summary>The tier multiplier a give-up would leave, for "Streak will drop to ×1.5".</summary>
+        public float MultiplierAfterGiveUp => TierMultiplier(TierAfterGiveUp);
+
+        /// <summary>True when giving up now would drop the streak tier (show the neutral warning line).</summary>
+        public bool GiveUpDropsTier => TierAfterGiveUp < StreakTier;
+
+        // ---- Tier-3 perk: one free Undo each level ----
+
+        bool freeUndoUsed;
+
         /// <summary>The top tier's perk: one free Undo charge each level (not banked).</summary>
-        public bool TierPerkUndo => StreakTier >= 3;
+        public bool TierPerkUndo => StreakTier >= EconomyConfig.FreeUndoTier;
+
+        /// <summary>
+        /// Free Undo charges left in the current level: <see cref="EconomyConfig.FreeUndoPerLevel"/>
+        /// while <see cref="TierPerkUndo"/> holds, Undo is unlocked and the charge is unused, else 0.
+        /// The charge is never saved or banked; it renews in <see cref="BeginLevel"/>.
+        /// </summary>
+        public int FreeUndoCharges => TierPerkUndo && IsUnlocked(BoosterType.Undo) && !freeUndoUsed
+            ? EconomyConfig.FreeUndoPerLevel
+            : 0;
+
+        /// <summary>
+        /// Call when a level starts (every <c>LevelStarted</c>, restarts included): renews the free
+        /// Undo charge. Wins and give-ups also renew it, so a missed call can't strand the perk.
+        /// </summary>
+        public void BeginLevel()
+        {
+            if (!freeUndoUsed) return;
+            freeUndoUsed = false;
+            RaiseChanged();
+        }
+
+        /// <summary>
+        /// Boosters usable right now: the owned count plus, for Undo, <see cref="FreeUndoCharges"/>.
+        /// Use this (not <see cref="BoosterCount"/>) to decide between using a booster and offering to buy one.
+        /// </summary>
+        public int UsableBoosterCount(BoosterType booster) =>
+            BoosterCount(booster) + (booster == BoosterType.Undo ? FreeUndoCharges : 0);
+
+        // ---- Journey: postcards and arrival reveals ----
+
+        /// <summary>Raised when a win arrives at a destination, as (stop, leg), after <see cref="Changed"/>.</summary>
+        public event Action<int, int> DestinationReached;
 
         public bool HasPostcard(int stop) =>
             Data.postcards != null && stop >= 0 && stop < Data.postcards.Length && Data.postcards[stop];
 
-        /// <summary>Marks a destination's postcard earned. Returns true when it is new.</summary>
-        public bool MarkPostcard(int stop) => throw new NotImplementedException("stream C");
+        /// <summary>How many destination postcards have been earned.</summary>
+        public int PostcardCount
+        {
+            get
+            {
+                int n = 0;
+                foreach (bool earned in Data.postcards)
+                    if (earned) n++;
+                return n;
+            }
+        }
+
+        /// <summary>Marks a destination's postcard earned. Returns true when it is new (and raises <see cref="Changed"/>).</summary>
+        public bool MarkPostcard(int stop)
+        {
+            if (!SetPostcard(stop)) return false;
+            RaiseChanged();
+            return true;
+        }
 
         /// <summary>True when the level at <paramref name="levelIndex"/> starts a destination whose arrival reveal hasn't played.</summary>
         public bool ShouldPlayArrival(int levelIndex) =>
             Journey.IsArrival(levelIndex) && Journey.LegFor(levelIndex) > Data.lastArrivalShown;
 
-        public void MarkArrivalShown(int levelIndex) => throw new NotImplementedException("stream C");
+        /// <summary>
+        /// Records that the arrival reveal for <paramref name="levelIndex"/>'s leg has played, so it
+        /// won't play again until the next destination (or the same one on the next loop). Never moves
+        /// backwards. Raises <see cref="Changed"/> when it changes anything.
+        /// </summary>
+        public void MarkArrivalShown(int levelIndex)
+        {
+            int leg = Journey.LegFor(levelIndex);
+            if (leg <= Data.lastArrivalShown) return;
+            Data.lastArrivalShown = leg;
+            RaiseChanged();
+        }
 
         public int ChestProgress => Data.chestProgress;
         public bool ChestReady => Data.chestProgress >= EconomyConfig.ChestEvery;
@@ -180,9 +291,12 @@ namespace CargoJam.Meta
         }
 
         /// <summary>
-        /// Pays out a win, advances the level, streak and chest bar, and applies unlocks.
+        /// Pays out a win, advances the level, streak and chest bar, applies unlocks, and earns the
+        /// postcard when the next level starts a new destination.
         /// The streak multiplier uses the streak <b>including</b> this win, so the 3rd win in a row
-        /// already pays ×1.5 and the 6th ×2. A full chest bar stays full until the chest is opened.
+        /// already pays ×1.5, the 6th ×2 and the 10th ×2.5. A full chest bar stays full until the chest
+        /// is opened. Raises <see cref="Changed"/> once, then <see cref="StreakTierChanged"/> and
+        /// <see cref="DestinationReached"/> when they apply.
         /// </summary>
         /// <param name="hard">The level was a HARD level (double base coins).</param>
         public WinResult RecordWin(bool hard)
@@ -194,7 +308,11 @@ namespace CargoJam.Meta
                 StreakAfter = Data.winStreak + 1,
                 ChestBefore = Data.chestProgress,
             };
-            result.Multiplier = EconomyConfig.StreakMultiplier(result.StreakAfter);
+            result.TierBefore = StreakTierFor(result.StreakBefore);
+            result.TierAfter = StreakTierFor(result.StreakAfter);
+            result.TierUp = result.TierAfter > result.TierBefore;
+            result.NextTierAt = NextTierThreshold(result.StreakAfter);
+            result.Multiplier = TierMultiplier(result.TierAfter);
             result.CoinsEarned = (int)Math.Round(result.BaseCoins * result.Multiplier, MidpointRounding.AwayFromZero);
 
             Grant(result.CoinsEarned);
@@ -208,17 +326,35 @@ namespace CargoJam.Meta
             result.ChestReady = ChestReady;
             result.NewLevelIndex = Data.levelIndex;
             result.Unlocked = ApplyUnlocks(Data.levelIndex);
+            if (Journey.IsArrival(Data.levelIndex))
+            {
+                result.ArrivedAt = Journey.StopFor(Data.levelIndex);
+                if (SetPostcard(result.ArrivedAt)) result.PostcardEarned = result.ArrivedAt;
+            }
+            freeUndoUsed = false;
 
             RaiseChanged();
+            if (result.TierUp) StreakTierChanged?.Invoke(result.TierBefore, result.TierAfter);
+            if (result.ArrivedAt >= 0) DestinationReached?.Invoke(result.ArrivedAt, Journey.LegFor(Data.levelIndex));
             return result;
         }
 
-        /// <summary>The player abandoned a failed or started level: the streak resets.</summary>
+        /// <summary>
+        /// The player abandoned a failed or started level (fail → give up, or restart / home after a
+        /// move). Gentle loss: the streak drops to the floor of the tier below
+        /// (<see cref="StreakFloorBelow"/>: 7 → 3, 12 → 6, 4 → 0) instead of to zero. Continue doesn't
+        /// call this, so it keeps the streak. Raises <see cref="Changed"/>, then
+        /// <see cref="StreakTierChanged"/> when the tier dropped.
+        /// </summary>
         public void RecordGiveUp()
         {
-            Data.winStreak = 0;
+            int tierBefore = StreakTier;
+            Data.winStreak = StreakFloorBelow(Data.winStreak);
             Data.totalGiveUps++;
+            freeUndoUsed = false;
             RaiseChanged();
+            int tierAfter = StreakTier;
+            if (tierAfter != tierBefore) StreakTierChanged?.Invoke(tierBefore, tierAfter);
         }
 
         public bool CanAfford(int coins) => Data.coins >= coins;
@@ -241,9 +377,18 @@ namespace CargoJam.Meta
             RaiseChanged();
         }
 
-        /// <summary>Uses one owned booster. False when none are owned.</summary>
+        /// <summary>
+        /// Uses one booster. For Undo, the level's free tier-3 charge (<see cref="FreeUndoCharges"/>) is
+        /// spent first, since it can't be banked; otherwise an owned one. False when none is usable.
+        /// </summary>
         public bool TryConsumeBooster(BoosterType booster)
         {
+            if (booster == BoosterType.Undo && FreeUndoCharges > 0)
+            {
+                freeUndoUsed = true;
+                RaiseChanged();
+                return true;
+            }
             int i = (int)booster;
             if (Data.boosters[i] <= 0) return false;
             Data.boosters[i]--;
@@ -333,6 +478,14 @@ namespace CargoJam.Meta
             return info;
         }
 
+        /// <summary>Sets a postcard without raising <see cref="Changed"/>. True when it is new.</summary>
+        bool SetPostcard(int stop)
+        {
+            if (stop < 0 || stop >= Data.postcards.Length || Data.postcards[stop]) return false;
+            Data.postcards[stop] = true;
+            return true;
+        }
+
         void Grant(int coins)
         {
             if (coins <= 0) return;
@@ -374,6 +527,11 @@ namespace CargoJam.Meta
             d.totalWins = Math.Max(0, d.totalWins);
             d.totalGiveUps = Math.Max(0, d.totalGiveUps);
             d.coinsEarned = Math.Max(0, d.coinsEarned);
+
+            // Journey (v2): every destination reached has its postcard (Harbor Town from the first
+            // launch), and no reveal can have played for a leg not reached yet.
+            ProfileMigration.MarkReachedPostcards(d);
+            d.lastArrivalShown = Math.Clamp(d.lastArrivalShown, -1, Journey.LegFor(d.levelIndex));
         }
 
         static T[] Resize<T>(T[] array)
