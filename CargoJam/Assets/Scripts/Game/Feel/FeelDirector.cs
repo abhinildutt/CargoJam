@@ -373,15 +373,92 @@ namespace CargoJam.Game.Feel
 
         // ---- Cargo ---------------------------------------------------------------------------------
 
-        public void FrostCracked(ParcelView parcel, int left, float at) { }
+        public void FrostCracked(ParcelView parcel, int left, float at)
+        {
+            if (views == null) return;
+            var ice = fxMaterials.Ice;
+            views.Tweener.At(at, () =>
+            {
+                if (!parcel) return;
+                var collar = parcel.transform.position + Vector3.up * 0.2f;
+                if (left <= 0)
+                {
+                    // The last layer bursts off: a big spray of shards and a frosty glint.
+                    particles.Emit(collar, BurstSpec.IceShards(16), ice);
+                    particles.Emit(collar + Vector3.up * 0.2f, BurstSpec.Sparkle(6), fxMaterials.White);
+                    sfx.Play(Sfx.IceShatter, 1f, 0.9f);
+                }
+                else
+                {
+                    particles.Emit(collar, BurstSpec.IceShards(6), ice);
+                    sfx.PlayVaried(Sfx.IceCrack, IcePitch(left), 0.8f, 0.03f);
+                }
+                Haptics.Play(Haptic.Tick);
+            });
+        }
 
-        public void ExpressTicked(ParcelView parcel, int left, float at) { }
+        /// <summary>Thinner ice cracks higher: 2 layers left → +2 semitones, 1 left → +6.</summary>
+        static float IcePitch(int left) => Mathf.Pow(2f, (Mathf.Clamp(3 - left, 0, 3) * 4f - 2f) / 12f);
 
-        public void StrapSnapped(StrapView strap, float at) { }
+        public void ExpressTicked(ParcelView parcel, int left, float at)
+        {
+            if (views == null) return;
+            // Rising pitch as the count runs down: two semitones a move over the last five.
+            float pitch = Mathf.Pow(2f, Mathf.Clamp(6 - left, 0, 5) * 2f / 12f);
+            float volume = left <= 2 ? 0.85f : 0.55f;
+            views.Tweener.At(at, () =>
+            {
+                sfx.Play(Sfx.ExpressTick, pitch, volume);
+                if (left == 1) Haptics.Play(Haptic.Warning);
+            });
+        }
 
-        public void GateProgress(GateView gate, int left, float at) { }
+        public void StrapSnapped(StrapView strap, float at)
+        {
+            if (views == null) return;
+            views.Tweener.At(at, () =>
+            {
+                if (!strap) return;
+                var a = strap.A ? strap.A.transform.position : strap.transform.position;
+                var b = strap.B ? strap.B.transform.position : strap.transform.position;
+                var mid = (a + b) * 0.5f + Vector3.up * 0.45f;
+                particles.Emit(mid, BurstSpec.Sparks(8), fxMaterials.White);
+                particles.Emit(mid, BurstSpec.Dust(4), fxMaterials.Dust);
+                sfx.PlayVaried(Sfx.StrapSnap, 1f, 0.85f);
+                Haptics.Play(Haptic.Tick);
+            });
+        }
 
-        public void GateOpened(GateView gate, float at) { }
+        public void GateProgress(GateView gate, int left, float at)
+        {
+            if (views == null || !gate) return;
+            var mat = views.Materials.Parcel(gate.Gate.Color, true);
+            // Each count down climbs a step, so the last loads before it opens build up.
+            float pitch = Mathf.Pow(2f, Mathf.Clamp(5 - left, 0, 5) * 2f / 12f);
+            views.Tweener.At(at, () =>
+            {
+                if (!gate) return;
+                particles.Emit(gate.transform.position + Vector3.up * 1.1f, BurstSpec.Sparkle(4), mat);
+                sfx.Play(Sfx.GateTick, pitch, 0.8f);
+            });
+        }
+
+        public void GateOpened(GateView gate, float at)
+        {
+            if (views == null || !gate) return;
+            var mat = views.Materials.Parcel(gate.Gate.Color, true);
+            var palette = fxMaterials.SparklePalette;
+            views.Tweener.At(at, () =>
+            {
+                if (!gate) return;
+                var top = gate.transform.position + Vector3.up;
+                particles.Emit(top, BurstSpec.Sparkle(12), palette, palette.Length);
+                particles.Emit(top, BurstSpec.Sparkle(6), mat);
+                particles.Emit(gate.transform.position, BurstSpec.Dust(6), fxMaterials.Dust);
+                sfx.Play(Sfx.GateOpen);
+                Haptics.Play(Haptic.TruckFull, 0.5f);
+            });
+        }
 
         public void TensionChanged(bool tense, float at)
         {
@@ -467,11 +544,19 @@ namespace CargoJam.Game.Feel
             if (views == null) return;
             overlay.ClearCallouts();
             music.Duck(at, 2.2f);
+            bool missed = reason == FailReason.ExpressMissed;
             views.Tweener.At(at, () =>
             {
                 music.SetTension(false);
                 overlay.SetFailMood(true);
-                sfx.Play(Sfx.Horn, 0.85f);
+                if (missed)
+                {
+                    // The express shipment left without its parcel: the countdown's last tick, high,
+                    // then a lower honk from the truck that gave up waiting.
+                    sfx.Play(Sfx.ExpressTick, 2f, 0.9f);
+                    sfx.Play(Sfx.Horn, 0.7f);
+                }
+                else sfx.Play(Sfx.Horn, 0.85f);
                 sfx.Play(Sfx.Fail);
                 Haptics.Play(Haptic.Fail);
             });
