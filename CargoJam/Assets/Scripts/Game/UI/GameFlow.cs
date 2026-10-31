@@ -10,14 +10,16 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// Owns the UI Toolkit document and sequences the game: Home → Level → Win (→ Chest → Unlock)
-    /// → next Level, or Fail → Continue / Give up → Home. Wires boosters and continues to the
-    /// economy, keeps board input off while anything covers it, and tells the camera and input
-    /// which part of the screen belongs to the UI (<see cref="IHudLayout"/>).
+    /// Owns the UI Toolkit document and sequences the game: Home (⇄ Journey) → Level → Win
+    /// (→ Chest → Unlock) → next Level, or Fail → Continue / Try again. Wires boosters and continues
+    /// to the economy, keeps board input off while anything covers it, tells the camera which part
+    /// of the screen belongs to the UI (<see cref="IHudLayout"/>) and where to frame the home
+    /// diorama (<see cref="IMenuLayout"/>), and hands the journey's arrival rules to the controller.
     /// </summary>
-    public sealed class GameFlow : MonoBehaviour, IHudLayout
+    public sealed class GameFlow : MonoBehaviour, IHudLayout, IMenuLayout
     {
         static readonly string[] StyleSheets = { "UI/CargoJamBase", "UI/CargoJamScreens" };
+        static readonly Rect FallbackMenuViewport = new Rect(0.02f, 0.34f, 0.96f, 0.56f);
 
         enum State
         {
@@ -32,8 +34,10 @@ namespace CargoJam.Game.UI
         UIDocument document;
         UiContext ctx;
         PanelSpace space;
+        Action stopAnalytics;
 
         HomeScreen home;
+        JourneyScreen journey;
         LevelHud hud;
         HardBanner banner;
         Tutorial tutorial;
@@ -44,10 +48,14 @@ namespace CargoJam.Game.UI
         ChestPopup chest;
         UnlockPopup unlock;
         DailyPopup daily;
+        VisualElement splash;
 
         State state = State.Home;
         int continuesUsed;
-        bool dailyChecked;
+        int attemptIndex = -1;
+        int attempt;
+        /// <summary>The level index the Journey screen last showed, so the truck can drive from there.</summary>
+        int journeySeenIndex;
         Rect lastSafeArea;
         Vector2Int lastScreen;
         readonly List<KeyValuePair<float, Action>> timed = new List<KeyValuePair<float, Action>>();
@@ -78,7 +86,9 @@ namespace CargoJam.Game.UI
 
             progression.Changed += OnProgressChanged;
             ProfileStore.Save(progression.Data);
+            stopAnalytics = Analytics.Observe(progression);
             UiFeedback.Audio = (controller.Fx as FeelDirector)?.Audio;
+            journeySeenIndex = progression.LevelIndex;
 
             controller.LevelStarted += OnLevelStarted;
             controller.LevelWon += OnLevelWon;
@@ -88,6 +98,8 @@ namespace CargoJam.Game.UI
             controller.BoosterApplied += OnBoosterApplied;
             controller.CraneArmedChanged += OnCraneArmed;
             controller.InputEnabled = false;
+            controller.ShouldRevealArrival = progression.ShouldPlayArrival;
+            controller.MenuLayout = this;
             controller.HudLayout = this;
             return true;
         }
@@ -97,6 +109,7 @@ namespace CargoJam.Game.UI
             if (ctx == null) return;
             ApplySafeArea();
             ShowHome();
+            PlaySplash();
         }
 
         void OnDestroy()
@@ -112,6 +125,7 @@ namespace CargoJam.Game.UI
                 controller.CraneArmedChanged -= OnCraneArmed;
             }
             if (progression != null) progression.Changed -= OnProgressChanged;
+            stopAnalytics?.Invoke();
             if (ctx != null && UiTween.Clock == ctx.Root) UiTween.Clock = null;
         }
 
@@ -140,13 +154,13 @@ namespace CargoJam.Game.UI
                 i = -1; // the action may have changed the list
             }
 
-            controller.InputEnabled = state == State.Playing && !ctx.AnyModalOpen && !home.Visible;
+            controller.InputEnabled = state == State.Playing && !ctx.AnyModalOpen && !home.Visible && !journey.Visible;
             tutorial.Update();
         }
 
-        // ---- IHudLayout -------------------------------------------------------------------------
+        // ---- IHudLayout / IMenuLayout -----------------------------------------------------------
 
-        /// <summary>The screen minus the safe-area insets, the top bar and the booster bar.</summary>
+        /// <summary>The screen minus the safe-area insets, the top row and the booster row.</summary>
         public Rect GameViewport
         {
             get
@@ -164,11 +178,33 @@ namespace CargoJam.Game.UI
             }
         }
 
+        /// <summary>
+        /// The home diorama fills the screen between the top row and the bottom block (destination
+        /// name, journey strip, Level button): roughly the top two thirds.
+        /// </summary>
+        public Rect MenuViewport
+        {
+            get
+            {
+                if (space == null || home == null) return FallbackMenuViewport;
+                var size = space.PanelSize;
+                if (size.y <= 1f || float.IsNaN(size.y)) return FallbackMenuViewport;
+                var insets = space.SafeInsets;
+                float topPanel = insets.y + LevelHud.TopBarHeight;
+                // Let the scene tuck a little under the destination caption; the shade keeps text legible.
+                float bottomPanel = home.BottomBlockTop + 60f;
+                float yMax = 1f - topPanel / size.y;
+                float yMin = 1f - bottomPanel / size.y;
+                if (yMax - yMin < 0.25f) return FallbackMenuViewport;
+                return Rect.MinMaxRect(0.03f, Mathf.Clamp01(yMin), 0.97f, Mathf.Clamp01(yMax));
+            }
+        }
+
         /// <summary>True when a press would hit the UI (or the board is covered).</summary>
         public bool Captures(Vector2 screenPosition)
         {
             if (ctx == null) return false;
-            if (ctx.AnyModalOpen || home.Visible) return true;
+            if (ctx.AnyModalOpen || home.Visible || journey.Visible) return true;
             var panel = ctx.Root.panel;
             if (panel == null) return false;
             var picked = panel.Pick(space.ScreenToPanel(screenPosition));
@@ -214,6 +250,7 @@ namespace CargoJam.Game.UI
                 Root = root,
                 HudLayer = Ui.El(root, "cj-fill"),
                 HomeLayer = Ui.El(root, "cj-fill"),
+                ScreenLayer = Ui.El(root, "cj-fill"),
                 OverlayLayer = Ui.El(root, "cj-fill"),
                 ModalLayer = Ui.El(root, "cj-fill"),
                 TopLayer = Ui.El(root, "cj-fill"),
@@ -230,6 +267,8 @@ namespace CargoJam.Game.UI
             ctx.Coins = new CoinCounter();
             topRow.Add(ctx.Coins);
             ctx.Coins.SetValue(progression.Coins, false);
+
+            splash = Ui.El(root, "cj-fill cj-splash", true);
         }
 
         void BuildScreens()
@@ -248,18 +287,32 @@ namespace CargoJam.Game.UI
             {
                 if (!ctx.AnyModalOpen) daily.Show(progression.DailyStatus(), home.Refresh);
             };
+            home.ChestClicked += () =>
+            {
+                if (!ctx.AnyModalOpen && progression.ChestReady)
+                    chest.Show(progression.NextChestIsBig, progression.OpenChest, home.Refresh);
+            };
+            home.JourneyClicked += OpenJourney;
+            // The bottom block's real height decides the diorama's frame: refit when it lays out.
+            home.LayoutChanged += () =>
+            {
+                if (home.Visible) controller.MenuLayout = this;
+            };
+
+            journey = new JourneyScreen(ctx, ctx.ScreenLayer);
+            journey.BackClicked += CloseJourney;
 
             var overlaySafe = Ui.El(ctx.OverlayLayer, "cj-fill cj-safe cj-overlay");
-            // Toasts and tips stack just under the top bar.
+            // Toasts, tips and the hard-level notice stack just under the top row.
             Ui.El(overlaySafe).style.height = LevelHud.TopBarHeight;
             ctx.Toast = new Toast(overlaySafe);
             tutorial = new Tutorial(ctx, overlaySafe);
-            banner = new HardBanner(ctx.OverlayLayer);
+            banner = new HardBanner(overlaySafe);
 
             win = new WinPanel(ctx);
             fail = new FailPanel(ctx);
             fail.ContinueClicked += OnContinueClicked;
-            fail.GiveUpClicked += OnGiveUpClicked;
+            fail.TryAgainClicked += OnTryAgainClicked;
             pause = new PausePopup(ctx);
             pause.RestartClicked += OnRestartClicked;
             pause.HomeClicked += OnPauseHomeClicked;
@@ -281,8 +334,37 @@ namespace CargoJam.Game.UI
                 e.style.paddingRight = insets.z;
                 e.style.paddingBottom = insets.w;
             });
-            // Re-assigning the layout makes the controller refit the camera to the new viewport.
+            ctx.Root.Query<VisualElement>(className: "cj-safe-top").ForEach(e =>
+            {
+                e.style.paddingLeft = insets.x;
+                e.style.paddingTop = insets.y;
+                e.style.paddingRight = insets.z;
+            });
+            // Re-assigning the layouts makes the controller refit the camera to the new viewport.
             if (controller.HudLayout == (IHudLayout)this) controller.HudLayout = this;
+            if (controller.MenuLayout == (IMenuLayout)this) controller.MenuLayout = this;
+        }
+
+        /// <summary>The launch splash: the wordmark over a dark wash, gone after a moment or a tap.</summary>
+        void PlaySplash()
+        {
+            var logo = new Logo();
+            splash.Add(logo);
+            Ui.Show(splash, true);
+            logo.PlayIntro();
+            bool gone = false;
+            Action dismiss = () =>
+            {
+                if (gone) return;
+                gone = true;
+                Anim.Fade(splash, 1f, 0f, Anim.Panel, 0f, () =>
+                {
+                    Ui.Show(splash, false);
+                    splash.Clear();
+                });
+            };
+            splash.RegisterCallback<PointerDownEvent>(_ => dismiss());
+            UiTween.Delay(1.5f, dismiss);
         }
 
         // ---- Flow -------------------------------------------------------------------------------
@@ -298,23 +380,28 @@ namespace CargoJam.Game.UI
             banner.Stop();
             ctx.Toast.Hide();
             controller.CancelCrane();
-            // The main menu has its own living depot backdrop; the level loads when Play is tapped.
+            // The home screen has its own living diorama; the level loads when Play is tapped.
             controller.ShowMenuScene(progression.LevelIndex);
             home.Show();
+            // No daily popup: the Daily icon's dot on the left edge is the only prompt.
+        }
 
-            if (dailyChecked) return;
-            dailyChecked = true;
-            var info = progression.DailyStatus();
-            if (info == null || !info.Available) return;
-            UiTween.Delay(0.7f, () =>
-            {
-                if (state == State.Home && !ctx.AnyModalOpen) daily.Show(progression.DailyStatus(), home.Refresh);
-            });
+        void OpenJourney()
+        {
+            if (state != State.Home || ctx.AnyModalOpen || journey.Visible) return;
+            journey.Show(journeySeenIndex);
+            journeySeenIndex = progression.LevelIndex;
+        }
+
+        void CloseJourney()
+        {
+            if (!journey.Visible) return;
+            journey.Hide(() => { if (state == State.Home) home.Refresh(); });
         }
 
         void OnPlayClicked()
         {
-            if (state != State.Home || ctx.AnyModalOpen) return;
+            if (state != State.Home || ctx.AnyModalOpen || journey.Visible) return;
             state = State.Playing;
             home.Hide();
             hud.Show();
@@ -330,7 +417,7 @@ namespace CargoJam.Game.UI
             if (unlocked.HasValue)
             {
                 var button = hud.Button(unlocked.Value);
-                UiTween.Delay(0.5f, () => Anim.Punch(button, 0.3f, 0.45f));
+                UiTween.Delay(0.5f, () => Anim.PopInReward(button, 0f, 0.4f));
             }
         }
 
@@ -338,12 +425,18 @@ namespace CargoJam.Game.UI
         {
             continuesUsed = 0;
             timed.Clear();
+            progression.BeginLevel();
+            if (controller.EnvironmentShown.Arrival) progression.MarkArrivalShown(info.Index);
+            attempt = info.Index == attemptIndex ? attempt + 1 : 1;
+            attemptIndex = info.Index;
+            Analytics.LogLevelStart(info.Index, info.Hard, attempt);
+
             hud.SetLevel(info.Number, info.Hard);
             hud.RefreshBoosters();
             ctx.Toast.Hide();
             if (state == State.Playing)
             {
-                if (info.Hard) banner.Play();
+                if (info.Hard) banner.Play(controller.EnvironmentShown.Arrival ? 2.5f : 0.3f);
                 tutorial.Begin(info.Index);
             }
             else
@@ -357,10 +450,12 @@ namespace CargoJam.Game.UI
             if (state != State.Playing) return;
             state = State.Won;
             tutorial.Stop();
+            banner.Stop();
             ctx.Toast.Hide();
 
             // Record now so the win is saved even if the app closes during the celebration; the
-            // counter holds still until the panel flies the coins in.
+            // counter holds still until the card flies the coins in.
+            int wonIndex = controller.LevelIndex;
             ctx.Coins.Freeze();
             WinResult result = null;
             try
@@ -371,7 +466,7 @@ namespace CargoJam.Game.UI
             {
                 Debug.LogException(e);
             }
-            At(showAt, () => win.Show(result, () => AfterWin(result)));
+            At(showAt, () => win.Show(result, wonIndex, () => AfterWin(result)));
         }
 
         void AfterWin(WinResult result)
@@ -404,7 +499,7 @@ namespace CargoJam.Game.UI
             int cost = progression.ContinueCost(continuesUsed);
             // A board stalled by padlocks fails with dock room to spare; another slot wouldn't help.
             bool canGrow = controller.CanContinue;
-            fail.Show(parcelsLeft, cost, progression.CanAfford(cost), canGrow, progression.WinStreak);
+            fail.Show(parcelsLeft, cost, progression.CanAfford(cost), canGrow, UiText.StreakDropWarning(progression));
         }
 
         void OnContinueClicked()
@@ -429,21 +524,22 @@ namespace CargoJam.Game.UI
             hud.RefreshBoosters();
         }
 
-        void OnGiveUpClicked()
+        /// <summary>Try again: the level counts as given up (the streak drops a tier), then replays.</summary>
+        void OnTryAgainClicked()
         {
             if (state != State.Failed) return;
             progression.RecordGiveUp();
             fail.Close(() =>
             {
-                ShowHome();
+                state = State.Playing;
+                controller.Restart();
             });
         }
 
         void OnPauseClicked()
         {
             if (state != State.Playing || ctx.AnyModalOpen) return;
-            int atRisk = controller.MovedThisLevel ? progression.WinStreak : 0;
-            pause.ShowPause(atRisk, null);
+            pause.ShowPause(controller.MovedThisLevel ? UiText.StreakDropWarning(progression) : null, null);
         }
 
         void OnRestartClicked()
@@ -474,7 +570,7 @@ namespace CargoJam.Game.UI
 
             if (!progression.IsUnlocked(booster))
             {
-                Reject(button, $"Unlocks at Level {EconomyConfig.UnlockLevel(booster)}");
+                Reject(button, $"Unlocks at level {EconomyConfig.UnlockLevel(booster)}");
                 return;
             }
             if (booster == BoosterType.Crane && controller.CraneArmed)
@@ -487,9 +583,9 @@ namespace CargoJam.Game.UI
                 Reject(button, WhyNot(booster));
                 return;
             }
-            if (progression.BoosterCount(booster) > 0)
+            if (progression.UsableBoosterCount(booster) > 0)
             {
-                // Charged in OnBoosterApplied, once the effect actually happens.
+                // Charged in OnBoosterApplied, once the effect actually happens (free charges first).
                 controller.UseBooster(booster);
                 return;
             }
@@ -524,7 +620,7 @@ namespace CargoJam.Game.UI
             if (!progression.TryConsumeBooster(booster))
                 Debug.LogWarning($"[UI] {booster} applied with none owned");
             hud.RefreshBoosters();
-            Anim.Punch(hud.Button(booster), 0.2f);
+            Anim.Punch(hud.Button(booster), 0.08f);
         }
 
         void OnCraneArmed(bool armed)

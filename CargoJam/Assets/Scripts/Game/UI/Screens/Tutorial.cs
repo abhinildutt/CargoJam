@@ -16,8 +16,8 @@ namespace CargoJam.Game.UI
         static readonly string[] Tips =
         {
             null,
-            "Blocked parcels can't move. Clear a path!",
-            "No matching truck? Parcels wait in the dock. Don't let it fill up!",
+            "Blocked parcels can't move. Clear a path first.",
+            "No matching truck? Parcels wait in the dock. Keep a slot or two free.",
         };
 
         readonly UiContext ctx;
@@ -39,7 +39,8 @@ namespace CargoJam.Game.UI
             Ui.Show(hand, false);
 
             tip = Ui.El(overlaySafe, "cj-tip");
-            Ui.Icon(tip, IconKind.Star, "cj-tip__icon");
+            var badge = Ui.El(tip, "cj-tip__badge");
+            Ui.Text(badge, "Tip", "cj-tip__badge-label");
             tipLabel = Ui.Text(tip, "", "cj-tip__label");
             Ui.Show(tip, false);
         }
@@ -59,7 +60,7 @@ namespace CargoJam.Game.UI
                 tipActive = true;
                 tipLabel.text = Tips[levelIndex];
                 Ui.Show(tip, true);
-                tipTween = Anim.PopIn(tip, 0.7f, 0.45f);
+                tipTween = Anim.SlideIn(tip, 0f, -24f, Anim.Panel, 0.7f);
             }
         }
 
@@ -76,7 +77,7 @@ namespace CargoJam.Game.UI
             {
                 tipActive = false;
                 tipTween?.Cancel();
-                tipTween = UiTween.Delay(2.5f, () => Anim.PopOut(tip, 0.2f, () => Ui.Show(tip, false)));
+                tipTween = UiTween.Delay(2.5f, () => Anim.Fade(tip, 1f, 0f, Anim.Small, 0f, () => Ui.Show(tip, false)));
             }
         }
 
@@ -111,10 +112,13 @@ namespace CargoJam.Game.UI
             SetHandShown(true);
             var p = ctx.Space.ScreenToPanel(c.CellToScreen(cell));
             float time = Time.unscaledTime - handFrom;
-            float bob = Mathf.Abs(Mathf.Sin(time * Mathf.PI * 1.3f));
-            Anim.SetTranslate(hand, p.x - HandSize * TipX, p.y - HandSize * TipY + 12f + bob * 34f);
-            // Squash a little at the bottom of each bob, like a tap.
-            Anim.SetScale(hand, 1f - (1f - bob) * 0.08f);
+            // A calm tap motion: ease down onto the parcel, rest, lift away.
+            float cycle = (time / 1.3f) % 1f;
+            float lift = cycle < 0.35f ? 1f - Easing.OutQuint(cycle / 0.35f)
+                : cycle < 0.55f ? 0f
+                : Easing.InOutSine((cycle - 0.55f) / 0.45f);
+            Anim.SetTranslate(hand, p.x - HandSize * TipX, p.y - HandSize * TipY + 10f + lift * 30f);
+            Anim.SetScale(hand, 1f - (1f - lift) * 0.05f);
         }
     }
 }

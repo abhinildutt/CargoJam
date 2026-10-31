@@ -1,272 +1,419 @@
-/* Cargo Jam UI: screens and popups. */
+/* Cargo Jam UI, design v3: screens and popups. Tokens live on .cj-root (CargoJamBase.uss). */
 
-/* ---- In-level HUD --------------------------------------------------------------------------- */
+/* ---- Launch splash ------------------------------------------------------------------------ */
+
+.cj-splash {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--ink);
+}
+
+.cj-logo {
+    align-items: center;
+}
+
+.cj-logo__word {
+    font-size: 150px;
+    -unity-font-definition: resource("UI/Fonts/Nunito-Black SDF");
+    letter-spacing: -2px;
+}
+
+.cj-logo__tiles {
+    flex-direction: row;
+    margin-top: 28px;
+}
+
+.cj-logo__tile {
+    width: 56px;
+    height: 56px;
+    margin: 0 10px;
+    border-radius: 14px;
+}
+
+/* ---- Home --------------------------------------------------------------------------------- */
+
+.cj-home__shade {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 52%;
+}
+
+.cj-home__top {
+    flex-direction: row;
+    align-items: center;
+    padding: 0 44px;
+}
+
+/* Left-edge column of claimable rewards (Daily, Chest), vertically centered. */
+.cj-home__edge {
+    position: absolute;
+    left: 44px;
+    top: 36%;
+}
+
+.cj-home__edge > .cj-btn {
+    margin-bottom: 32px;
+}
+
+.cj-home__bottom {
+    padding: 0 56px 64px 56px;
+}
+
+.cj-home__name {
+    margin-top: 4px;
+    white-space: normal;
+}
+
+.cj-home__strip {
+    margin-top: 40px;
+}
+
+.cj-home__play {
+    margin-top: 40px;
+}
+
+.cj-home__tier {
+    position: absolute;
+    right: 40px;
+    top: 44px;
+}
+
+.cj-home__hard {
+    position: absolute;
+    left: 40px;
+    top: 54px;
+    margin-left: 0;
+}
+
+/* Journey strip (a glass button): dots, caption, chevron. */
+.cj-strip {
+    height: 150px;
+    padding: 0 40px;
+}
+
+.cj-strip > .cj-btn__face {
+    border-radius: 50px;
+}
+
+.cj-strip > .cj-btn__content {
+    flex-grow: 1;
+    justify-content: flex-start;
+}
+
+.cj-strip__dots {
+    flex-direction: row;
+    align-items: center;
+}
+
+.cj-strip__dot {
+    width: 22px;
+    height: 22px;
+    margin-right: 14px;
+    border-radius: 11px;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(255, 255, 255, 0.30);
+}
+
+.cj-strip__dot--done {
+    background-color: var(--gold);
+}
+
+.cj-strip__dot--finale {
+    background-color: rgba(217, 83, 79, 0.85);
+}
+
+.cj-strip__dot--current {
+    width: 50px;
+    height: 50px;
+    border-radius: 25px;
+    background-color: #FFFFFF;
+}
+
+.cj-strip__truck {
+    width: 36px;
+    height: 36px;
+}
+
+.cj-strip__caption {
+    flex-grow: 1;
+    flex-shrink: 1;
+    margin-left: 18px;
+    font-size: 38px;
+    -unity-font-definition: resource("UI/Fonts/Nunito-ExtraBold SDF");
+    -unity-text-align: middle-left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cj-strip__chevron {
+    width: 40px;
+    height: 40px;
+}
+
+/* ---- Journey screen ----------------------------------------------------------------------- */
+
+.cj-journey {
+    background-color: var(--surface-2);
+}
+
+.cj-journey__column {
+    align-self: center;
+}
+
+.cj-journey__header {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+}
+
+.cj-journey__band {
+    background-color: var(--surface-2);
+}
+
+.cj-journey__row {
+    flex-direction: row;
+    align-items: center;
+    padding: 0 44px;
+}
+
+.cj-journey__titles {
+    margin-left: 32px;
+}
+
+.cj-journey__fade {
+    height: 90px;
+}
+
+.cj-journey__marker {
+    position: absolute;
+    width: 150px;
+    height: 150px;
+}
+
+.cj-journey__marker > .cj-elevation {
+    border-radius: 75px;
+}
+
+.cj-journey__marker-disc {
+    width: 150px;
+    height: 150px;
+    border-radius: 75px;
+    border-width: 6px;
+    border-color: var(--primary);
+    align-items: center;
+    justify-content: center;
+    background-color: var(--surface);
+}
+
+.cj-journey__marker-icon {
+    width: 104px;
+    height: 104px;
+}
+
+.cj-postcard {
+    position: absolute;
+}
+
+.cj-postcard > .cj-elevation {
+    border-radius: 56px;
+}
+
+.cj-postcard__card {
+    flex-grow: 1;
+    border-radius: 56px;
+    padding: 20px;
+    background-color: var(--surface);
+}
+
+.cj-postcard--current .cj-postcard__card {
+    border-width: 6px;
+    border-color: var(--primary);
+    padding: 14px;
+}
+
+.cj-postcard__frame {
+    flex-grow: 1;
+    border-radius: 40px;
+    overflow: hidden;
+    background-color: var(--surface-2);
+}
+
+.cj-postcard__art {
+    flex-grow: 1;
+}
+
+.cj-postcard__text {
+    padding: 22px 16px 10px 16px;
+}
+
+.cj-postcard--locked .cj-postcard__card {
+    background-color: var(--surface);
+    opacity: 0.85;
+}
+
+.cj-postcard__stamp {
+    position: absolute;
+    top: -30px;
+    right: -26px;
+}
+
+.cj-stamp {
+    width: 140px;
+    height: 140px;
+}
+
+/* ---- In-level HUD ------------------------------------------------------------------------- */
 
 .cj-hud__top {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    padding: 0 28px;
+    padding: 0 44px;
 }
 
 .cj-hud__level {
-    flex-direction: row;
-    align-items: center;
-    height: 92px;
-    padding: 0 36px;
-    border-radius: 46px;
-    background-color: var(--chip);
+    padding: 0 40px;
 }
 
-.cj-hud__level-label {
-    font-size: 54px;
+.cj-hud__hard {
+    margin-left: 18px;
+    height: 56px;
 }
 
-/* Keeps the centre pill centred: the coin counter (top layer) occupies this spot. */
+/* Keeps the level chip centered: the coin pill (top layer) occupies this spot. */
 .cj-hud__coin-space {
-    width: 270px;
+    width: 230px;
 }
 
 .cj-hud__bottom {
     flex-direction: row;
     justify-content: center;
     align-items: center;
-    padding-bottom: 24px;
+    padding-bottom: 30px;
 }
 
-/* ---- Booster buttons ------------------------------------------------------------------------ */
+/* ---- Booster discs ------------------------------------------------------------------------ */
 
 .cj-booster {
-    width: 210px;
-    height: 230px;
-    margin: 0 22px;
+    width: 156px;
+    height: 156px;
+    margin: 0 30px;
     align-items: center;
     justify-content: center;
 }
 
-.cj-btn--booster {
-    width: 180px;
-    height: 180px;
-    border-radius: 90px;
-    border-bottom-width: 12px;
+.cj-btn--disc {
+    width: 156px;
+    height: 156px;
     padding: 0;
 }
 
-.cj-btn--booster .cj-btn__icon {
-    width: 104px;
-    height: 104px;
+.cj-btn--disc > .cj-btn__face {
+    border-radius: 78px;
+}
+
+.cj-btn--disc .cj-btn__icon {
+    width: 70px;
+    height: 70px;
     margin: 0;
 }
 
+.cj-booster--locked .cj-btn__icon,
 .cj-booster--unusable .cj-btn__icon {
     opacity: 0.4;
 }
 
-.cj-booster--armed .cj-btn--booster {
-    background-color: var(--coin);
-    border-color: var(--coin-edge);
+.cj-booster--armed .cj-btn--disc > .cj-btn__face {
+    background-color: var(--surface);
+    border-color: var(--surface);
 }
 
 .cj-booster__ring {
     position: absolute;
-    left: 15px;
-    top: 25px;
-    width: 180px;
-    height: 180px;
-    border-radius: 90px;
-    border-width: 10px;
-    border-color: var(--coin);
+    left: -10px;
+    top: -10px;
+    width: 176px;
+    height: 176px;
+    border-radius: 88px;
+    border-width: 6px;
+    border-color: #FFFFFF;
 }
 
 .cj-booster__badge {
     position: absolute;
-    top: -14px;
-    right: -14px;
-    min-width: 72px;
-    height: 72px;
-    padding: 0 12px;
-    align-items: center;
-    justify-content: center;
-    border-radius: 36px;
-    border-width: 5px;
-    border-color: #FFFFFF;
-    background-color: var(--danger);
-}
-
-.cj-booster__badge-label {
-    font-size: 38px;
-}
-
-.cj-booster__price,
-.cj-booster__lock {
-    position: absolute;
-    bottom: -34px;
-    left: 10px;
-    right: 10px;
+    top: -8px;
+    right: -8px;
+    min-width: 60px;
     height: 60px;
-    flex-direction: row;
+    padding: 0 16px;
     align-items: center;
     justify-content: center;
     border-radius: 30px;
-    background-color: rgba(59, 47, 42, 0.92);
+    background-color: var(--surface);
 }
 
-.cj-booster__lock {
-    background-color: #8F877C;
+.cj-booster__badge-label {
+    font-size: 32px;
+    -unity-font-definition: resource("UI/Fonts/Nunito-Black SDF");
+    color: var(--ink);
 }
 
-.cj-booster__price-coin {
-    width: 46px;
-    height: 46px;
-    margin-right: 4px;
+.cj-booster--free .cj-booster__badge {
+    background-color: var(--gold);
 }
 
-.cj-booster__price-label,
-.cj-booster__lock-label {
-    font-size: 36px;
-}
-
-/* ---- Home ----------------------------------------------------------------------------------- */
-
-.cj-home__scrim {
-    /* The depot backdrop is meant to be seen; only a light wash keeps the top chips readable. */
-    background-color: rgba(255, 255, 255, 0);
-}
-
-.cj-home__top {
-    flex-direction: row;
-    align-items: center;
-    padding: 0 28px;
-}
-
-.cj-home__daily {
-    margin-left: 18px;
-}
-
-.cj-home__header {
-    align-items: center;
-    margin-top: 10px;
-}
-
-.cj-home__route {
-    font-size: 54px;
-    margin-top: 6px;
-    margin-bottom: 4px;
-}
-
-/* ---- Logo ----------------------------------------------------------------------------------- */
-
-.cj-logo {
-    align-items: center;
-}
-
-.cj-logo__row {
+.cj-booster__chip {
+    position: absolute;
+    left: -40px;
+    right: -40px;
+    bottom: -28px;
     flex-direction: row;
     justify-content: center;
 }
 
-.cj-logo__letter {
-    font-size: 156px;
-    -unity-font-style: bold;
-    -unity-text-outline-width: 8px;
-    -unity-text-outline-color: rgb(59, 47, 42);
-    text-shadow: 0 12px 0 rgba(40, 30, 25, 0.35);
-    margin: 0 -1px;
-    padding: 0;
-}
-
-.cj-logo__letter--big {
-    font-size: 210px;
-    margin-top: -44px;
-}
-
-.cj-home__chest {
+.cj-booster__pill {
     flex-direction: row;
     align-items: center;
-    margin: 0 60px 36px 60px;
-    padding: 22px 32px;
-    border-width: 6px;
-    border-radius: 44px;
-    border-color: var(--panel-border);
-    background-color: var(--panel);
+    height: 56px;
+    padding: 0 20px 0 12px;
+    border-radius: 28px;
+    background-color: var(--surface);
 }
 
-.cj-home__chest-icon {
-    width: 150px;
-    height: 150px;
+.cj-booster__chip-icon {
+    width: 32px;
+    height: 32px;
+    margin-right: 8px;
 }
 
-.cj-home__chest-icon--big {
-    width: 176px;
-    height: 176px;
+.cj-booster__chip-label {
+    font-size: 30px;
+    -unity-font-definition: resource("UI/Fonts/Nunito-Black SDF");
+    color: var(--ink);
 }
 
-.cj-home__chest-col {
-    flex-grow: 1;
-    flex-shrink: 1;
-    margin-left: 26px;
-}
-
-.cj-home__chest-title {
-    font-size: 38px;
-    -unity-font-style: bold;
-    color: var(--text-dark);
-    margin-bottom: 10px;
-}
-
-.cj-home__chest-hint {
-    font-size: 34px;
-    color: var(--text-dark);
-    margin-top: 10px;
-}
-
-.cj-home__play {
-    align-self: center;
-    margin-bottom: 110px;
-}
-
-/* ---- HARD banner ---------------------------------------------------------------------------- */
+/* ---- Hard-level notice -------------------------------------------------------------------- */
 
 .cj-hard-banner {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 34%;
-    height: 230px;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border-top-width: 10px;
-    border-bottom-width: 10px;
-    border-color: var(--danger-edge);
-    background-color: var(--danger);
-}
-
-.cj-hard-banner__inner {
+    align-self: center;
     flex-direction: row;
     align-items: center;
+    margin-top: 24px;
+    padding: 28px 48px 28px 32px;
+    border-radius: 56px;
 }
 
-.cj-hard-banner__icon {
-    width: 110px;
-    height: 110px;
-    margin: 0 20px;
+.cj-hard-banner__tag {
+    margin-left: 0;
+    margin-right: 28px;
 }
 
-.cj-hard-banner__col {
-    align-items: center;
-}
-
-.cj-hard-banner__title {
-    font-size: 100px;
-}
-
-.cj-hard-banner__sub {
-    font-size: 42px;
-    color: var(--coin);
-}
-
-/* ---- Tutorial ------------------------------------------------------------------------------- */
+/* ---- Tutorial ----------------------------------------------------------------------------- */
 
 .cj-hand {
     position: absolute;
@@ -279,251 +426,203 @@
     flex-direction: row;
     align-items: center;
     max-width: 960px;
-    margin-top: 24px;
-    padding: 20px 34px;
-    border-width: 6px;
-    border-radius: 44px;
-    border-color: var(--panel-border);
-    background-color: var(--panel);
+    margin: 24px 44px 0 44px;
+    padding: 28px 40px 28px 28px;
+    border-radius: 48px;
+    background-color: var(--surface);
 }
 
-.cj-tip__icon {
-    width: 64px;
-    height: 64px;
-    margin-right: 18px;
+.cj-tip__badge {
+    height: 60px;
+    padding: 0 22px;
+    margin-right: 24px;
+    justify-content: center;
+    border-radius: 30px;
+    background-color: var(--surface-2);
+}
+
+.cj-tip__badge-label {
+    font-size: var(--fs-micro);
+    -unity-font-definition: resource("UI/Fonts/Nunito-Black SDF");
+    color: var(--ink-2);
 }
 
 .cj-tip__label {
     flex-shrink: 1;
-    font-size: 40px;
-    -unity-font-style: bold;
+    font-size: var(--fs-body);
     white-space: normal;
-    color: var(--text-dark);
+    color: var(--ink);
 }
 
-/* ---- Win panel ------------------------------------------------------------------------------ */
+/* ---- Win card ----------------------------------------------------------------------------- */
 
-.cj-win__stars {
-    flex-direction: row;
-    align-items: flex-end;
-    justify-content: center;
-    margin-top: 6px;
-}
-
-.cj-win__star {
-    width: 130px;
-    height: 130px;
-    margin: 0 8px;
-}
-
-.cj-win__star--mid {
-    width: 170px;
-    height: 170px;
+.cj-win__caption {
+    -unity-text-align: middle-center;
 }
 
 .cj-win__reward {
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    margin-top: 16px;
-}
-
-.cj-win__coin {
-    width: 120px;
-    height: 120px;
-    margin-right: 16px;
-}
-
-.cj-win__coins {
-    font-size: 104px;
-    color: var(--coin);
-}
-
-.cj-win__mult {
-    flex-direction: row;
-    align-items: center;
-    height: 84px;
-    margin-top: 10px;
-    padding: 0 30px 0 12px;
-    border-radius: 42px;
-    border-bottom-width: 8px;
-    border-color: var(--danger-edge);
-    background-color: var(--danger);
-}
-
-.cj-win__mult-icon {
-    width: 62px;
-    height: 62px;
-    margin-right: 8px;
-}
-
-.cj-win__mult-label {
-    font-size: 46px;
-}
-
-.cj-win__streak {
-    margin-top: 10px;
-    font-size: 38px;
-    -unity-font-style: bold;
-    color: var(--text-dark);
-}
-
-.cj-win__chest {
-    width: 100%;
-    flex-direction: row;
-    align-items: center;
-    margin-top: 22px;
-    padding: 18px 26px;
-    border-radius: 36px;
-    background-color: rgba(232, 211, 168, 0.45);
-}
-
-.cj-win__chest-icon {
-    width: 124px;
-    height: 124px;
-}
-
-.cj-win__chest-col {
-    flex-grow: 1;
-    margin-left: 22px;
-}
-
-.cj-win__chest-ready {
-    font-size: 42px;
-    color: var(--coin);
     margin-top: 8px;
 }
 
-/* ---- Fail panel ----------------------------------------------------------------------------- */
+.cj-win__coin {
+    width: 110px;
+    height: 110px;
+    margin-right: 24px;
+}
 
-.cj-fail__badge {
-    width: 200px;
-    height: 200px;
-    margin-top: 14px;
+.cj-win__coins {
+    font-size: 110px;
+    -unity-font-definition: resource("UI/Fonts/Nunito-Black SDF");
+    color: var(--ink);
+}
+
+.cj-win__tier {
+    margin-left: 28px;
+}
+
+.cj-win__progress {
+    align-self: stretch;
+    margin-top: 40px;
+    padding: 36px 44px 40px 44px;
+}
+
+.cj-win__row {
+    flex-direction: row;
     align-items: center;
-    justify-content: center;
-    border-radius: 100px;
-    border-bottom-width: 12px;
-    border-color: var(--secondary-edge);
-    background-color: var(--secondary);
+    margin-bottom: 18px;
 }
 
-.cj-fail__icon {
-    width: 116px;
-    height: 116px;
+.cj-win__row--gap {
+    margin-top: 36px;
 }
+
+.cj-win__postcard {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 28px;
+}
+
+.cj-win__stamp {
+    width: 76px;
+    height: 76px;
+    margin-right: 18px;
+}
+
+.cj-win__next-wrap {
+    align-self: stretch;
+    margin-top: 44px;
+}
+
+/* ---- Fail sheet --------------------------------------------------------------------------- */
 
 .cj-fail__left {
-    margin-top: 18px;
-    font-size: 60px;
-    color: var(--danger);
+    margin-top: 4px;
 }
 
-.cj-fail__continue-text {
-    align-items: center;
-}
-
-.cj-fail__continue-sub {
-    font-size: 36px;
-    margin-top: -6px;
+.cj-fail__continue-label {
+    font-size: 54px;
 }
 
 .cj-fail__poor {
-    margin-top: 12px;
-    font-size: 38px;
-    -unity-font-style: bold;
-    color: var(--danger);
+    margin-top: 14px;
 }
 
-.cj-fail__warning {
-    margin-top: 22px;
-    font-size: 36px;
-    -unity-font-style: bold;
-    -unity-text-align: middle-center;
-    color: var(--text-dark);
-}
-
-.cj-fail__giveup {
-    margin-top: 16px;
-}
-
-/* ---- Pause / settings ----------------------------------------------------------------------- */
+/* ---- Pause / settings --------------------------------------------------------------------- */
 
 .cj-settings {
-    width: 100%;
-    margin-top: 10px;
+    align-self: stretch;
+    margin-top: 16px;
     padding: 8px 0;
 }
 
 .cj-settings__row {
     flex-direction: row;
     align-items: center;
-    height: 116px;
-    padding: 0 30px;
+    height: 132px;
+    padding: 0 40px;
+}
+
+.cj-settings__rule {
+    height: 2px;
+    margin: 0 40px;
+    background-color: var(--stroke);
 }
 
 .cj-settings__icon {
-    width: 72px;
-    height: 72px;
+    width: 60px;
+    height: 60px;
 }
 
 .cj-settings__label {
-    margin-left: 24px;
-    font-size: 48px;
-    -unity-font-style: bold;
-    color: var(--text-dark);
-}
-
-.cj-pause__buttons {
-    width: 100%;
-    align-items: center;
+    margin-left: 28px;
 }
 
 .cj-pause__row {
     flex-direction: row;
-    justify-content: center;
-    margin-top: 24px;
+    justify-content: space-between;
+    margin: 24px -12px 0 -12px;
 }
 
 .cj-pause__half {
-    min-width: 0;
-    width: 360px;
-    margin: 0 10px;
+    flex-grow: 1;
+    flex-basis: 0;
+    margin: 0 12px;
     padding: 0 20px;
 }
 
-/* ---- Booster disc (buy / unlock) ------------------------------------------------------------ */
+.cj-pause__row .cj-btn__label {
+    font-size: 44px;
+}
+
+/* ---- Booster disc (buy / unlock) ---------------------------------------------------------- */
 
 .cj-booster-disc {
     width: 220px;
     height: 220px;
-    margin: 10px 0;
+    margin: 16px 0;
     align-items: center;
     justify-content: center;
     border-radius: 110px;
-    border-width: 8px;
-    border-bottom-width: 16px;
-    border-color: var(--panel-border);
-    background-color: #FFFFFF;
+    background-color: var(--surface-2);
 }
 
 .cj-booster-disc__icon {
-    width: 136px;
-    height: 136px;
+    width: 110px;
+    height: 110px;
 }
 
 .cj-booster-disc--big {
-    width: 270px;
-    height: 270px;
-    border-radius: 135px;
+    width: 260px;
+    height: 260px;
+    border-radius: 130px;
 }
 
 .cj-booster-disc--big .cj-booster-disc__icon {
-    width: 170px;
-    height: 170px;
+    width: 130px;
+    height: 130px;
 }
 
-/* ---- Chest / unlock stage ------------------------------------------------------------------- */
+.cj-unlock__name {
+    margin-top: 8px;
+}
+
+.cj-unlock__gift {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 20px;
+    padding: 18px 36px;
+}
+
+.cj-unlock__gift-icon {
+    width: 60px;
+    height: 60px;
+    margin-right: 18px;
+}
+
+/* ---- Chest -------------------------------------------------------------------------------- */
 
 .cj-chest__stage {
     width: 520px;
@@ -534,38 +633,36 @@
 
 .cj-chest__rays {
     position: absolute;
-    left: -80px;
-    top: -140px;
-    width: 680px;
-    height: 680px;
+    left: -60px;
+    top: -120px;
+    width: 640px;
+    height: 640px;
 }
 
 .cj-chest__icon {
-    width: 310px;
-    height: 310px;
+    width: 290px;
+    height: 290px;
 }
 
 .cj-chest__icon--big {
-    width: 370px;
-    height: 370px;
+    width: 350px;
+    height: 350px;
 }
 
 .cj-chest__hint {
-    font-size: 60px;
-    color: var(--coin);
-    margin-top: 6px;
+    margin-top: 8px;
 }
 
 .cj-chest__rewards {
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: center;
-    margin-top: 10px;
+    margin-top: 16px;
 }
 
 .cj-reward {
     align-items: center;
-    margin: 0 16px;
+    margin: 0 18px;
 }
 
 .cj-reward__disc {
@@ -574,104 +671,61 @@
     align-items: center;
     justify-content: center;
     border-radius: 70px;
-    border-bottom-width: 10px;
-    border-color: #D9CBB0;
-    background-color: #FFFFFF;
+    background-color: var(--surface-2);
 }
 
 .cj-reward__icon {
-    width: 96px;
-    height: 96px;
+    width: 88px;
+    height: 88px;
 }
 
 .cj-reward__label {
-    font-size: 48px;
-    margin-top: 6px;
-}
-
-.cj-unlock__name {
-    font-size: 76px;
-    margin-top: 4px;
-}
-
-.cj-unlock__gift {
-    flex-direction: row;
-    align-items: center;
     margin-top: 10px;
-    padding: 10px 26px;
-    border-radius: 36px;
-    background-color: rgba(232, 211, 168, 0.45);
 }
 
-.cj-unlock__gift-icon {
-    width: 64px;
-    height: 64px;
-    margin-right: 14px;
-}
-
-.cj-unlock__gift-label {
-    font-size: 40px;
-    -unity-font-style: bold;
-    color: var(--text-dark);
-}
-
-/* ---- Daily reward --------------------------------------------------------------------------- */
+/* ---- Daily reward ------------------------------------------------------------------------- */
 
 .cj-daily__streak {
-    font-size: 40px;
-    -unity-font-style: bold;
-    color: var(--text-dark);
-    margin-bottom: 10px;
+    margin-bottom: 20px;
+    -unity-text-align: middle-center;
 }
 
 .cj-daily__grid {
-    width: 100%;
+    align-self: stretch;
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: center;
 }
 
 .cj-daily__cell {
-    width: 170px;
-    height: 214px;
-    margin: 8px;
-    padding: 12px 0;
+    width: 176px;
+    height: 220px;
+    margin: 10px;
+    padding: 18px 0;
     align-items: center;
     justify-content: space-between;
-    border-radius: 28px;
-    border-bottom-width: 9px;
-    border-color: #D9CBB0;
-    background-color: #FFFFFF;
+    border-radius: 36px;
+    border-width: 4px;
+    border-color: rgba(0, 0, 0, 0);
+    background-color: var(--surface-2);
 }
 
 .cj-daily__cell--chest {
-    width: 356px;
-    background-color: #FFE9B0;
+    width: 372px;
 }
 
 .cj-daily__cell--claimed {
-    opacity: 0.6;
+    opacity: 0.55;
 }
 
 .cj-daily__cell--today {
-    border-width: 7px;
-    border-bottom-width: 12px;
-    border-color: var(--coin-edge);
-    background-color: #FFF3C4;
-}
-
-.cj-daily__day {
-    font-size: 32px;
+    border-color: var(--gold);
+    background-color: var(--surface);
 }
 
 .cj-daily__icon {
-    width: 92px;
-    height: 92px;
-}
-
-.cj-daily__amount {
-    font-size: 38px;
-    color: var(--coin);
+    width: 84px;
+    height: 84px;
 }
 
 .cj-daily__check {
@@ -682,11 +736,11 @@
     bottom: 0;
     align-items: center;
     justify-content: center;
-    border-radius: 24px;
-    background-color: rgba(59, 201, 91, 0.55);
+    border-radius: 32px;
+    background-color: rgba(47, 168, 102, 0.78);
 }
 
 .cj-daily__check-icon {
-    width: 92px;
-    height: 92px;
+    width: 76px;
+    height: 76px;
 }

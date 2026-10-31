@@ -3,7 +3,7 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// A short message pill under the top bar ("Tap any parcel to lift it", "Unlocks at Level 6").
+    /// A short glass message pill under the top bar ("Tap any parcel to lift it", "Unlocks at level 6").
     /// Timed messages fade on their own; sticky ones stay until <see cref="Hide"/>.
     /// </summary>
     public sealed class Toast
@@ -15,8 +15,8 @@ namespace CargoJam.Game.UI
 
         public Toast(VisualElement parent)
         {
-            pill = Ui.El(parent, "cj-toast");
-            label = Ui.Text(pill, "", "cj-toast__label");
+            pill = Ui.El(parent, "cj-toast cj-glass");
+            label = Ui.Text(pill, "", "cj-toast__label cj-on-glass");
             Ui.Show(pill, false);
         }
 
@@ -34,7 +34,7 @@ namespace CargoJam.Game.UI
             if (!visible) return;
             visible = false;
             anim?.Cancel();
-            anim = Anim.SlideOut(pill, 0f, -30f, 0.2f, () => Ui.Show(pill, false));
+            anim = Anim.SlideOut(pill, 0f, -24f, 0.2f, () => Ui.Show(pill, false));
         }
 
         void ShowInternal(string text)
@@ -49,11 +49,11 @@ namespace CargoJam.Game.UI
             {
                 Anim.SetTranslate(pill, 0f, 0f);
                 Anim.SetOpacity(pill, 1f);
-                anim = Anim.Punch(pill, 0.08f);
+                anim = Anim.Punch(pill, 0.04f);
             }
             else
             {
-                anim = Anim.SlideIn(pill, 0f, -40f, 0.35f);
+                anim = Anim.SlideIn(pill, 0f, -32f, Anim.Small);
             }
         }
     }
