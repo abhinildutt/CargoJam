@@ -1,12 +1,14 @@
+using CargoJam.Game.UI;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace CargoJam.Game.Presentation.Fx
 {
     /// <summary>
-    /// Screen-space FX on its own UIDocument: danger, win and fail vignettes, combo callouts and the
-    /// truck-full check badge. Every element ignores picking so it never blocks input. Animated from
-    /// one Update with no per-frame allocations.
+    /// Screen-space FX on its own UIDocument: danger, win and fail vignettes, combo and delivery
+    /// callouts, the truck-full check badge and the arrival card. Design v3 type (Nunito Black, soft
+    /// shadow, no outline) and palette tokens. Every element ignores picking so it never blocks input.
+    /// Animated from one Update with no per-frame allocations.
     /// </summary>
     public sealed class FxOverlay : MonoBehaviour
     {
@@ -22,9 +24,10 @@ namespace CargoJam.Game.Presentation.Fx
         const float BadgeLife = 0.95f;
         const float BadgeSize = 120f;
 
-        static readonly Color DangerColor = new Color(0.95f, 0.33f, 0.29f);
-        static readonly Color FailColor = new Color(0.17f, 0.17f, 0.24f);
-        static readonly Color Outline = new Color(0.23f, 0.18f, 0.16f);
+        static readonly Color DangerColor = UiPalette.Danger;
+        static readonly Color FailColor = UiPalette.Ink;
+        /// <summary>The danger vignette never goes past this, so it reads as a warning rather than an alarm.</summary>
+        const float DangerPeak = 0.7f;
 
         sealed class Callout
         {
@@ -32,6 +35,7 @@ namespace CargoJam.Game.Presentation.Fx
             public float Start = -1f;
             public Vector2 Anchor;
             public float Tilt;
+            public bool Celebrate;
         }
 
         sealed class Badge
@@ -51,9 +55,10 @@ namespace CargoJam.Game.Presentation.Fx
         readonly Badge[] badges = new Badge[BadgeCount];
         int nextCallout, nextBadge;
 
+        ArrivalCard arrival;
         int dangerLevel;
         float dangerEnvelope;
-        float flashStart = -1f, flashDuration = 1f;
+        float flashStart = -1f, flashDuration = 1f, flashStrength = 1f;
         float failStart = -1f;
         float failEnvelope;
 
@@ -91,20 +96,27 @@ namespace CargoJam.Game.Presentation.Fx
         /// <summary>Dock danger: 0 off, 1 one slot left (gentle pulse), 2 full (strong, fast pulse).</summary>
         public void SetDanger(int level) => dangerLevel = Mathf.Clamp(level, 0, 2);
 
-        /// <summary>A quick full-edge flash in <paramref name="color"/> that fades over <paramref name="duration"/>.</summary>
-        public void Flash(Color color, float duration)
+        /// <summary>
+        /// A quick full-edge flash in <paramref name="color"/> that fades over <paramref name="duration"/>,
+        /// peaking at <paramref name="strength"/> (0..1) of the vignette's full opacity.
+        /// </summary>
+        public void Flash(Color color, float duration, float strength = 1f)
         {
             if (!EnsureBuilt()) return;
             flash.SetColor(color);
             flashStart = Time.time;
             flashDuration = Mathf.Max(0.05f, duration);
+            flashStrength = Mathf.Clamp01(strength);
         }
 
         /// <summary>The fail mood: a greyish tint and dark edges that breathe until cleared.</summary>
         public void SetFailMood(bool on) => failStart = on ? Time.time : -1f;
 
-        /// <summary>Floating callout text at a world point.</summary>
-        public void ShowCallout(string text, Color fill, float fontSize, Vector3 world)
+        /// <summary>
+        /// Floating callout text at a world point. A <paramref name="celebrate"/> callout (combos) pops
+        /// with a little overshoot and tilt; otherwise it fades up calmly (delivery ladder, notes).
+        /// </summary>
+        public void ShowCallout(string text, Color fill, float fontSize, Vector3 world, bool celebrate = true)
         {
             if (!EnsureBuilt() || !TryWorldToPanel(world, out var anchor)) return;
             var c = callouts[nextCallout];
@@ -115,10 +127,18 @@ namespace CargoJam.Game.Presentation.Fx
             label.style.fontSize = fontSize;
             c.Anchor = anchor;
             c.Start = Time.time;
-            c.Tilt = Random.Range(-7f, 7f);
+            c.Celebrate = celebrate;
+            c.Tilt = celebrate ? Random.Range(-4f, 4f) : 0f;
             label.style.display = DisplayStyle.Flex;
             label.BringToFront();
             Place(label, anchor, 0f, 0f, 0f, 0f);
+        }
+
+        /// <summary>The arrival reveal's destination card ("Arrived" over the name, plus the stamp), starting now.</summary>
+        public void ShowArrival(string destination)
+        {
+            if (!EnsureBuilt()) return;
+            arrival.Show(destination);
         }
 
         /// <summary>A check badge that pops above <paramref name="follow"/> and rides along with it.</summary>
@@ -157,6 +177,7 @@ namespace CargoJam.Game.Presentation.Fx
             danger.SetIntensity(0f);
             flash.SetIntensity(0f);
             fail.SetIntensity(0f);
+            arrival.Hide();
             foreach (var c in callouts)
             {
                 c.Start = -1f;
@@ -200,16 +221,15 @@ namespace CargoJam.Game.Presentation.Fx
                 var label = new Label { pickingMode = PickingMode.Ignore };
                 var s = label.style;
                 s.position = Position.Absolute;
-                s.unityFontStyleAndWeight = FontStyle.Bold;
                 s.unityTextAlign = TextAnchor.MiddleCenter;
                 s.whiteSpace = WhiteSpace.NoWrap;
-                s.unityTextOutlineColor = Outline;
-                s.unityTextOutlineWidth = 3f;
-                s.textShadow = new TextShadow { offset = new Vector2(0f, 6f), blurRadius = 0f, color = new Color(0f, 0f, 0f, 0.35f) };
+                FxType.Display(label);
                 s.display = DisplayStyle.None;
                 root.Add(label);
                 callouts[i] = new Callout { Label = label };
             }
+            arrival = new ArrivalCard();
+            root.Add(arrival);
             return true;
         }
 
@@ -224,10 +244,11 @@ namespace CargoJam.Game.Presentation.Fx
             // Danger: ease the envelope toward the level, then pulse on top of it.
             float target = dangerLevel == 0 ? 0f : 1f;
             dangerEnvelope = Mathf.MoveTowards(dangerEnvelope, target, dt * (target > dangerEnvelope ? 4f : 2.5f));
+            // Calm v3 pulse: a slow breath at one slot left, a firmer (still unhurried) one when full.
             float pulse = dangerLevel >= 2
-                ? 0.72f + 0.28f * Mathf.Sin(now * Mathf.PI * 2f * 2.4f)
-                : 0.42f + 0.18f * Mathf.Sin(now * Mathf.PI * 2f * 1.2f);
-            danger.SetIntensity(dangerEnvelope * pulse * (1f - failEnvelope));
+                ? 0.78f + 0.22f * Mathf.Sin(now * Mathf.PI * 2f * 1.5f)
+                : 0.42f + 0.12f * Mathf.Sin(now * Mathf.PI * 2f * 0.8f);
+            danger.SetIntensity(DangerPeak * dangerEnvelope * pulse * (1f - failEnvelope));
 
             if (flashStart >= 0f)
             {
@@ -239,7 +260,7 @@ namespace CargoJam.Game.Presentation.Fx
                 }
                 else
                 {
-                    flash.SetIntensity(1f - Ease.OutCubic(k));
+                    flash.SetIntensity(flashStrength * (1f - Ease.OutCubic(k)));
                 }
             }
 
@@ -250,6 +271,7 @@ namespace CargoJam.Game.Presentation.Fx
 
             for (int i = 0; i < CalloutCount; i++) StepCallout(callouts[i], now);
             for (int i = 0; i < BadgeCount; i++) StepBadge(badges[i], now);
+            arrival.Step(now);
         }
 
         void StepCallout(Callout c, float now)
@@ -262,11 +284,22 @@ namespace CargoJam.Game.Presentation.Fx
                 c.Label.style.display = DisplayStyle.None;
                 return;
             }
-            float scale = t < 0.16f
-                ? 1.25f * Ease.OutBack(t / 0.16f)
-                : Mathf.Lerp(1.25f, 1f, Mathf.Clamp01((t - 0.16f) / 0.2f));
-            float rise = -110f * Ease.OutCubic(t);
-            float alpha = t < 0.7f ? 1f : 1f - (t - 0.7f) / 0.3f;
+            float scale, alpha;
+            if (c.Celebrate)
+            {
+                // A small pop (combos are a reward moment), settling to rest by a third of the way.
+                scale = t < 0.16f
+                    ? 1.1f * Ease.OutBack(t / 0.16f)
+                    : Mathf.Lerp(1.1f, 1f, Mathf.Clamp01((t - 0.16f) / 0.2f));
+                alpha = t < 0.7f ? 1f : 1f - (t - 0.7f) / 0.3f;
+            }
+            else
+            {
+                float k = Mathf.Clamp01(t / 0.2f);
+                scale = 0.94f + 0.06f * (1f - Mathf.Pow(1f - k, 5f));
+                alpha = t < 0.2f ? k : t < 0.72f ? 1f : 1f - (t - 0.72f) / 0.28f;
+            }
+            float rise = (c.Celebrate ? -110f : -70f) * Ease.OutCubic(t);
             Place(c.Label, c.Anchor, rise, scale, alpha, c.Tilt * (1f - t));
         }
 

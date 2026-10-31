@@ -1,5 +1,6 @@
 using CargoJam.Game.Presentation;
 using CargoJam.Game.Presentation.Fx;
+using CargoJam.Game.UI;
 using UnityEngine;
 
 namespace CargoJam.Game.Feel
@@ -12,14 +13,9 @@ namespace CargoJam.Game.Feel
     {
         static readonly int[] Thresholds = { 3, 5, 8, 12 };
         static readonly string[] Words = { "Nice!", "Great!", "Awesome!", "Unstoppable!" };
-        static readonly Color[] Colors =
-        {
-            new Color(0.23f, 0.79f, 0.36f),
-            new Color(0.29f, 0.56f, 0.94f),
-            new Color(0.70f, 0.42f, 0.98f),
-            new Color(1f, 0.78f, 0.24f),
-        };
-        static readonly float[] FontSizes = { 92f, 104f, 116f, 130f };
+        /// <summary>v3 type: white over the scene for the first two tiers, reward gold for the top two.</summary>
+        static readonly Color[] Colors = { UiPalette.OnGlass, UiPalette.OnGlass, UiPalette.Gold, UiPalette.Gold };
+        static readonly float[] FontSizes = { 84f, 92f, 104f, 116f };
         /// <summary>Parcel color index used for each tier's burst (green, blue, purple, yellow).</summary>
         static readonly int[] BurstColor = { 2, 1, 4, 3 };
         /// <summary>Root, major second, major third, fifth.</summary>

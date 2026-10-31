@@ -51,6 +51,23 @@ namespace CargoJam.Game.Presentation.Fx
             Count = count, SpeedMin = speed * 0.6f, SpeedMax = speed, Up = speed * 0.45f, Gravity = 9f, Drag = 1.6f,
             Life = 1.8f, LifeJitter = 0.3f, Size = new Vector3(0.16f, 0.02f, 0.1f), Grow = 1f, Spin = 720f,
         };
+
+        /// <summary>
+        /// The v3 win confetti: fewer, larger cards that float down slowly and turn lazily, so the
+        /// celebration reads as refined rather than busy.
+        /// </summary>
+        public static BurstSpec Ribbons(int count, float speed) => new BurstSpec
+        {
+            Count = count, Radius = 0.3f, SpeedMin = speed * 0.55f, SpeedMax = speed, Up = speed * 0.5f, Gravity = 4.5f,
+            Drag = 2.2f, Life = 2.4f, LifeJitter = 0.2f, Size = new Vector3(0.28f, 0.02f, 0.17f), Grow = 1f, Spin = 300f,
+        };
+
+        /// <summary>Soft glints shed behind something moving: barely any speed, a gentle lift.</summary>
+        public static BurstSpec Trail(int count) => new BurstSpec
+        {
+            Count = count, Radius = 0.22f, SpeedMin = 0.1f, SpeedMax = 0.5f, Up = 0.6f, Gravity = 0.4f, Drag = 2f,
+            Life = 0.65f, LifeJitter = 0.25f, Size = new Vector3(0.1f, 0.1f, 0.1f), Grow = 0.3f, Spin = 360f,
+        };
     }
 
     /// <summary>
