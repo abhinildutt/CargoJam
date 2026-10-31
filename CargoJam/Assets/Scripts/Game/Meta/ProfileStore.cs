@@ -8,7 +8,7 @@ namespace CargoJam.Game.Meta
     /// Loads and saves the player's <see cref="ProfileData"/> as JSON (JsonUtility) in PlayerPrefs.
     /// Never throws on bad data: a corrupt save is replaced by a fresh profile with a warning.
     /// Older save versions are upgraded on load (<see cref="ProfileMigration.Upgrade"/>; v1 → v2 adds
-    /// the journey postcards) and written back. Wrap the loaded data in a <see cref="Progression"/>,
+    /// the journey postcards, v2 → v3 the seen-cargo flags) and written back. Wrap the loaded data in a <see cref="Progression"/>,
     /// which repairs out-of-range values.
     /// </summary>
     public static class ProfileStore

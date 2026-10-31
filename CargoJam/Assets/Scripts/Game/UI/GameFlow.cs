@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using CargoJam.Core;
 using CargoJam.Game.Feel;
 using CargoJam.Game.Meta;
 using CargoJam.Game.Presentation;
+using CargoJam.Game.Presentation.Fx;
 using CargoJam.Meta;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -11,7 +13,9 @@ namespace CargoJam.Game.UI
 {
     /// <summary>
     /// Owns the UI Toolkit document and sequences the game: Home (⇄ Journey) → Level → Win
-    /// (→ Chest → Unlock) → next Level, or Fail → Continue / Try again. Wires boosters and continues
+    /// (→ Chest → Unlock) → next Level, or Fail → Continue / Try again. A level that debuts a cargo kind
+    /// shows its "New cargo!" card once the board has landed (after any arrival or HARD banner), then
+    /// the tutorial hand. Wires boosters and continues
     /// to the economy, keeps board input off while anything covers it, tells the camera which part
     /// of the screen belongs to the UI (<see cref="IHudLayout"/>) and where to frame the home
     /// diorama (<see cref="IMenuLayout"/>), and hands the journey's arrival rules to the controller.
@@ -47,9 +51,13 @@ namespace CargoJam.Game.UI
         BuyBoosterPopup buy;
         ChestPopup chest;
         UnlockPopup unlock;
+        CargoIntroPopup cargoIntro;
         DailyPopup daily;
         VisualElement splash;
         const string SplashSeenKey = "cj.splashSeen";
+        /// <summary>When the HARD banner starts, in seconds after the level starts: late on an arrival level (after the destination card).</summary>
+        const float ArrivalBannerAt = 2.5f;
+        const float BannerAt = 0.3f;
 
         State state = State.Home;
         int continuesUsed;
@@ -59,6 +67,13 @@ namespace CargoJam.Game.UI
         int journeySeenIndex;
         Rect lastSafeArea;
         Vector2Int lastScreen;
+        /// <summary>Cargo cards still to show for the level that just started, in enum order.</summary>
+        readonly List<CargoKind> cargoQueue = new List<CargoKind>();
+        /// <summary>Bumped on every level start so a card callback from an older level does nothing.</summary>
+        int cargoToken;
+        /// <summary>The cargo the hand teaches on <see cref="teachLevel"/>, so a retry points it out again.</summary>
+        CargoKind teachKind;
+        int teachLevel = -1;
         readonly List<KeyValuePair<float, Action>> timed = new List<KeyValuePair<float, Action>>();
 
         /// <summary>
@@ -326,6 +341,7 @@ namespace CargoJam.Game.UI
             buy = new BuyBoosterPopup(ctx);
             chest = new ChestPopup(ctx);
             unlock = new UnlockPopup(ctx);
+            cargoIntro = new CargoIntroPopup(ctx);
             daily = new DailyPopup(ctx);
         }
 
@@ -449,15 +465,94 @@ namespace CargoJam.Game.UI
             hud.SetLevel(info.Number, info.Hard);
             hud.RefreshBoosters();
             ctx.Toast.Hide();
+            cargoQueue.Clear();
+            cargoToken++;
             if (state == State.Playing)
             {
-                if (info.Hard) banner.Play(controller.EnvironmentShown.Arrival ? 2.5f : 0.3f);
-                tutorial.Begin(info.Index);
+                bool arrival = controller.EnvironmentShown.Arrival;
+                if (info.Hard) banner.Play(arrival ? ArrivalBannerAt : BannerAt);
+                QueueCargoCards(info);
+                if (cargoQueue.Count > 0)
+                {
+                    // The cards come first; the hand follows the last one.
+                    tutorial.Stop();
+                    ShowCargoCardsAt(Time.time + CargoCardDelay(arrival, info.Hard), cargoToken);
+                }
+                else
+                {
+                    tutorial.Begin(info.Index);
+                    // Retrying the debut level: the card is done with, the hand isn't.
+                    if (attempt > 1 && teachLevel == info.Index) tutorial.BeginCargo(teachKind);
+                }
             }
             else
             {
                 tutorial.Stop();
             }
+        }
+
+        // ---- Cargo cards ------------------------------------------------------------------------
+
+        /// <summary>Queues a card for every cargo kind in the level the player hasn't met yet.</summary>
+        void QueueCargoCards(LevelStartInfo info)
+        {
+            if (info.CargoMask == 0) return;
+            foreach (CargoKind kind in Enum.GetValues(typeof(CargoKind)))
+                if (info.Uses(kind) && !progression.HasSeenCargo((int)kind)) cargoQueue.Add(kind);
+            if (cargoQueue.Count == 0) return;
+
+            // The hand teaches the first kind you can act on; a bollard has nothing to tap.
+            teachKind = cargoQueue[0];
+            foreach (var kind in cargoQueue)
+            {
+                if (kind == CargoKind.Bollard) continue;
+                teachKind = kind;
+                break;
+            }
+            teachLevel = info.Index;
+        }
+
+        /// <summary>
+        /// Seconds after a level starts until a card may open: the board has landed, and any arrival
+        /// card or HARD banner has played out.
+        /// </summary>
+        static float CargoCardDelay(bool arrival, bool hard)
+        {
+            if (hard) return (arrival ? ArrivalBannerAt : BannerAt) + HardBanner.Duration + 0.25f;
+            return arrival ? ArrivalBannerAt + 0.25f : LevelIntro.InputDelay + 0.25f;
+        }
+
+        /// <summary>Opens the cards at a time, waiting while a pause or settings sheet is up.</summary>
+        void ShowCargoCardsAt(float due, int token)
+        {
+            At(due, () =>
+            {
+                if (token != cargoToken || state != State.Playing) return;
+                if (ctx.AnyModalOpen)
+                {
+                    ShowCargoCardsAt(Time.time + 0.25f, token);
+                    return;
+                }
+                ShowNextCargoCard(token);
+            });
+        }
+
+        void ShowNextCargoCard(int token)
+        {
+            if (token != cargoToken || state != State.Playing) return;
+            if (cargoQueue.Count == 0)
+            {
+                // All met: now show where to start (unless they already have).
+                if (!controller.MovedThisLevel) tutorial.BeginCargo(teachKind);
+                return;
+            }
+            var kind = cargoQueue[0];
+            cargoQueue.RemoveAt(0);
+            cargoIntro.Show(kind, () =>
+            {
+                progression.MarkCargoSeen((int)kind);
+                ShowNextCargoCard(token);
+            });
         }
 
         void OnLevelWon(float showAt)
@@ -506,15 +601,18 @@ namespace CargoJam.Game.UI
             tutorial.Stop();
             ctx.Toast.Hide();
             controller.CancelCrane();
-            At(showAt, () => ShowFail(parcelsLeft));
+            var reason = controller.Session != null ? controller.Session.FailReason : FailReason.OutOfSpace;
+            Analytics.LogLevelFail(controller.LevelIndex, parcelsLeft, continuesUsed, reason);
+            At(showAt, () => ShowFail(parcelsLeft, reason));
         }
 
-        void ShowFail(int parcelsLeft)
+        void ShowFail(int parcelsLeft, FailReason reason)
         {
             int cost = progression.ContinueCost(continuesUsed);
-            // A board stalled by padlocks fails with dock room to spare; another slot wouldn't help.
+            // Only a full dock can be helped by another slot (not a stalled board or a missed express);
+            // the sheet also hides Continue unless the reason is OutOfSpace.
             bool canGrow = controller.CanContinue;
-            fail.Show(parcelsLeft, cost, progression.CanAfford(cost), canGrow, UiText.StreakDropWarning(progression));
+            fail.Show(reason, parcelsLeft, cost, progression.CanAfford(cost), canGrow, UiText.StreakDropWarning(progression));
         }
 
         void OnContinueClicked()

@@ -1,3 +1,4 @@
+using CargoJam.Core;
 using CargoJam.Meta;
 
 namespace CargoJam.Game.UI
@@ -38,6 +39,69 @@ namespace CargoJam.Game.UI
                 default: return IconKind.PlusSlot;
             }
         }
+
+        // ---- Cargo (docs/design-v4-cargo-variety.md, section 5) ----
+
+        /// <summary>The cargo's name on its "New cargo!" card.</summary>
+        public static string CargoName(CargoKind kind)
+        {
+            switch (kind)
+            {
+                case CargoKind.Bollard: return "Bollard";
+                case CargoKind.Frost: return "Frozen crate";
+                case CargoKind.Mystery: return "Mystery parcel";
+                case CargoKind.Express: return "Express parcel";
+                case CargoKind.Lock: return "Padlocked parcel";
+                case CargoKind.Strap: return "Strapped pair";
+                default: return "Customs gate";
+            }
+        }
+
+        /// <summary>The one line under the name on the "New cargo!" card.</summary>
+        public static string CargoHelp(CargoKind kind)
+        {
+            switch (kind)
+            {
+                case CargoKind.Bollard: return "Bollards never move. Plan around them.";
+                case CargoKind.Frost: return "Move parcels next to a frozen crate to crack its ice.";
+                case CargoKind.Mystery: return "Covered parcels show their color once they're free.";
+                case CargoKind.Express: return "Ship express parcels before their number runs out. Every move counts.";
+                case CargoKind.Lock: return "Load the key parcel into a truck to open the padlock.";
+                case CargoKind.Strap: return "Strapped parcels travel together and need two spaces.";
+                default: return "Gates open once enough parcels of their color are loaded.";
+            }
+        }
+
+        public static IconKind CargoIcon(CargoKind kind)
+        {
+            switch (kind)
+            {
+                case CargoKind.Bollard: return IconKind.Bollard;
+                case CargoKind.Frost: return IconKind.Frost;
+                case CargoKind.Mystery: return IconKind.Mystery;
+                case CargoKind.Express: return IconKind.Express;
+                case CargoKind.Lock: return IconKind.Lock;
+                case CargoKind.Strap: return IconKind.Strap;
+                default: return IconKind.Gate;
+            }
+        }
+
+        // ---- Fail sheet ----
+
+        /// <summary>The fail sheet's title for why the level ended.</summary>
+        public static string FailTitle(FailReason reason)
+        {
+            switch (reason)
+            {
+                case FailReason.Stuck: return "No moves left";
+                case FailReason.ExpressMissed: return "Express missed";
+                default: return "Out of space";
+            }
+        }
+
+        /// <summary>The line under the fail title that explains the reason, or null when the title says it all.</summary>
+        public static string FailSubline(FailReason reason) =>
+            reason == FailReason.ExpressMissed ? "An express parcel ran out of moves." : null;
 
         /// <summary>"×1.5", "×2", "×2.5".</summary>
         public static string Multiplier(float m)

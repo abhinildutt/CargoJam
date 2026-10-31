@@ -9,8 +9,11 @@ namespace CargoJam.Meta
     [Serializable]
     public class ProfileData
     {
-        /// <summary>The save format this build writes. v2 added <see cref="postcards"/> and <see cref="lastArrivalShown"/>.</summary>
-        public const int CurrentVersion = 2;
+        /// <summary>
+        /// The save format this build writes. v2 added <see cref="postcards"/> and <see cref="lastArrivalShown"/>;
+        /// v3 added <see cref="cargoSeen"/>.
+        /// </summary>
+        public const int CurrentVersion = 3;
 
         /// <summary>
         /// Kinds of special cargo (the Core <c>CargoKind</c> enum, whose int values index
@@ -55,7 +58,7 @@ namespace CargoJam.Meta
         /// <summary>Progress leg (<see cref="Journey.LegFor"/>) whose arrival reveal has played; -1 = none yet.</summary>
         public int lastArrivalShown = -1;
 
-        // ---- design v4: cargo variety ----
+        // ---- v3 (design v4: cargo variety) ----
 
         /// <summary>
         /// Cargo kinds whose "New cargo!" card the player has seen, indexed by <c>CargoKind</c>. An older
