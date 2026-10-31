@@ -19,6 +19,8 @@ namespace CargoJam.Game.Presentation.Fx
         public Material Dust { get; }
         /// <summary>Bright rim used for the dock pad glow.</summary>
         public Material PadGlow { get; }
+        /// <summary>Pale cyan-white ice shards (frozen crates cracking).</summary>
+        public Material Ice { get; }
 
         /// <summary>White, glint and gold: the default sparkle palette.</summary>
         public Material[] SparklePalette { get; }
@@ -36,6 +38,7 @@ namespace CargoJam.Game.Presentation.Fx
             Gold = Make(new Color(1f, 0.78f, 0.22f));
             Dust = Make(new Color(0.86f, 0.80f, 0.70f));
             PadGlow = Make(new Color(1f, 0.97f, 0.80f));
+            Ice = Make(new Color(0.84f, 0.95f, 1f));
             SparklePalette = new[] { White, Glint, Gold };
             ConfettiPalette = new[]
             {
