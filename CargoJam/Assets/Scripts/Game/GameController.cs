@@ -248,6 +248,7 @@ namespace CargoJam.Game
                 Dock = dock,
                 Parcels = new List<ParcelView>(parcels.Values),
                 Trucks = trucks,
+                Environment = environment,
             };
             float introSeconds = fx?.LevelBuilt(views) ?? 0f;
             introSeconds += fx?.EnvironmentChanged(env) ?? 0f;

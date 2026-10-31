@@ -51,6 +51,8 @@ namespace CargoJam.Game.Presentation
         public DockView Dock;
         public IReadOnlyList<ParcelView> Parcels;
         public IReadOnlyList<TruckView> Trucks;
+        /// <summary>The persistent scenery (reveal points for the arrival pan, the current biome).</summary>
+        public WorldEnvironment Environment;
     }
 
     /// <summary>
