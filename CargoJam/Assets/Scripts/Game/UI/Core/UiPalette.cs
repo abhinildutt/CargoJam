@@ -47,6 +47,17 @@ namespace CargoJam.Game.UI
         /// <summary>Spark colors for reward bursts: golds and whites, no rainbow.</summary>
         public static readonly Color[] Sparks = { Gold, Color.white, GoldLight, GoldDeep };
 
+        /// <summary>Colors for the cargo icons on the "New cargo!" card (multi-color icons).</summary>
+        public static class Cargo
+        {
+            public static readonly Color Ice = Hex(0x5E9BC4);
+            public static readonly Color IceLight = Hex(0xBFDDF0);
+            public static readonly Color Mystery = Hex(0x7A67B5);
+            public static readonly Color MysteryDeep = Hex(0x5A4A8E);
+            public static readonly Color Strap = Hex(0x3F7FE6);
+            public static readonly Color StrapDeep = Hex(0x2F62B8);
+        }
+
         /// <summary>Muted scene colors for the six postcard illustrations (Journey screen).</summary>
         public static class Art
         {
