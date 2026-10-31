@@ -146,6 +146,13 @@ namespace CargoJam.Game
         public bool MovedThisLevel => movedThisLevel;
         public int ParcelsLeft => session == null ? 0 : session.Board.Count + session.Dock.Count;
 
+        /// <summary>
+        /// Time.time when the current level's intro is over and the board takes taps: the board has
+        /// dropped in, and on an arrival level the destination reveal has played. Set by
+        /// <see cref="StartLevel"/> before <see cref="LevelStarted"/> fires.
+        /// </summary>
+        public float IntroEndsAt => inputBlockedUntil;
+
         /// <summary>The UI turns this off while a popup or panel covers the board.</summary>
         public bool InputEnabled { get; set; } = true;
 
