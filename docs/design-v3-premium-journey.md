@@ -191,12 +191,16 @@ All UI sizes are in panel units at the 1080×1920 reference (PanelSettings: Scal
 | Back band | `z ∈ [b.max.z + 0.6, b.max.z + 9]` | Buildings, mesas, trees, cranes. Largest props go furthest back. |
 | Truck lane | `z ≈ 2.4–4.1` | **Keep clear**: trucks enter at x−11, queue left of x 1.25 and exit at x 10.25 |
 | Side gutters | `|x| > b.max.x + 0.4` | Low props only (fences, crates, bushes, lamps) |
-| Foreground | `z < b.min.z − 0.8` | Low props and ground detail (grass tufts, road paint, puddles). They must not reach above the booster bar's screen band. |
+| Foreground | `z < b.min.z − 0.8` | **Left empty.** The booster bar (levels) and the Home bottom block sit over this band, and props there read as clutter behind the UI (dropped during integration). |
 
 **Assets**
 
 - Kenney CC0 kits live under `Assets/Resources/Env/<Kit>/` and are listed in `Assets/Resources/Env/LICENSES.md`.
 - **Draw calls:** combine static props per environment build (`Mesh.CombineMeshes` per material), and turn on instancing on the environment materials. Budget: **≤150 draw calls** on a 7×9 board in the densest biome.
+
+**Props to avoid:** anything box-shaped and parcel-sized (e.g. the Car Kit `box`) reads as an oversized game parcel.
+
+**Falling snow** (Frost Port) comes from the FX layer's ambient life, which keeps it off the board; the environment doesn't add its own.
 
 **Persistence**
 
