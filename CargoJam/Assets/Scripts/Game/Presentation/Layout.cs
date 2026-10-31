@@ -12,14 +12,18 @@ namespace CargoJam.Game.Presentation
         public const float CellSize = 1f;
         public static readonly Vector3 ParcelSize = new Vector3(0.82f, 0.62f, 0.82f);
         public const float FreeLift = 0.07f;
-        public const float InTruckScale = 0.5f;
+        /// <summary>Parcels ride on the flatbed at this scale (three fit the Car Kit truck's deck).</summary>
+        public const float InTruckScale = 0.55f;
 
         public const float DockEdgeZ = 0.62f;
         public const float DockZ = 1.6f;
         public const float DockSpacing = 1.05f;
         public const float RoadZ = 3.25f;
         public const float BayX = 1.25f;
-        public const float QueueSpacing = 3.1f;
+        /// <summary>Distance between queued trucks: the truck is ~2.97 long, so this leaves a ~0.4 gap.</summary>
+        public const float QueueSpacing = 3.4f;
+        /// <summary>Half the truck's length plus a margin, for the area the camera keeps in view.</summary>
+        public const float TruckHalfLength = 1.55f;
         public const float DepartDistance = 9f;
 
         public int Width { get; }
@@ -59,9 +63,9 @@ namespace CargoJam.Game.Presentation
         {
             get
             {
-                float halfWidth = Mathf.Max(Width * CellSize * 0.5f, DockSlots * DockSpacing * 0.5f, BayX + 1.4f) + 0.25f;
+                float halfWidth = Mathf.Max(Width * CellSize * 0.5f, DockSlots * DockSpacing * 0.5f, BayX + TruckHalfLength) + 0.25f;
                 float near = -(Height - 1) * CellSize - 0.6f;
-                float far = RoadZ + 0.8f;
+                float far = RoadZ + 0.9f;
                 var b = new Bounds();
                 b.SetMinMax(new Vector3(-halfWidth, 0f, near), new Vector3(halfWidth, 1f, far));
                 return b;
