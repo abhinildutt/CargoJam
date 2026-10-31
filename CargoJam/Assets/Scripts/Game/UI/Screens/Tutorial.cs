@@ -1,3 +1,4 @@
+using CargoJam.Core;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -5,7 +6,8 @@ namespace CargoJam.Game.UI
 {
     /// <summary>
     /// First-session teaching: on level 1 a hand bobs over a good parcel (following it every frame)
-    /// until the first move; levels 2 and 3 show a one-line tip.
+    /// until the first move; levels 2 and 3 show a one-line tip. When a cargo kind debuts, the hand
+    /// points at what to do with it (<see cref="BeginCargo"/>).
     /// </summary>
     public sealed class Tutorial
     {
@@ -26,6 +28,8 @@ namespace CargoJam.Game.UI
         readonly Label tipLabel;
         bool handActive;
         bool handShown;
+        /// <summary>The cargo kind the hand is teaching, or null for the level 1 hint.</summary>
+        CargoKind? cargoKind;
         bool tipActive;
         float handFrom;
         UiTween tipTween;
@@ -64,6 +68,20 @@ namespace CargoJam.Game.UI
             }
         }
 
+        /// <summary>
+        /// Points the hand at what teaches a cargo kind on its debut level (the controller picks the cell,
+        /// see <c>GameController.TryGetCargoHintCell</c>) until the first move. Bollards have nothing to
+        /// tap, so they get no hand.
+        /// </summary>
+        public void BeginCargo(CargoKind kind)
+        {
+            Stop();
+            if (kind == CargoKind.Bollard) return;
+            cargoKind = kind;
+            handActive = true;
+            handFrom = Time.unscaledTime + 0.4f;
+        }
+
         /// <summary>The board changed (a move happened): the hand's job is done; tips linger briefly.</summary>
         public void OnMove()
         {
@@ -71,6 +89,7 @@ namespace CargoJam.Game.UI
             {
                 handActive = false;
                 handShown = false;
+                cargoKind = null;
                 Anim.Fade(hand, 1f, 0f, 0.2f, 0f, () => { if (!handActive) Ui.Show(hand, false); });
             }
             if (tipActive)
@@ -93,18 +112,23 @@ namespace CargoJam.Game.UI
         {
             handActive = false;
             handShown = false;
+            cargoKind = null;
             tipActive = false;
             tipTween?.Cancel();
             Ui.Show(hand, false);
             Ui.Show(tip, false);
         }
 
+        bool TryGetTarget(GameController c, out Cell cell) =>
+            cargoKind.HasValue ? c.TryGetCargoHintCell(cargoKind.Value, out cell) : c.TryGetHintCell(out cell);
+
         /// <summary>Follows the hint parcel; call every frame.</summary>
         public void Update()
         {
             if (!handActive) return;
             var c = ctx.Controller;
-            if (Time.unscaledTime < handFrom || !c.InputEnabled || !c.TryGetHintCell(out var cell))
+            Cell cell = default;
+            if (Time.unscaledTime < handFrom || !c.InputEnabled || !TryGetTarget(c, out cell))
             {
                 SetHandShown(false);
                 return;

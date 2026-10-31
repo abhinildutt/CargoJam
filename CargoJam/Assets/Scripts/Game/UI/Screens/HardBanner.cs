@@ -10,6 +10,9 @@ namespace CargoJam.Game.UI
     {
         const float Hold = 1.8f;
 
+        /// <summary>Seconds from the end of <see cref="Play"/>'s delay until the card has faded away.</summary>
+        public const float Duration = Anim.Panel + Hold + Anim.Panel;
+
         readonly VisualElement card;
         UiTween sequence;
 
