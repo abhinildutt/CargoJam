@@ -24,10 +24,6 @@ namespace CargoJam.Game.Presentation
         public Pick[] Far; public int FarCount;
         /// <summary>Side gutters: low props only.</summary>
         public Pick[] Gutter; public int GutterCount;
-        /// <summary>Foreground: ground detail that stays below the booster bar.</summary>
-        public Pick[] Front; public int FrontCount;
-        /// <summary>Falling snow.</summary>
-        public bool Snow;
 
         public bool HasWater => ShoreOffset >= 0f;
     }
@@ -38,14 +34,6 @@ namespace CargoJam.Game.Presentation
         static Pick P(string path, float min, float max, float weight = 1f, bool face = false) =>
             new Pick(path, min, max, weight, face);
 
-        // Low ground detail shared by the greener biomes.
-        static readonly Pick[] GreenFront =
-        {
-            P("Nature/grass", 1.4f, 1.9f, 3f), P("Nature/grass_large", 1.3f, 1.7f, 2f),
-            P("Nature/grass_leafs", 1.6f, 2.2f, 2f), P("Nature/flower_yellowA", 1.4f, 1.8f),
-            P("Nature/flower_purpleA", 1.4f, 1.8f), P("Nature/rock_smallA", 1.4f, 2f),
-            P("Nature/plant_bushSmall", 1.4f, 1.8f),
-        };
 
         static readonly Pick[] GreenGutter =
         {
@@ -66,7 +54,6 @@ namespace CargoJam.Game.Presentation
             Mid = new[] { P("Nature/plant_bushDetailed", 1.6f, 2f), P("Nature/plant_bushLarge", 1.6f, 2f) }, MidCount = 4,
             Far = new Pick[0], FarCount = 0,
             Gutter = new[] { P("Cars/cone", 0.9f, 1f), P("Nature/plant_bush", 1.6f, 2f) }, GutterCount = 6,
-            Front = new[] { P("Nature/rock_smallA", 1.4f, 2f), P("Nature/grass", 1.4f, 1.8f, 2f), P("Cars/cone", 0.7f, 0.8f) }, FrontCount = 8,
         };
 
         // ---- Farmlands --------------------------------------------------------------------------
@@ -91,7 +78,6 @@ namespace CargoJam.Game.Presentation
                 P("Nature/fence_simple", 1.1f, 1.2f, 2f, true), P("Nature/plant_bush", 1.6f, 2.2f),
                 P("Nature/crop_pumpkin", 1.1f, 1.4f), P("Nature/grass_large", 1.5f, 2f),
             }, GutterCount = 7,
-            Front = GreenFront, FrontCount = 12,
         };
 
         // ---- Canyon Highway ---------------------------------------------------------------------
@@ -116,11 +102,6 @@ namespace CargoJam.Game.Presentation
                 P("Nature/cactus_short", 1.4f, 1.8f, 2f), P("Nature/rock_smallC", 1.8f, 2.4f),
                 P("Nature/rock_largeA", 1.2f, 1.6f), P("Nature/grass_large", 1.4f, 1.8f),
             }, GutterCount = 7,
-            Front = new[]
-            {
-                P("Nature/rock_smallA", 1.4f, 2f, 2f), P("Nature/rock_smallFlatA", 1.6f, 2.2f, 2f),
-                P("Nature/grass", 1.3f, 1.7f), P("Nature/cactus_short", 0.8f, 1f),
-            }, FrontCount = 10,
         };
 
         // ---- Pine Ridge -------------------------------------------------------------------------
@@ -147,11 +128,6 @@ namespace CargoJam.Game.Presentation
                 P("Nature/stump_round", 1.6f, 2f), P("Nature/mushroom_redGroup", 1.6f, 2f),
                 P("Nature/plant_bush", 1.6f, 2f),
             }, GutterCount = 7,
-            Front = new[]
-            {
-                P("Nature/grass", 1.4f, 1.9f, 3f), P("Nature/mushroom_tanGroup", 1.4f, 1.8f),
-                P("Nature/rock_smallA", 1.4f, 2f, 2f), P("Nature/stump_round", 1.2f, 1.5f),
-            }, FrontCount = 11,
         };
 
         // ---- Metro City -------------------------------------------------------------------------
@@ -169,11 +145,6 @@ namespace CargoJam.Game.Presentation
                 P("Suburban/planter", 1.6f, 2f, 2f), P("Nature/plant_bushLarge", 1.6f, 2f),
                 P("Cars/cone", 0.8f, 0.9f),
             }, GutterCount = 6,
-            Front = new[]
-            {
-                P("Suburban/planter", 1.4f, 1.7f), P("Nature/plant_bushSmall", 1.4f, 1.8f),
-                P("Cars/cone", 0.6f, 0.7f),
-            }, FrontCount = 6,
         };
 
         // ---- Frost Port -------------------------------------------------------------------------
@@ -196,13 +167,6 @@ namespace CargoJam.Game.Presentation
                 P("Nature/tree_pineSmallA", 1.1f, 1.4f, 2f), P("Nature/rock_smallC", 1.8f, 2.4f),
                 P("Nature/plant_bush", 1.6f, 2f),
             }, GutterCount = 6,
-            Front = new[]
-            {
-                P("Nature/rock_smallA", 1.4f, 2f, 2f), P("Nature/rock_smallFlatB", 1.6f, 2.2f),
-                P("Nature/grass", 1.3f, 1.6f),
-            }, FrontCount = 9,
-            // Falling snow comes from the FX layer's ambient life (AmbientLife), which keeps it off the board.
-            Snow = false,
         };
 
         public static PropSet For(string id) => id switch

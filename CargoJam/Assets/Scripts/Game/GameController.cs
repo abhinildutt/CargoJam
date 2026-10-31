@@ -665,6 +665,9 @@ namespace CargoJam.Game
             var lastTruck = trucks.Count > 0 ? trucks[trucks.Count - 1].transform.position : center;
             fx?.WinSequence(lastDeparture, lastTruck);
             fx?.Win(at, center);
+
+            // The next level opens a new destination: load its models now, while the win plays.
+            if (Journey.IsArrival(levelIndex + 1)) environment.Preload(levelIndex + 1);
             PushCamera(center, 0.07f, at, 0.9f);
             LevelWon?.Invoke(at + Timing.WinOverlayDelay);
         }

@@ -66,6 +66,18 @@ namespace CargoJam.Game.Presentation
         public Material Accent => Solid("accent", biome.Accent);
         public Material Rock => Solid("rock", biome.Rock);
         public Material Wood => Solid("wood", biome.Wood);
+        /// <summary>Destroys the materials this palette made (the environment calls it when it goes away).</summary>
+        public void Destroy()
+        {
+            foreach (var m in nature.Values) if (m != null) Object.Destroy(m);
+            foreach (var m in kits.Values) if (m != null) Object.Destroy(m);
+            foreach (var m in solids.Values) if (m != null) Object.Destroy(m);
+            nature.Clear();
+            kits.Clear();
+            solids.Clear();
+            glowing.Clear();
+        }
+
         public Material Dark => Solid("dark", new Color(0.22f, 0.23f, 0.26f));
         public Material Metal => Solid("metal", new Color(0.70f, 0.72f, 0.75f));
         public Material Snow => Solid("snow", new Color(0.95f, 0.97f, 1f));

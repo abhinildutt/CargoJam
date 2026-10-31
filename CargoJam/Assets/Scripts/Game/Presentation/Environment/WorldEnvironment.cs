@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using CargoJam.Meta;
 using UnityEngine;
@@ -28,8 +29,6 @@ namespace CargoJam.Game.Presentation
         Mood lastMood;
         StaticBatch batch;
         PostFx post;
-        ParticleSystem snow;
-        Material snowMaterial;
         readonly Light[] pointLights = new Light[MaxPointLights];
         readonly Dictionary<string, EnvPalette> palettes = new Dictionary<string, EnvPalette>();
 
@@ -80,10 +79,46 @@ namespace CargoJam.Game.Presentation
         {
             batch?.Destroy();
             foreach (var l in pointLights) if (l != null) l.enabled = false;
-            if (snow != null) snow.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             RenderSettings.fog = false;
             RevealPoints = new Vector3[0];
             lastStop = -1;
+        }
+
+        /// <summary>
+        /// Loads the Kenney models a level's destination dresses with, one per frame, so its first
+        /// visit doesn't stall in the frame the arrival pan starts. Call it a few seconds ahead
+        /// (the controller does on the win before an arrival).
+        /// </summary>
+        public void Preload(int levelIndex)
+        {
+            var set = PropSets.For(Biomes.For(Journey.StopFor(levelIndex)).PropSet);
+            StartCoroutine(PreloadModels(set));
+        }
+
+        static IEnumerator PreloadModels(PropSet set)
+        {
+            foreach (var picks in new[] { set.Mid, set.Far, set.Gutter })
+            {
+                if (picks == null) continue;
+                foreach (var pick in picks)
+                {
+                    PropLibrary.Get(pick.Path);
+                    yield return null;
+                }
+            }
+            foreach (var path in set.Parked)
+            {
+                PropLibrary.Get(path);
+                yield return null;
+            }
+        }
+
+        void OnDestroy()
+        {
+            batch?.Destroy();
+            post?.Destroy();
+            foreach (var p in palettes.Values) p.Destroy();
+            palettes.Clear();
         }
 
         EnvironmentInfo Show(int levelIndex, Stage stage)
@@ -157,7 +192,6 @@ namespace CargoJam.Game.Presentation
                 cam.backgroundColor = l.Sky;
             }
             post?.Apply(l);
-            SetSnow(set.Snow);
         }
 
         /// <summary>
@@ -176,68 +210,6 @@ namespace CargoJam.Game.Presentation
             float start = Mathf.Max(0f, depth + 0.5f);
             RenderSettings.fogStartDistance = start;
             RenderSettings.fogEndDistance = start + 1f / Mathf.Max(0.001f, lighting.FogDensity);
-        }
-
-        void SetSnow(bool on)
-        {
-            if (!on)
-            {
-                if (snow != null) snow.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-                return;
-            }
-            if (snow == null) snow = CreateSnow();
-            if (!snow.isPlaying) snow.Play(true);
-        }
-
-        ParticleSystem CreateSnow()
-        {
-            var go = new GameObject("Snow");
-            go.transform.SetParent(transform, false);
-            go.transform.localPosition = new Vector3(0f, 7f, 2f);
-            var ps = go.AddComponent<ParticleSystem>();
-            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-
-            var main = ps.main;
-            main.loop = true;
-            main.playOnAwake = false;
-            main.duration = 5f;
-            main.startLifetime = 7f;
-            main.startSpeed = 0f;
-            main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.1f);
-            main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI);
-            main.maxParticles = 240;
-            main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.prewarm = true;
-
-            var emission = ps.emission;
-            emission.rateOverTime = 32f;
-
-            var shape = ps.shape;
-            shape.shapeType = ParticleSystemShapeType.Box;
-            shape.scale = new Vector3(24f, 0.1f, 24f);
-
-            var velocity = ps.velocityOverLifetime;
-            velocity.enabled = true;
-            velocity.space = ParticleSystemSimulationSpace.World;
-            velocity.x = new ParticleSystem.MinMaxCurve(-0.25f, 0.25f);
-            velocity.y = new ParticleSystem.MinMaxCurve(-1.3f, -0.9f);
-            velocity.z = new ParticleSystem.MinMaxCurve(-0.15f, 0.15f);
-
-            var noise = ps.noise;
-            noise.enabled = true;
-            noise.strength = 0.25f;
-            noise.frequency = 0.35f;
-            noise.quality = ParticleSystemNoiseQuality.Low;
-
-            snowMaterial = materials.NewMaterial(new Color(0.97f, 0.98f, 1f), null, 0f);
-            snowMaterial.name = "Snow";
-            var r = go.GetComponent<ParticleSystemRenderer>();
-            r.renderMode = ParticleSystemRenderMode.Mesh;
-            r.mesh = MeshKit.Box(0f);
-            r.sharedMaterial = snowMaterial;
-            r.shadowCastingMode = ShadowCastingMode.Off;
-            r.receiveShadows = false;
-            return ps;
         }
 
         // ---- Props --------------------------------------------------------------------------------

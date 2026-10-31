@@ -58,7 +58,7 @@ The HARD flags in the level files are unchanged: levels 15, 25, … are still HA
 
 **Home**
 
-- **Removed from Home:** the logo (moves to a first-launch splash), the chest card, the route bar, the streak chip in the top row, and the daily button in the top row.
+- **Removed from Home:** the logo (moves to a splash shown once, on first launch), the chest card, the route bar, the streak chip in the top row, and the daily button in the top row.
 - **Background:** a full-screen live 3D diorama of the current destination at the current mood.
 - **Top-right:** a quiet coin pill.
 - **Top-left:** a quiet settings button.
@@ -93,7 +93,7 @@ The HARD flags in the level files are unchanged: levels 15, 25, … are still HA
 **Fail**
 
 - A **bottom sheet** covers no more than the lower 45% of the screen, so the stuck board stays visible above it.
-- Content: "Out of space", "2 parcels to go", **Continue +1 slot · 300**, and **Try again**.
+- Content: "Out of space", "2 parcels to go", **Continue +1 slot · 300**, and **Try again**. Try again records the give-up and restarts the same level; Home stays reachable from Pause.
 - If a streak tier would drop, one neutral line: "Streak will drop to ×1.5". No guilt copy.
 
 **Popups (Pause/Settings, Daily, Chest, Buy booster, Unlock)**
@@ -148,7 +148,7 @@ All UI sizes are in panel units at the 1080×1920 reference (PanelSettings: Scal
 **Space and shape**
 
 - Spacing: 8 / 16 / 24 / 32 / 48 / 64.
-- Radii: 20 (chips), 32 (buttons, cards), 56 (sheets), and pills fully rounded.
+- Radii, as built from the approved mockup: chips 20, buttons about 50–56, cards 72, sheet tops 80, pills fully rounded. (The first draft said 32/56; at these sizes that looked boxy next to the mockup.)
 - Elevation: there is no `box-shadow`, so fake it with a blurred-look underlay, a sibling element offset 6–10px with `rgba(12,18,28,0.18)` and the same radius. Never use a hard bottom-border "edge".
 
 **Buttons**
@@ -226,7 +226,7 @@ All UI sizes are in panel units at the 1080×1920 reference (PanelSettings: Scal
   - Parcels sit visibly on the flatbed's 3 slots, so keep the bed-slot logic and positions.
   - The wheels spin while driving, and the body keeps the dip, punch and squash animations through the existing "Body" child pattern.
   - `truck` (box) and `delivery` are available for scenery traffic.
-- Parcels get a beveled box mesh with a tape stripe. Keep the white symbol and size. The symbols (■ ● ▲ ◆ ★ ♥, one per color) exist so colorblind players and grayscale ad clips can tell colors apart, so they stay.
+- Parcels get a beveled box mesh with a tape stripe. Keep the white symbol and size. The symbols (circle, square, plus, diamond, cross and two bars, one per color) exist so colorblind players and grayscale ad clips can tell colors apart, so they stay.
 
 ## 6. Engagement
 

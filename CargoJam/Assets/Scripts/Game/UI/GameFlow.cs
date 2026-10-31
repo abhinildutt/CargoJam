@@ -49,6 +49,7 @@ namespace CargoJam.Game.UI
         UnlockPopup unlock;
         DailyPopup daily;
         VisualElement splash;
+        const string SplashSeenKey = "cj.splashSeen";
 
         State state = State.Home;
         int continuesUsed;
@@ -109,7 +110,13 @@ namespace CargoJam.Game.UI
             if (ctx == null) return;
             ApplySafeArea();
             ShowHome();
-            PlaySplash();
+            // The wordmark splash is a first-launch moment; returning players go straight to Home.
+            if (PlayerPrefs.GetInt(SplashSeenKey, 0) == 0)
+            {
+                PlayerPrefs.SetInt(SplashSeenKey, 1);
+                PlayerPrefs.Save();
+                PlaySplash();
+            }
         }
 
         void OnDestroy()
@@ -391,12 +398,20 @@ namespace CargoJam.Game.UI
             if (state != State.Home || ctx.AnyModalOpen || journey.Visible) return;
             journey.Show(journeySeenIndex);
             journeySeenIndex = progression.LevelIndex;
+            // The Journey screen is opaque: stop drawing the 3D scene under it once it has slid in.
+            UiTween.Delay(Anim.Panel, () => { if (journey.Visible) SetSceneVisible(false); });
         }
 
         void CloseJourney()
         {
             if (!journey.Visible) return;
+            SetSceneVisible(true);
             journey.Hide(() => { if (state == State.Home) home.Refresh(); });
+        }
+
+        void SetSceneVisible(bool on)
+        {
+            if (controller.Camera != null) controller.Camera.enabled = on;
         }
 
         void OnPlayClicked()

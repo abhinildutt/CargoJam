@@ -29,6 +29,8 @@ namespace CargoJam.Game.Feel
         float[] cumulative = new float[0];
         int count;
         float start, duration;
+        /// <summary>The clock starts on the first Tick, so a load stall in the frame that began the pan can't skip part of it.</summary>
+        bool clockStarted;
         Vector3 lastPosition;
         Quaternion lastRotation;
         bool active;
@@ -74,6 +76,7 @@ namespace CargoJam.Game.Feel
                 cumulative[i] = cumulative[i - 1] + Mathf.Max(0.5f, Vector3.Distance(positions[i - 1], positions[i]));
 
             start = Time.time;
+            clockStarted = false;
             duration = seconds;
             active = true;
             Write(positions[0], rotations[0]);
@@ -97,6 +100,11 @@ namespace CargoJam.Game.Feel
                 return;
             }
 
+            if (!clockStarted)
+            {
+                clockStarted = true;
+                start = Time.time;
+            }
             float u = (Time.time - start) / duration;
             if (u >= 1f)
             {

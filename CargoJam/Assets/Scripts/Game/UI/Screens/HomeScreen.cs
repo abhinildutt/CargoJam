@@ -126,9 +126,10 @@ namespace CargoJam.Game.UI
             play.Text = $"Level {index + 1}";
             Ui.Show(hardTag, ctx.Controller.IsHardLevel(index));
 
-            int tier = p.StreakTier;
-            Ui.Show(tierChip, tier >= 1);
-            tierLabel.text = UiText.Multiplier(Progression.TierMultiplier(tier));
+            // What the next win pays (the streak counts that win), so the chip never undersells it.
+            float next = p.NextWinMultiplier;
+            Ui.Show(tierChip, next > 1f);
+            tierLabel.text = UiText.Multiplier(next);
 
             var daily = p.DailyStatus();
             bool dailyReady = daily != null && daily.Available;
