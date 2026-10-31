@@ -113,6 +113,9 @@ namespace CargoJam.Core.Tests
             var events = s.Tap(new Cell(1, 0));
             Assert.That(s.Status, Is.EqualTo(GameStatus.Failed));
             Assert.That(events.Last(), Is.InstanceOf<LevelFailed>());
+            Assert.That(((LevelFailed)events.Last()).Reason, Is.EqualTo(FailReason.OutOfSpace));
+            Assert.That(s.FailReason, Is.EqualTo(FailReason.OutOfSpace));
+            Assert.That(s.CanAddHoldingSlot, Is.True, "Continue is offered after running out of space");
         }
 
         [Test]
