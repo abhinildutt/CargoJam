@@ -38,6 +38,18 @@ namespace CargoJam.Game.Feel
         Stamp,
         /// <summary>Distant rumble after a storm's lightning flash.</summary>
         Thunder,
+        /// <summary>A layer of ice cracking off a frozen crate (pitched up as the ice thins).</summary>
+        IceCrack,
+        /// <summary>The last layer of ice bursting off.</summary>
+        IceShatter,
+        /// <summary>An express parcel's countdown ticking (pitched up as it runs out).</summary>
+        ExpressTick,
+        /// <summary>The Crane cutting a strap: a taut band snapping.</summary>
+        StrapSnap,
+        /// <summary>A customs gate's counter clacking down one load.</summary>
+        GateTick,
+        /// <summary>A customs gate's boom swinging up, with a bright ding.</summary>
+        GateOpen,
     }
 
     /// <summary>Plays one-shot effects from a small pool of sources so overlapping sounds don't cut each other off.</summary>

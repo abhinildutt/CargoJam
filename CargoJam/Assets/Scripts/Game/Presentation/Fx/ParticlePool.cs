@@ -45,6 +45,16 @@ namespace CargoJam.Game.Presentation.Fx
             Life = 0.55f, LifeJitter = 0.2f, Size = new Vector3(0.07f, 0.07f, 0.16f), Grow = 0.4f, Spin = 720f,
         };
 
+        /// <summary>
+        /// Thin flat slivers of ice flung up and out of a cracking collar, tumbling as they fall back
+        /// and shrinking away (they melt rather than pile up).
+        /// </summary>
+        public static BurstSpec IceShards(int count) => new BurstSpec
+        {
+            Count = count, Radius = 0.3f, SpeedMin = 1.8f, SpeedMax = 4f, Up = 2.4f, Flatten = 0.3f, Gravity = 12f,
+            Drag = 1.4f, Life = 0.6f, LifeJitter = 0.2f, Size = new Vector3(0.13f, 0.03f, 0.08f), Grow = 0.3f, Spin = 900f,
+        };
+
         /// <summary>Flat paper flakes for celebrations.</summary>
         public static BurstSpec Confetti(int count, float speed) => new BurstSpec
         {
