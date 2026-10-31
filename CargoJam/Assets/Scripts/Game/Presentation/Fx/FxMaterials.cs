@@ -1,3 +1,4 @@
+using CargoJam.Game.UI;
 using UnityEngine;
 
 namespace CargoJam.Game.Presentation.Fx
@@ -22,18 +23,28 @@ namespace CargoJam.Game.Presentation.Fx
         /// <summary>White, glint and gold: the default sparkle palette.</summary>
         public Material[] SparklePalette { get; }
 
+        /// <summary>Win confetti in the v3 reward palette: gold, gold-deep, cream and the primary green.</summary>
+        public Material[] ConfettiPalette { get; }
+
+        readonly Material baseMaterial;
+
         public FxMaterials()
         {
-            var baseMaterial = Resources.Load<Material>("Materials/Base");
-            White = Make(baseMaterial, new Color(1f, 1f, 0.97f));
-            Glint = Make(baseMaterial, new Color(1f, 0.95f, 0.62f));
-            Gold = Make(baseMaterial, new Color(1f, 0.78f, 0.22f));
-            Dust = Make(baseMaterial, new Color(0.86f, 0.80f, 0.70f));
-            PadGlow = Make(baseMaterial, new Color(1f, 0.97f, 0.80f));
+            baseMaterial = Resources.Load<Material>("Materials/Base");
+            White = Make(new Color(1f, 1f, 0.97f));
+            Glint = Make(new Color(1f, 0.95f, 0.62f));
+            Gold = Make(new Color(1f, 0.78f, 0.22f));
+            Dust = Make(new Color(0.86f, 0.80f, 0.70f));
+            PadGlow = Make(new Color(1f, 0.97f, 0.80f));
             SparklePalette = new[] { White, Glint, Gold };
+            ConfettiPalette = new[]
+            {
+                Make(UiPalette.Gold), Make(UiPalette.GoldDeep), Make(UiPalette.Surface), Make(UiPalette.Primary),
+            };
         }
 
-        static Material Make(Material baseMaterial, Color c)
+        /// <summary>A new opaque material in <paramref name="c"/> from the shared base (for pooled FX).</summary>
+        public Material Make(Color c)
         {
             var m = baseMaterial != null ? new Material(baseMaterial) : new Material(Shader.Find("Universal Render Pipeline/Lit"));
             m.SetColor("_BaseColor", c);
