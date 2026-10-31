@@ -5,135 +5,136 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// The home screen (main menu) over the living depot backdrop: the CARGO JAM logo, route and
-    /// progress, the pulsing "Level N" button (with HARD badge), the streak flame, the chest bar, the
-    /// daily reward button and settings.
+    /// The home screen (design v3): the live 3D diorama of the current destination fills the screen;
+    /// over it sit a quiet settings button (top-left), the coin pill (top-right, global), a left-edge
+    /// column of Daily and Chest icons that only appear while claimable, and the bottom block:
+    /// destination caption and name, the journey strip (opens the Journey screen) and the Level N
+    /// button with the streak tier chip. The Level button's slow breathe is the screen's one idle loop.
     /// </summary>
     public sealed class HomeScreen
     {
+        /// <summary>Fallback height of the bottom block (panel units) before the first layout.</summary>
+        public const float BottomBlockHeight = 640f;
+
         readonly UiContext ctx;
-        readonly VisualElement scrim;
+        readonly VisualElement root;
+        readonly GradientFill shade;
         readonly VisualElement topRow;
-        readonly VisualElement header;
-        readonly Logo logo;
-        readonly VisualElement chestCard;
+        readonly VisualElement edge;
+        readonly CandyButton dailyButton;
+        readonly CandyButton chestButton;
+        readonly VisualElement bottom;
+        readonly Label caption;
+        readonly Label destination;
+        readonly JourneyStrip strip;
         readonly VisualElement playWrap;
         readonly CandyButton play;
-        readonly VisualElement playHard;
-        readonly Label routeLabel;
-        readonly ProgressBar routeBar;
-        readonly VisualElement streakChip;
-        readonly Label streakLabel;
-        readonly Label streakMultiplier;
-        readonly ProgressBar chestBar;
-        readonly Label chestHint;
-        readonly Icon chestIcon;
-        readonly VisualElement dailyDot;
-        UiTween pulse, dotPulse;
+        readonly VisualElement tierChip;
+        readonly Label tierLabel;
+        readonly VisualElement hardTag;
+        UiTween breathe;
         bool visible;
 
         public event Action PlayClicked;
         public event Action SettingsClicked;
         public event Action DailyClicked;
+        public event Action ChestClicked;
+        public event Action JourneyClicked;
+        /// <summary>The bottom block was laid out (the diorama framing may change).</summary>
+        public event Action LayoutChanged;
 
         public HomeScreen(UiContext ctx)
         {
             this.ctx = ctx;
-            scrim = Ui.El(ctx.HomeLayer, "cj-fill cj-home__scrim", true);
-            var safe = Ui.El(ctx.HomeLayer, "cj-fill cj-safe cj-home");
+            root = Ui.El(ctx.HomeLayer, "cj-fill");
 
-            // Top row: settings, streak, daily (coins live in the top layer at the right).
+            // A soft fade to dark behind the bottom block keeps white text legible over any scenery.
+            shade = new GradientFill(UiPalette.ScrimClear, UiPalette.A(UiPalette.Scrim, 0.78f));
+            shade.AddToClassList("cj-home__shade");
+            root.Add(shade);
+
+            var safe = Ui.El(root, "cj-fill cj-safe cj-home");
+
             topRow = Ui.El(safe, "cj-home__top");
             topRow.style.height = LevelHud.TopBarHeight;
-            var gear = new CandyButton(null, "cj-btn--secondary cj-btn--round-m", IconKind.Gear);
+            var gear = new CandyButton(null, "cj-btn--glass cj-btn--icon cj-home__settings", IconKind.Gear);
             gear.Clicked += () => SettingsClicked?.Invoke();
             topRow.Add(gear);
 
-            streakChip = Ui.El(topRow, "cj-chip");
-            Ui.Icon(streakChip, IconKind.Flame, "cj-chip__icon");
-            streakLabel = Ui.Text(streakChip, "0", "cj-chip__label cj-txt");
-            streakMultiplier = Ui.Text(streakChip, "", "cj-chip__tag cj-txt");
-
-            var dailyWrap = Ui.El(topRow, "cj-home__daily");
-            var daily = new CandyButton(null, "cj-btn--coin cj-btn--round-m", IconKind.Gift);
-            daily.Clicked += () => DailyClicked?.Invoke();
-            dailyWrap.Add(daily);
-            dailyDot = Ui.El(daily, "cj-dot");
-            Ui.El(topRow, "cj-grow");
-            Ui.El(topRow, "cj-hud__coin-space");
-
-            header = Ui.El(safe, "cj-home__header");
-            logo = new Logo();
-            header.Add(logo);
-            routeLabel = Ui.Text(header, "Route 1 · Harbor", "cj-home__route cj-txt");
-            routeBar = new ProgressBar("cj-bar--route");
-            header.Add(routeBar);
+            edge = Ui.El(safe, "cj-home__edge");
+            dailyButton = EdgeButton(IconKind.Gift, "cj-home__daily", () => DailyClicked?.Invoke());
+            chestButton = EdgeButton(IconKind.Chest, "cj-home__chest", () => ChestClicked?.Invoke());
 
             Ui.El(safe, "cj-grow");
 
-            chestCard = Ui.El(safe, "cj-card cj-home__chest");
-            chestIcon = Ui.Icon(chestCard, IconKind.Chest, "cj-home__chest-icon");
-            var chestCol = Ui.El(chestCard, "cj-home__chest-col");
-            Ui.Text(chestCol, "Win levels to fill the chest!", "cj-home__chest-title");
-            chestBar = new ProgressBar("cj-bar--chest");
-            chestCol.Add(chestBar);
-            chestHint = Ui.Text(chestCol, "", "cj-home__chest-hint");
+            bottom = Ui.El(safe, "cj-home__bottom");
+            caption = Ui.Text(bottom, "", "cj-home__caption cj-t-label cj-on-glass-2");
+            destination = Ui.Text(bottom, "", "cj-home__name cj-t-display cj-on-glass");
+            strip = new JourneyStrip();
+            strip.Button.AddToClassList("cj-home__strip");
+            strip.Button.Clicked += () => JourneyClicked?.Invoke();
+            bottom.Add(strip.Button);
 
-            playWrap = Ui.El(safe, "cj-home__play");
-            play = new CandyButton("Level 1", "cj-btn--primary cj-btn--huge");
+            playWrap = Ui.El(bottom, "cj-home__play");
+            play = new CandyButton("Level 1", "cj-btn--primary cj-btn--l cj-btn--wide cj-btn--raised cj-home__level");
             play.Clicked += () => PlayClicked?.Invoke();
             playWrap.Add(play);
-            playHard = Ui.El(play, "cj-hard-badge cj-hard-badge--play");
-            Ui.Text(playHard, "HARD", "cj-hard-badge__label cj-txt");
+            hardTag = Ui.El(play, "cj-tag cj-home__hard");
+            Ui.Text(hardTag, "HARD", "cj-tag__label");
+            tierChip = Ui.El(play, "cj-tier cj-tier--on-primary cj-home__tier");
+            Ui.Icon(tierChip, IconKind.Flame, "cj-tier__icon");
+            tierLabel = Ui.Text(tierChip, "×1.5", "cj-tier__label");
 
+            bottom.RegisterCallback<GeometryChangedEvent>(_ => LayoutChanged?.Invoke());
             Ui.Show(ctx.HomeLayer, false);
+        }
+
+        CandyButton EdgeButton(IconKind icon, string cls, Action clicked)
+        {
+            var button = new CandyButton(null, "cj-btn--glass cj-btn--tile " + cls, icon);
+            Ui.El(button, "cj-dot");
+            button.Clicked += clicked;
+            edge.Add(button);
+            return button;
         }
 
         public bool Visible => visible;
 
-        /// <summary>Re-reads progress, streak, chest and daily state.</summary>
+        /// <summary>
+        /// Top of the bottom block in panel units from the top of the panel (where the diorama's
+        /// frame ends), or a fallback before the first layout.
+        /// </summary>
+        public float BottomBlockTop
+        {
+            get
+            {
+                // From the layout height, not worldBound, so a slide-in transform doesn't skew it.
+                float h = bottom.layout.height;
+                if (float.IsNaN(h) || h <= 1f) h = BottomBlockHeight;
+                return ctx.Space.PanelSize.y - ctx.Space.SafeInsets.w - h;
+            }
+        }
+
+        /// <summary>Re-reads destination, progress, streak tier, and what is claimable.</summary>
         public void Refresh()
         {
             var p = ctx.Progression;
             int index = p.LevelIndex;
-            routeLabel.text = UiText.RouteName(index);
-            routeBar.Set(UiText.RouteStep(index), UiText.LevelsPerRoute, visible);
+            caption.text = UiText.StopCaption(index);
+            destination.text = Journey.NameOf(Journey.StopFor(index));
+            strip.Set(index);
             play.Text = $"Level {index + 1}";
-            Ui.Show(playHard, ctx.Controller.IsHardLevel(index));
+            Ui.Show(hardTag, ctx.Controller.IsHardLevel(index));
 
-            streakLabel.text = p.WinStreak.ToString();
-            streakChip.EnableInClassList("cj-chip--cold", p.WinStreak <= 0);
-            // What the next win will pay, so the chip is a promise rather than a receipt.
-            float m = p.NextWinMultiplier;
-            streakMultiplier.text = m > 1.01f ? UiText.Multiplier(m) + " coins" : "";
-            Ui.Show(streakMultiplier, m > 1.01f);
+            int tier = p.StreakTier;
+            Ui.Show(tierChip, tier >= 1);
+            tierLabel.text = UiText.Multiplier(Progression.TierMultiplier(tier));
 
-            int chest = Math.Min(p.ChestProgress, EconomyConfig.ChestEvery);
-            chestBar.Set(chest, EconomyConfig.ChestEvery, visible);
-            bool big = p.NextChestIsBig;
-            chestIcon.EnableInClassList("cj-home__chest-icon--big", big);
-            chestHint.text = p.ChestReady ? "Chest ready! Win to open it."
-                : big ? "Next one is a BIG chest!"
-                : $"{EconomyConfig.ChestEvery - chest} more wins to a chest";
-
-            SetDailyDot(DailyAvailable());
-        }
-
-        bool DailyAvailable()
-        {
-            var info = ctx.Progression.DailyStatus();
-            return info != null && info.Available;
-        }
-
-        void SetDailyDot(bool on)
-        {
-            Ui.Show(dailyDot, on);
-            if (on && dotPulse == null) dotPulse = Anim.Pulse(dailyDot, 0.2f, 0.8f);
-            if (!on && dotPulse != null)
-            {
-                dotPulse.Cancel();
-                dotPulse = null;
-            }
+            var daily = p.DailyStatus();
+            bool dailyReady = daily != null && daily.Available;
+            Ui.Show(dailyButton, dailyReady);
+            Ui.Show(chestButton, p.ChestReady);
+            Ui.Show(edge, dailyReady || p.ChestReady);
         }
 
         public void Show()
@@ -142,14 +143,15 @@ namespace CargoJam.Game.UI
             if (visible) return;
             visible = true;
             Ui.Show(ctx.HomeLayer, true);
-            Anim.Fade(scrim, 0f, 1f, 0.3f);
-            Anim.SlideIn(topRow, 0f, -120f, 0.4f);
-            Anim.SlideIn(header, 0f, -80f, 0.45f, 0.05f);
-            logo.PlayIntro();
-            Anim.SlideIn(chestCard, 0f, 120f, 0.45f, 0.1f);
-            Anim.PopIn(play, 0.18f, 0.45f);
-            pulse?.Cancel();
-            pulse = Anim.Pulse(playWrap, 0.05f, 1.2f);
+            Anim.Fade(root, 0f, 1f, Anim.Small);
+            Anim.SlideIn(topRow, 0f, -40f, Anim.Panel);
+            Anim.SlideIn(edge, -40f, 0f, Anim.Panel, 0.06f);
+            Anim.SlideIn(bottom, 0f, 80f, Anim.Panel, 0.04f);
+            breathe?.Cancel();
+            breathe = UiTween.Delay(Anim.Panel, () =>
+            {
+                if (visible) breathe = Anim.Breathe(playWrap);
+            });
         }
 
         public void Hide(Action done = null)
@@ -160,18 +162,18 @@ namespace CargoJam.Game.UI
                 return;
             }
             visible = false;
-            pulse?.Cancel();
-            pulse = null;
-            logo.Stop();
-            Anim.Fade(scrim, 1f, 0f, 0.25f);
-            Anim.SlideOut(topRow, 0f, -120f, 0.22f);
-            Anim.SlideOut(header, 0f, -80f, 0.22f);
-            Anim.SlideOut(chestCard, 0f, 160f, 0.22f);
-            Anim.SlideOut(playWrap, 0f, 200f, 0.25f, () =>
+            breathe?.Cancel();
+            breathe = null;
+            Anim.SetScale(playWrap, 1f);
+            Anim.SlideOut(bottom, 0f, 60f, Anim.Small);
+            Anim.Fade(root, 1f, 0f, Anim.Small, 0f, () =>
             {
-                Anim.SetTranslate(playWrap, 0f, 0f);
-                Anim.SetOpacity(playWrap, 1f);
-                if (!visible) Ui.Show(ctx.HomeLayer, false);
+                if (!visible)
+                {
+                    Ui.Show(ctx.HomeLayer, false);
+                    Anim.ClearTransform(bottom);
+                    Anim.SetOpacity(bottom, 1f);
+                }
                 done?.Invoke();
             });
         }

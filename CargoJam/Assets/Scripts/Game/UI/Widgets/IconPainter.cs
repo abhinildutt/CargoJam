@@ -6,15 +6,15 @@ namespace CargoJam.Game.UI
     /// <summary>
     /// Draws every <see cref="IconKind"/> into a 100x100 design box scaled to the element. Arcs are
     /// built as polylines so they don't depend on Painter2D's arc-direction conventions.
+    /// Design v3: single-color icons are flat (ink or white, no drop shadow); the multi-color ones
+    /// (coin, chest, flame, gift, star, truck) use the gold and palette tokens from <see cref="UiPalette"/>.
     /// </summary>
     static class IconPainter
     {
-        static readonly Color Shade = new Color(0f, 0f, 0f, 0.22f);
-        static readonly Color Dark = Hex(0x3B2F2A);
-        static readonly Color CoinFace = Hex(0xFFC83D);
-        static readonly Color CoinRim = Hex(0xE09A16);
-        static readonly Color CoinShine = Hex(0xFFE58A);
-        static readonly Color Danger = Hex(0xF2554B);
+        static Color Dark => UiPalette.Ink;
+        static Color CoinFace => UiPalette.Gold;
+        static Color CoinRim => UiPalette.GoldDeep;
+        static Color CoinShine => UiPalette.GoldLight;
 
         /// <summary>Maps design coordinates (0..100) into the element's content rect.</summary>
         readonly struct Frame
@@ -30,7 +30,6 @@ namespace CargoJam.Game.UI
 
             public Vector2 P(float x, float y) => new Vector2(origin.x + x * scale, origin.y + y * scale);
             public float L(float v) => v * scale;
-            public Frame Offset(float dx, float dy) => new Frame(origin + new Vector2(dx, dy) * scale, scale);
         }
 
         delegate void Shape(Painter2D p, Frame f, Color c);
@@ -69,31 +68,30 @@ namespace CargoJam.Game.UI
                 case IconKind.Home: Mono(p, f, tint, House); break;
                 case IconKind.Restart: Mono(p, f, tint, Restart); break;
                 case IconKind.Play: Mono(p, f, tint, PlayTriangle); break;
+                case IconKind.Back: Mono(p, f, tint, (q, g, c) => Chevron(q, g, c, true)); break;
+                case IconKind.ChevronRight: Mono(p, f, tint, (q, g, c) => Chevron(q, g, c, false)); break;
+                case IconKind.Truck: Truck(p, f); break;
+                case IconKind.Map: Mono(p, f, tint, MapPin); break;
             }
         }
 
-        /// <summary>Single-colour icons get a soft drop shade underneath for depth.</summary>
-        static void Mono(Painter2D p, Frame f, Color tint, Shape shape)
-        {
-            shape(p, f.Offset(0f, 4f), Shade);
-            shape(p, f, tint);
-        }
+        /// <summary>Single-colour icons are flat: one fill, no shade.</summary>
+        static void Mono(Painter2D p, Frame f, Color tint, Shape shape) => shape(p, f, tint);
 
         // ---- Coloured icons -----------------------------------------------------------------------
 
         static void Coin(Painter2D p, Frame f)
         {
-            Circle(p, f, 50f, 53f, 45f, CoinRim);
-            Circle(p, f, 50f, 48f, 45f, CoinFace);
-            StrokeCircle(p, f, 50f, 48f, 31f, 6f, CoinRim);
+            Circle(p, f, 50f, 50f, 46f, CoinRim);
+            Circle(p, f, 50f, 46f, 42f, CoinFace);
             // A raised bar in the middle reads as a coin even at small sizes.
-            RoundRect(p, f, 44f, 30f, 12f, 36f, 6f, CoinRim);
-            ArcStroke(p, f, 50f, 48f, 38f, 200f, 260f, 6f, CoinShine);
+            RoundRect(p, f, 42f, 24f, 16f, 44f, 8f, CoinRim);
+            ArcStroke(p, f, 50f, 46f, 32f, 200f, 250f, 6f, CoinShine);
         }
 
         static void Flame(Painter2D p, Frame f)
         {
-            p.fillColor = Hex(0xFF6A1A);
+            p.fillColor = UiPalette.Gold;
             p.BeginPath();
             p.MoveTo(f.P(50f, 3f));
             p.BezierCurveTo(f.P(70f, 28f), f.P(88f, 44f), f.P(86f, 66f));
@@ -105,7 +103,7 @@ namespace CargoJam.Game.UI
             p.ClosePath();
             p.Fill();
 
-            p.fillColor = Hex(0xFFD23D);
+            p.fillColor = UiPalette.GoldLight;
             p.BeginPath();
             p.MoveTo(f.P(50f, 42f));
             p.BezierCurveTo(f.P(60f, 56f), f.P(70f, 64f), f.P(68f, 77f));
@@ -118,15 +116,15 @@ namespace CargoJam.Game.UI
 
         static void Chest(Painter2D p, Frame f, bool open)
         {
-            var wood = Hex(0xB8652F);
-            var woodDark = Hex(0x7E4220);
-            var lid = Hex(0xD27A3C);
+            var wood = UiPalette.Wood;
+            var woodDark = UiPalette.WoodDark;
+            var lid = UiPalette.WoodLight;
             RoundRect(p, f, 8f, 48f, 84f, 46f, 9f, woodDark);
             RoundRect(p, f, 10f, 46f, 80f, 44f, 8f, wood);
             if (open)
             {
                 // Light spilling out of the open chest.
-                RoundRect(p, f, 14f, 38f, 72f, 14f, 6f, Hex(0xFFF0A0));
+                RoundRect(p, f, 14f, 38f, 72f, 14f, 6f, UiPalette.GoldLight);
                 RoundRect(p, f, 6f, 6f, 88f, 26f, 12f, woodDark);
                 RoundRect(p, f, 8f, 4f, 84f, 24f, 12f, lid);
                 RoundRect(p, f, 44f, 4f, 12f, 24f, 2f, CoinFace);
@@ -150,7 +148,7 @@ namespace CargoJam.Game.UI
             // Outline pass first, then the fill pass, so overlapping parts merge into one silhouette.
             for (int pass = 0; pass < 2; pass++)
             {
-                var c = pass == 0 ? Dark : Color.white;
+                var c = pass == 0 ? Dark : UiPalette.Surface;
                 float g = pass == 0 ? 4f : 0f;
                 RoundRect(p, f, 32f - g, 4f - g, 18f + g * 2, 56f + g * 2, 9f + g, c);
                 RoundRect(p, f, 47f - g, 32f - g, 15f + g * 2, 30f + g * 2, 7.5f + g, c);
@@ -163,10 +161,9 @@ namespace CargoJam.Game.UI
 
         static void Gift(Painter2D p, Frame f)
         {
-            var red = Hex(0xF2554B);
-            RoundRect(p, f, 12f, 46f, 76f, 48f, 7f, Hex(0xC23B33));
-            RoundRect(p, f, 14f, 44f, 72f, 46f, 6f, red);
-            RoundRect(p, f, 8f, 30f, 84f, 20f, 6f, Hex(0xFF6E63));
+            RoundRect(p, f, 12f, 46f, 76f, 48f, 7f, UiPalette.GiftWrapDark);
+            RoundRect(p, f, 14f, 44f, 72f, 46f, 6f, UiPalette.GiftWrap);
+            RoundRect(p, f, 8f, 30f, 84f, 20f, 6f, UiPalette.GiftWrap);
             RoundRect(p, f, 43f, 30f, 14f, 60f, 2f, CoinFace);
             Circle(p, f, 37f, 22f, 12f, CoinRim);
             Circle(p, f, 63f, 22f, 12f, CoinRim);
@@ -205,7 +202,7 @@ namespace CargoJam.Game.UI
             {
                 float a0 = (i * 360f / count) * Mathf.Deg2Rad;
                 float a1 = a0 + (360f / count * 0.5f) * Mathf.Deg2Rad;
-                p.fillColor = new Color(tint.r, tint.g, tint.b, tint.a * (i % 2 == 0 ? 0.55f : 0.35f));
+                p.fillColor = UiPalette.A(tint, tint.a * (i % 2 == 0 ? 0.55f : 0.35f));
                 p.BeginPath();
                 p.MoveTo(f.P(50f, 50f));
                 p.LineTo(f.P(50f + Mathf.Cos(a0) * 70f, 50f + Mathf.Sin(a0) * 70f));
@@ -230,7 +227,7 @@ namespace CargoJam.Game.UI
             RoundRect(p, f, 18f, 44f, 64f, 50f, 11f, c);
             if (c.a > 0.5f)
             {
-                var hole = new Color(0f, 0f, 0f, 0.35f);
+                var hole = UiPalette.A(UiPalette.Ink, 0.35f);
                 Circle(p, f, 50f, 63f, 7f, hole);
                 RoundRect(p, f, 46.5f, 63f, 7f, 16f, 3f, hole);
             }
@@ -401,16 +398,71 @@ namespace CargoJam.Game.UI
         static void House(Painter2D p, Frame f, Color c)
         {
             Poly(p, c, f.P(50f, 8f), f.P(94f, 48f), f.P(80f, 48f), f.P(80f, 90f), f.P(20f, 90f), f.P(20f, 48f), f.P(6f, 48f));
-            RoundRect(p, f, 42f, 62f, 16f, 28f, 4f, new Color(0f, 0f, 0f, c.a * 0.3f));
+            RoundRect(p, f, 42f, 62f, 16f, 28f, 4f, UiPalette.A(UiPalette.Ink, c.a * 0.3f));
         }
 
         static void PlayTriangle(Painter2D p, Frame f, Color c) =>
             Poly(p, c, f.P(26f, 12f), f.P(86f, 50f), f.P(26f, 88f));
 
+        static void Chevron(Painter2D p, Frame f, Color c, bool left)
+        {
+            p.strokeColor = c;
+            p.lineWidth = f.L(13f);
+            p.BeginPath();
+            if (left)
+            {
+                p.MoveTo(f.P(62f, 18f));
+                p.LineTo(f.P(30f, 50f));
+                p.LineTo(f.P(62f, 82f));
+            }
+            else
+            {
+                p.MoveTo(f.P(38f, 18f));
+                p.LineTo(f.P(70f, 50f));
+                p.LineTo(f.P(38f, 82f));
+            }
+            p.Stroke();
+        }
+
+        static void MapPin(Painter2D p, Frame f, Color c)
+        {
+            p.fillColor = c;
+            p.BeginPath();
+            p.MoveTo(f.P(50f, 94f));
+            p.BezierCurveTo(f.P(34f, 72f), f.P(16f, 56f), f.P(16f, 38f));
+            p.BezierCurveTo(f.P(16f, 18f), f.P(32f, 4f), f.P(50f, 4f));
+            p.BezierCurveTo(f.P(68f, 4f), f.P(84f, 18f), f.P(84f, 38f));
+            p.BezierCurveTo(f.P(84f, 56f), f.P(66f, 72f), f.P(50f, 94f));
+            p.ClosePath();
+            p.MoveTo(f.P(63f, 38f));
+            ArcPoints(p, f, 50f, 38f, 13f, 0f, 360f, true);
+            p.ClosePath();
+            p.Fill(FillRule.OddEven);
+        }
+
+        /// <summary>A side-on flatbed truck facing right: the journey marker.</summary>
+        static void Truck(Painter2D p, Frame f)
+        {
+            var body = UiPalette.Primary;
+            var cab = UiPalette.PrimaryPress;
+            // Bed with two parcels.
+            RoundRect(p, f, 4f, 52f, 62f, 18f, 4f, body);
+            RoundRect(p, f, 10f, 32f, 22f, 20f, 4f, UiPalette.Gold);
+            RoundRect(p, f, 36f, 32f, 22f, 20f, 4f, UiPalette.GoldDeep);
+            // Cab with a window.
+            RoundRect(p, f, 64f, 30f, 32f, 40f, 8f, cab);
+            RoundRect(p, f, 72f, 36f, 18f, 13f, 3f, UiPalette.Surface);
+            // Wheels.
+            Circle(p, f, 22f, 74f, 11f, UiPalette.Ink);
+            Circle(p, f, 78f, 74f, 11f, UiPalette.Ink);
+            Circle(p, f, 22f, 74f, 4f, UiPalette.Ink3);
+            Circle(p, f, 78f, 74f, 4f, UiPalette.Ink3);
+        }
+
         /// <summary>A red "off" slash across a toggle icon.</summary>
         static void Slash(Painter2D p, Frame f)
         {
-            p.strokeColor = Danger;
+            p.strokeColor = UiPalette.Danger;
             p.lineWidth = f.L(10f);
             Line(p, f, 12f, 12f, 88f, 88f);
         }
@@ -424,16 +476,6 @@ namespace CargoJam.Game.UI
             p.Arc(f.P(cx, cy), f.L(r), new Angle(0f, AngleUnit.Degree), new Angle(360f, AngleUnit.Degree));
             p.ClosePath();
             p.Fill();
-        }
-
-        static void StrokeCircle(Painter2D p, Frame f, float cx, float cy, float r, float width, Color c)
-        {
-            p.strokeColor = c;
-            p.lineWidth = f.L(width);
-            p.BeginPath();
-            ArcPoints(p, f, cx, cy, r, 0f, 360f, true);
-            p.ClosePath();
-            p.Stroke();
         }
 
         static void ArcStroke(Painter2D p, Frame f, float cx, float cy, float r, float a0, float a1, float width, Color c)
@@ -502,7 +544,5 @@ namespace CargoJam.Game.UI
             p.Stroke();
         }
 
-        public static Color Hex(int rgb) =>
-            new Color(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, 1f);
     }
 }
