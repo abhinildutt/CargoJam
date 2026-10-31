@@ -9,7 +9,11 @@ namespace CargoJam.Meta
     [Serializable]
     public class ProfileData
     {
-        public int version = 1;
+        /// <summary>The save format this build writes. v2 added <see cref="postcards"/> and <see cref="lastArrivalShown"/>.</summary>
+        public const int CurrentVersion = 2;
+
+        /// <summary>Save format version; older saves are upgraded by <see cref="ProfileMigration.Upgrade"/>.</summary>
+        public int version = CurrentVersion;
 
         public int coins = EconomyConfig.StartingCoins;
         /// <summary>0-based index of the level to play next.</summary>
