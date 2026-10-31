@@ -28,11 +28,28 @@ namespace CargoJam.Game.Presentation
         /// <summary>Stamp ink: the UI's ink navy, which each color's stamp leans toward.</summary>
         static readonly Color InkBase = new Color(0.10f, 0.13f, 0.19f);
 
-        /// <summary>Texel centers (u) of the 4×1 parcel skin texture: body, tape, stamp ink, label paper.</summary>
-        public const float SkinBodyU = 0.125f;
-        public const float SkinTapeU = 0.375f;
-        public const float SkinSymbolU = 0.625f;
-        public const float SkinLabelU = 0.875f;
+        /// <summary>Express tag card, and the same card on a blocked parcel.</summary>
+        static readonly Color TagCard = new Color(0.99f, 0.99f, 0.97f);
+        static readonly Color TagCardDim = new Color(0.87f, 0.87f, 0.85f);
+        /// <summary>Urgent red ink (express tags at 2 moves or fewer).</summary>
+        static readonly Color AlertInk = new Color(0.86f, 0.13f, 0.11f);
+        /// <summary>Bare steel (buckles, gate posts) and dark strap webbing.</summary>
+        static readonly Color SkinSteel = new Color(0.70f, 0.72f, 0.76f);
+        static readonly Color SkinWebbing = new Color(0.17f, 0.18f, 0.21f);
+
+        /// <summary>
+        /// Texel centers (u) of the 8×1 parcel skin texture: body, tape, stamp ink, label paper, then
+        /// the cargo columns, which are the same in every color's skin (alert ink, tag card, steel,
+        /// webbing), so express tags, straps and gates draw with the parcel skin's material.
+        /// </summary>
+        public const float SkinBodyU = 0.0625f;
+        public const float SkinTapeU = 0.1875f;
+        public const float SkinSymbolU = 0.3125f;
+        public const float SkinLabelU = 0.4375f;
+        public const float SkinAlertU = 0.5625f;
+        public const float SkinTagU = 0.6875f;
+        public const float SkinSteelU = 0.8125f;
+        public const float SkinWebbingU = 0.9375f;
 
         const string CarKitColormap = "Env/Cars/Textures/colormap";
 
@@ -62,6 +79,8 @@ namespace CargoJam.Game.Presentation
         public Material TarpDim { get; }
         public Material Gold { get; }
         public Material Steel { get; }
+        /// <summary>The ice collar on frozen crates: opaque, pale cyan-white and smooth.</summary>
+        public Material Ice { get; }
 
         /// <summary>The concrete slab under the yard and dock.</summary>
         public Material Apron { get; }
@@ -90,8 +109,8 @@ namespace CargoJam.Game.Presentation
                 bright[i] = Make(Swatches[i]);
                 dim[i] = Make(Dim(Swatches[i]));
                 truckBody[i] = Make(Color.Lerp(Swatches[i], Color.white, 0.25f));
-                skinBright[i] = MakeSkin(Swatches[i], InkFor(i), LabelPaper, $"Parcel {i}");
-                skinDim[i] = MakeSkin(Dim(Swatches[i]), InkFor(i), LabelPaperDim, $"Parcel {i} dim");
+                skinBright[i] = MakeSkin(Swatches[i], InkFor(i), LabelPaper, TagCard, $"Parcel {i}");
+                skinDim[i] = MakeSkin(Dim(Swatches[i]), InkFor(i), LabelPaperDim, TagCardDim, $"Parcel {i} dim");
                 labelInk[i] = Make(InkFor(i));
             }
             Label = Make(LabelPaper);
@@ -111,6 +130,9 @@ namespace CargoJam.Game.Presentation
             TarpDim = Make(new Color(0.45f, 0.46f, 0.5f));
             Gold = Make(new Color(1f, 0.78f, 0.22f));
             Steel = Make(new Color(0.7f, 0.72f, 0.76f));
+            Ice = Make(new Color(0.80f, 0.93f, 0.98f));
+            Ice.name = "Ice";
+            Ice.SetFloat("_Smoothness", 0.9f);
 
             Apron = Make(new Color(0.70f, 0.69f, 0.66f));
             LaneMark = Make(new Color(0.93f, 0.91f, 0.84f));
@@ -123,8 +145,9 @@ namespace CargoJam.Game.Presentation
         public Material Parcel(int color, bool free) => free ? bright[color] : dim[color];
 
         /// <summary>
-        /// The parcel box's material: a tiny texture holding the body color, the tape stripe and the
-        /// symbol color, so a parcel with its symbol is one draw call (see <see cref="ParcelView"/>).
+        /// The parcel box's material: a tiny texture holding the body color, the tape stripe, the
+        /// symbol color and the cargo columns, so a parcel with its symbol (and an express tag) is one
+        /// draw call (see <see cref="ParcelView"/>). Straps and gates draw with it too.
         /// </summary>
         public Material ParcelSkin(int color, bool free) => free ? skinBright[color] : skinDim[color];
 
@@ -260,20 +283,23 @@ namespace CargoJam.Game.Presentation
             return m;
         }
 
-        /// <summary>Body, tape, stamp ink and label paper in a 4×1 point-filtered texture under a white base color.</summary>
-        Material MakeSkin(Color body, Color ink, Color paper, string name)
+        /// <summary>
+        /// Body, tape, stamp ink, label paper and the shared cargo columns (see <see cref="SkinBodyU"/>)
+        /// in an 8×1 point-filtered texture under a white base color.
+        /// </summary>
+        Material MakeSkin(Color body, Color ink, Color paper, Color tag, string name)
         {
             // Packing tape: a slightly darker, slightly greyer band of the body color.
             float luma = 0.299f * body.r + 0.587f * body.g + 0.114f * body.b;
             var tape = Color.Lerp(body * 0.8f, new Color(luma, luma, luma) * 0.8f, 0.2f);
             tape.a = 1f;
-            var tex = new Texture2D(4, 1, TextureFormat.RGBA32, false)
+            var tex = new Texture2D(8, 1, TextureFormat.RGBA32, false)
             {
                 name = name,
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp,
             };
-            tex.SetPixels(new[] { body, tape, ink, paper });
+            tex.SetPixels(new[] { body, tape, ink, paper, AlertInk, tag, SkinSteel, SkinWebbing });
             tex.Apply(false, true);
             var m = Make(Color.white);
             m.name = name;
