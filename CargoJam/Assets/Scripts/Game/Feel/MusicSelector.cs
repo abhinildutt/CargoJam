@@ -83,7 +83,7 @@ namespace CargoJam.Game.Feel
         /// <summary>
         /// The cue to play now and the one to prefetch. In a level the prefetch is the next level's cue
         /// (<see cref="LevelViews.NextHard"/> says whether it is HARD); on the menu it is the cue of
-        /// the level the player is about to start (finales are always HARD).
+        /// the level the player is about to start (<see cref="EnvironmentInfo.Hard"/>).
         /// </summary>
         public static void Choose(in EnvironmentInfo info, LevelViews views, out MusicCue play, out MusicCue prefetch)
         {
@@ -95,7 +95,7 @@ namespace CargoJam.Game.Feel
             else
             {
                 play = ForMenu(info.LevelIndex);
-                prefetch = ForLevel(info.LevelIndex, Journey.MoodFor(info.LevelIndex) == Mood.Storm);
+                prefetch = ForLevel(info.LevelIndex, info.Hard);
             }
         }
     }

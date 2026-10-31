@@ -268,6 +268,7 @@ namespace CargoJam.Game
             Scenery.Build(levelRoot, layout, materials, Bollards(level));
             var env = environment.ShowLevel(levelIndex, layout);
             if (env.Arrival && ShouldRevealArrival != null) env.Arrival = ShouldRevealArrival(levelIndex);
+            env.Hard = level.Hard;
             EnvironmentShown = env;
             dock = DockView.Create(levelRoot, layout, materials);
             foreach (var p in session.Board.Parcels)
@@ -343,6 +344,8 @@ namespace CargoJam.Game
             menu = MenuDiorama.Create(materials);
             var env = environment.ShowMenu(levelIndex);
             env.Arrival = false;
+            // The level Play starts next: the music prefetches its cue (Drive or Storm when HARD).
+            env.Hard = levels.Count > 0 && IsHardLevel(levelIndex);
             EnvironmentShown = env;
             fx?.EnvironmentChanged(env);
             FitCamera();
