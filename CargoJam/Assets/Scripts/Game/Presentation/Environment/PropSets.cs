@@ -63,9 +63,9 @@ namespace CargoJam.Game.Presentation
             ShoreOffset = 3.6f,
             LampSpacing = 4.5f,
             Parked = new[] { "Cars/delivery", "Cars/van", "Cars/truck" }, ParkedCount = 2,
-            Mid = new[] { P("Cars/box", 1.1f, 1.3f, 2f), P("Nature/plant_bushLarge", 1.6f, 2f) }, MidCount = 4,
+            Mid = new[] { P("Nature/plant_bushDetailed", 1.6f, 2f), P("Nature/plant_bushLarge", 1.6f, 2f) }, MidCount = 4,
             Far = new Pick[0], FarCount = 0,
-            Gutter = new[] { P("Cars/box", 0.8f, 1f, 2f), P("Cars/cone", 0.9f, 1f), P("Nature/plant_bush", 1.6f, 2f) }, GutterCount = 6,
+            Gutter = new[] { P("Cars/cone", 0.9f, 1f), P("Nature/plant_bush", 1.6f, 2f) }, GutterCount = 6,
             Front = new[] { P("Nature/rock_smallA", 1.4f, 2f), P("Nature/grass", 1.4f, 1.8f, 2f), P("Cars/cone", 0.7f, 0.8f) }, FrontCount = 8,
         };
 
@@ -201,7 +201,8 @@ namespace CargoJam.Game.Presentation
                 P("Nature/rock_smallA", 1.4f, 2f, 2f), P("Nature/rock_smallFlatB", 1.6f, 2.2f),
                 P("Nature/grass", 1.3f, 1.6f),
             }, FrontCount = 9,
-            Snow = true,
+            // Falling snow comes from the FX layer's ambient life (AmbientLife), which keeps it off the board.
+            Snow = false,
         };
 
         public static PropSet For(string id) => id switch
@@ -261,10 +262,8 @@ namespace CargoJam.Game.Presentation
             d.Scatter(set.Gutter, perSide, -s.GutterX - 2.4f, -s.GutterX, gz0, gz1);
             d.Scatter(set.Gutter, set.GutterCount - perSide, s.GutterX, s.GutterX + 2.4f, gz0, gz1);
 
-            // Foreground: low detail, no shadows (cheap, and nothing to shade under the booster bar).
-            float fz1 = s.FrontZ, fz0 = s.FrontZ - 6f;
-            float fx = s.Content.max.x + 1.2f;
-            d.Scatter(set.Front, set.FrontCount, -fx, fx, fz0, fz1, 0.25f, shadows: false);
+            // No foreground props: the booster bar (levels) and the bottom block (Home) sit over that
+            // band, and anything there reads as clutter behind the UI. The ground plane carries it.
         }
     }
 }

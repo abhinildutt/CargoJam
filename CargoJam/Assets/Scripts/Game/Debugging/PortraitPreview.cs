@@ -27,6 +27,15 @@ namespace CargoJam.Game.Debugging
 
         public static bool Active { get; private set; }
 
+        // Domain reload is off for Play mode, so statics survive between sessions: start each one clean.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics()
+        {
+            Active = false;
+            camera = null;
+            panels.Clear();
+        }
+
         public static void Begin()
         {
             if (Active) return;
@@ -122,7 +131,7 @@ namespace CargoJam.Game.Debugging
 
         static IEnumerable<UI.CandyButton> VisibleButtons()
         {
-            foreach (var doc in Object.FindObjectsByType<UIDocument>(FindObjectsSortMode.None))
+            foreach (var doc in Object.FindObjectsByType<UIDocument>())
             {
                 if (doc.rootVisualElement == null) continue;
                 foreach (var button in doc.rootVisualElement.Query<UI.CandyButton>().ToList())

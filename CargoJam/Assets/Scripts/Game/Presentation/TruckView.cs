@@ -139,7 +139,9 @@ namespace CargoJam.Game.Presentation
         {
             get
             {
-                if (!modelTried)
+                // Rebake when the meshes were destroyed: with domain reload off, statics outlive the
+                // play session that made them.
+                if (!modelTried || (model != null && model.Body == null))
                 {
                     modelTried = true;
                     model = Bake();
