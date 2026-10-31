@@ -31,15 +31,23 @@ namespace CargoJam.Game.Presentation.Fx
 
         static readonly Vector3 SquashAmount = new Vector3(0.16f, -0.24f, 0.16f);
 
+        /// <summary>Parked out of shot while a delayed intro waits (above the camera, far up the road).</summary>
+        const float ParkHeight = 60f;
+        const float ParkDistance = 40f;
+
         /// <summary>
         /// Plays the intro. <paramref name="rowLanded"/> gets (row, rowCount) as each row touches down;
-        /// <paramref name="leadTruckParked"/> fires when the first truck reaches the bay.
+        /// <paramref name="leadTruckParked"/> fires when the first truck reaches the bay. With a
+        /// <paramref name="delay"/> (the arrival reveal pans the camera first) the board waits out of
+        /// shot and drops in as the camera settles.
         /// </summary>
-        /// <returns>Seconds until input should be allowed.</returns>
-        public static float Play(LevelViews views, Action<int, int> rowLanded, Action<TruckView> leadTruckParked)
+        /// <returns>Seconds until input should be allowed, including <paramref name="delay"/>.</returns>
+        public static float Play(LevelViews views, Action<int, int> rowLanded, Action<TruckView> leadTruckParked,
+            float delay = 0f)
         {
             var tw = views.Tweener;
-            float now = tw.Now;
+            delay = Mathf.Max(0f, delay);
+            float now = tw.Now + delay;
 
             int rows = 0;
             foreach (var pv in views.Parcels) rows = Mathf.Max(rows, pv.Parcel.Cell.Y + 1);
@@ -49,7 +57,7 @@ namespace CargoJam.Game.Presentation.Fx
             {
                 // A hair of per-parcel jitter so a row doesn't land as one slab.
                 float start = now + DropStart + pv.Parcel.Cell.Y * stagger + UnityEngine.Random.Range(0f, 0.012f);
-                Drop(tw, pv, start);
+                Drop(tw, pv, start, delay > 0f);
             }
             if (rowLanded != null)
             {
@@ -63,7 +71,7 @@ namespace CargoJam.Game.Presentation.Fx
             for (int i = 0; i < views.Trucks.Count; i++)
             {
                 var tv = views.Trucks[i];
-                float arrive = RollIn(tw, tv, now + i * TruckStagger);
+                float arrive = RollIn(tw, tv, now + i * TruckStagger, delay > 0f);
                 // The controller schedules loads and queue shifts after these; keep them honest.
                 tv.MoveFreeAt = Mathf.Max(tv.MoveFreeAt, arrive);
                 if (i == 0)
@@ -78,15 +86,15 @@ namespace CargoJam.Game.Presentation.Fx
                 for (int slot = 0; slot < dock.SlotCount; slot++)
                     dock.PopIn(tw, now + PadStart + slot * PadStagger, slot);
 
-            return InputDelay;
+            return delay + InputDelay;
         }
 
-        static void Drop(Tweener tw, ParcelView pv, float start)
+        static void Drop(Tweener tw, ParcelView pv, float start, bool park)
         {
             var tr = pv.transform;
             var rest = tr.position;
             var from = rest + Vector3.up * DropHeight;
-            tr.position = from;
+            tr.position = park ? rest + Vector3.up * ParkHeight : from;
             // Every step checks InYard: if the parcel is tapped mid-drop the controller owns it from then on.
             tw.Run(start, DropTime,
                 t => { if (pv && pv.InYard) tr.position = Vector3.LerpUnclamped(from, rest, Ease.InCubic(t)); },
@@ -115,12 +123,12 @@ namespace CargoJam.Game.Presentation.Fx
                 () => { if (pv && pv.InYard) tr.localScale = rest; });
         }
 
-        static float RollIn(Tweener tw, TruckView tv, float start)
+        static float RollIn(Tweener tw, TruckView tv, float start, bool park)
         {
             var tr = tv.transform;
             var rest = tr.position;
             var from = rest + Vector3.left * TruckOffset;
-            tr.position = from;
+            tr.position = park ? rest + Vector3.left * ParkDistance : from;
             float arrive = start + TruckTime;
             tw.Run(start, TruckTime,
                 t => { if (tr) tr.position = Vector3.LerpUnclamped(from, rest, SoftBack(t)); },
