@@ -1,0 +1,26 @@
+{
+  "id": 63,
+  "hard": false,
+  "holdingSlots": 5,
+  "truckCapacity": 3,
+  "trucks": "OOGPYGYRPYGBRGYPB",
+  "rows": [
+    "OOGPORO",
+    "YYOPYPO",
+    "BYGGYGG",
+    "GGYB..P",
+    "BPGYRGY",
+    ".R.YGYP",
+    "RR.GGRP",
+    "YBBPYPB"
+  ],
+  "frost": [
+    { "x": 5, "y": 2, "layers": 1 },
+    { "x": 1, "y": 4, "layers": 2 },
+    { "x": 2, "y": 7, "layers": 2 }
+  ],
+  "straps": [
+    { "x": 6, "y": 5, "x2": 6, "y2": 6 },
+    { "x": 1, "y": 5, "x2": 1, "y2": 6 }
+  ]
+}

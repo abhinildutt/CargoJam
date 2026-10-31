@@ -1,0 +1,25 @@
+{
+  "id": 73,
+  "hard": false,
+  "holdingSlots": 5,
+  "truckCapacity": 3,
+  "trucks": "YGYRBPORYGPOGBYGP",
+  "rows": [
+    "OOYYBPR",
+    "GBGYYYB",
+    "OYGRB.Y",
+    "Y..PRRG",
+    ".OPPGGG",
+    "RRGYGPY",
+    "OOBPBG.",
+    "YYPPGPG"
+  ],
+  "frost": [
+    { "x": 0, "y": 0, "layers": 1 },
+    { "x": 6, "y": 1, "layers": 1 },
+    { "x": 6, "y": 3, "layers": 1 }
+  ],
+  "express": [
+    { "x": 1, "y": 1, "taps": 15 }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "id": 88,
+  "hard": false,
+  "holdingSlots": 5,
+  "truckCapacity": 3,
+  "trucks": "GPYGPGBRYBGPBYOBR",
+  "rows": [
+    "RGGYGBP",
+    "pYGPgYY",
+    "BrBY.GP",
+    "YGGYPB.",
+    "BpPGGRO",
+    "B.G.BRP",
+    "OBRGYY.",
+    "RBPBBbO"
+  ],
+  "straps": [
+    { "x": 3, "y": 4, "x2": 4, "y2": 4 },
+    { "x": 3, "y": 7, "x2": 4, "y2": 7 }
+  ]
+}

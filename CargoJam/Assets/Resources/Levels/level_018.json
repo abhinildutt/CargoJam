@@ -3,13 +3,16 @@
   "hard": false,
   "holdingSlots": 5,
   "truckCapacity": 3,
-  "trucks": "RPOPORYOYPR",
+  "trucks": "GPGPGPOYGPG",
   "rows": [
-    "PPOPOR",
-    ".OpPOR",
-    "RORYYY",
-    "RRPYoP",
-    ".OYORR",
-    "POY.PR"
+    "GPPGPG",
+    "GP.GGP",
+    "PYP.GG",
+    "YOPGGP",
+    "G.PPGG",
+    "YPOOGG"
+  ],
+  "express": [
+    { "x": 2, "y": 0, "taps": 11 }
   ]
 }

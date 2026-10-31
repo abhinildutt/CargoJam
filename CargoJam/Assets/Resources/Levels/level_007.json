@@ -3,12 +3,16 @@
   "hard": false,
   "holdingSlots": 5,
   "truckCapacity": 3,
-  "trucks": "RPBPBPR",
+  "trucks": "RYBYRBRB",
   "rows": [
-    "BBRBP",
-    "PPRPR",
-    "PPB.B",
-    ".RBP.",
-    "RPPR."
+    "RRYYB",
+    "RYBBY",
+    "RRYRY",
+    "BBB.R",
+    "RRBBB"
+  ],
+  "frost": [
+    { "x": 1, "y": 1, "layers": 1 },
+    { "x": 4, "y": 1, "layers": 1 }
   ]
 }

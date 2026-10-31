@@ -1,0 +1,24 @@
+{
+  "id": 92,
+  "hard": false,
+  "holdingSlots": 5,
+  "truckCapacity": 3,
+  "trucks": "PYBPYBPGOGR",
+  "rows": [
+    "YPBYPP",
+    "BPYPYO",
+    "BYPBP.",
+    "#####+",
+    "ROGGPB",
+    "..GGBY",
+    "GRPROG"
+  ],
+  "frost": [
+    { "x": 1, "y": 0, "layers": 2 },
+    { "x": 3, "y": 2, "layers": 1 },
+    { "x": 4, "y": 2, "layers": 2 }
+  ],
+  "gates": [
+    { "x": 5, "y": 3, "color": "P", "count": 6 }
+  ]
+}
