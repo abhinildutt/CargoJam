@@ -18,7 +18,6 @@ import re
 import subprocess
 import sys
 
-MAIN_PROJECT = "/Users/abhinildutt/Desktop/iOS game dev/CargoJam"
 UNITY = "/Applications/Unity/Hub/Editor/6000.6.7f1/Unity.app/Contents"
 DOTNET = UNITY + "/Resources/Scripting/DotNetSdk/dotnet"
 NUNIT = UNITY + "/Resources/PackageManager/BuiltInPackages/com.unity.ext.nunit/net472/unity-custom/nunit.framework.dll"
@@ -28,6 +27,18 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 PROJECT = os.path.join(REPO, "CargoJam")
 OUT = os.path.join(REPO, "tools", ".out")
+
+
+def main_project():
+    """The main checkout's Unity project. Worktrees share its .git dir, so ask git where that is."""
+    r = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                       cwd=HERE, capture_output=True, text=True)
+    if r.returncode != 0:
+        return PROJECT
+    return os.path.join(os.path.dirname(r.stdout.strip()), "CargoJam")
+
+
+MAIN_PROJECT = main_project()
 
 
 def template(assembly):
