@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using CargoJam.Core;
 using CargoJam.Meta;
 using UnityEngine;
 
@@ -47,7 +48,8 @@ namespace CargoJam.Game.Meta
     /// <item><c>session_start</c> [coins, level, login_streak]: once per launch.</item>
     /// <item><c>level_start</c> [level, hard, attempt, stop, mood]: <see cref="LogLevelStart"/> fills stop and mood.</item>
     /// <item><c>level_complete</c> [level, hard, coins, streak, moves, seconds]</item>
-    /// <item><c>level_fail</c> [level, parcels_left, continues_used]: the dock filled up.</item>
+    /// <item><c>level_fail</c> [level, parcels_left, continues_used, reason]: <see cref="LogLevelFail"/> words the reason as
+    /// <c>out_of_space</c>, <c>stuck</c> or <c>express_missed</c>.</item>
     /// <item><c>level_giveup</c> [level, streak_lost, from: fail|pause_restart|pause_home]</item>
     /// <item><c>continue_used</c> [level, cost, continues_used]</item>
     /// <item><c>booster_used</c> [booster, level]</item>
@@ -118,6 +120,28 @@ namespace CargoJam.Game.Meta
                 ("attempt", attempt),
                 ("stop", Journey.StopFor(levelIndex)),
                 ("mood", MoodKey(Journey.MoodFor(levelIndex))));
+
+        /// <summary>
+        /// Logs <c>level_fail</c>: level (1-based), parcels left, continues used and why it ended
+        /// (<see cref="FailKey"/>).
+        /// </summary>
+        public static void LogLevelFail(int levelIndex, int parcelsLeft, int continuesUsed, FailReason reason) =>
+            Log(LevelFail,
+                ("level", levelIndex + 1),
+                ("parcels_left", parcelsLeft),
+                ("continues_used", continuesUsed),
+                ("reason", FailKey(reason)));
+
+        /// <summary>The analytics word for a fail reason.</summary>
+        public static string FailKey(FailReason reason)
+        {
+            switch (reason)
+            {
+                case FailReason.Stuck: return "stuck";
+                case FailReason.ExpressMissed: return "express_missed";
+                default: return "out_of_space";
+            }
+        }
 
         /// <summary>
         /// Logs the events <paramref name="progression"/> raises itself: <c>destination_reached</c>

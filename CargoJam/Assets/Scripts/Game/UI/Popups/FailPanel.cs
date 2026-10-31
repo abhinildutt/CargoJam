@@ -1,16 +1,20 @@
 using System;
+using CargoJam.Core;
 using UnityEngine.UIElements;
 
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// "Out of space" as a bottom sheet (at most 45% of the screen) so the stuck board stays in view:
-    /// "N parcels to go", Continue +1 slot · price (greyed with "Not enough coins" when unaffordable),
-    /// Try again (gives the level up and replays it), and one neutral line when giving up would drop
-    /// the streak tier. No timers, no guilt copy.
+    /// The fail sheet (a bottom sheet, at most 45% of the screen, so the stuck board stays in view).
+    /// The title says why the level ended: "Out of space", "No moves left" or "Express missed" (with
+    /// a one-line explanation). Then "N parcels to go", Continue +1 slot · price (only for "Out of
+    /// space"; greyed with "Not enough coins" when unaffordable), Try again (gives the level up and
+    /// replays it), and one neutral line when giving up would drop the streak tier. No timers, no
+    /// guilt copy.
     /// </summary>
     public sealed class FailPanel : Popup
     {
+        readonly Label reasonLabel;
         readonly Label leftLabel;
         readonly CandyButton continueButton;
         readonly Label priceLabel;
@@ -25,6 +29,7 @@ namespace CargoJam.Game.UI
 
         public FailPanel(UiContext ctx) : base(ctx, "Out of space", PopupKind.Sheet)
         {
+            reasonLabel = Ui.Text(Body, "", "cj-t-body cj-c-ink2 cj-t-center cj-fail__left");
             leftLabel = Ui.Text(Body, "", "cj-t-body cj-c-ink2 cj-t-center cj-fail__left");
 
             var actions = Ui.El(Body, "cj-popup__actions");
@@ -45,13 +50,20 @@ namespace CargoJam.Game.UI
         }
 
         /// <summary>Opens (or refreshes) the sheet.</summary>
+        /// <param name="reason">Why the level ended; picks the title and whether Continue can show.</param>
         /// <param name="parcelsLeft">Parcels still to deliver.</param>
         /// <param name="cost">Coin price of the next continue.</param>
         /// <param name="affordable">Whether the player has the coins.</param>
-        /// <param name="canContinue">False when another slot wouldn't help (dock can't grow, padlocks).</param>
+        /// <param name="canContinue">False when another slot wouldn't help (dock can't grow, or the dock wasn't the problem).</param>
         /// <param name="streakWarning">"Streak will drop to ×1.5" when giving up drops a tier, else null.</param>
-        public void Show(int parcelsLeft, int cost, bool affordable, bool canContinue, string streakWarning)
+        public void Show(FailReason reason, int parcelsLeft, int cost, bool affordable, bool canContinue, string streakWarning)
         {
+            // Another slot only helps when the dock was the problem.
+            canContinue &= reason == FailReason.OutOfSpace;
+            Title = UiText.FailTitle(reason);
+            string why = UiText.FailSubline(reason);
+            reasonLabel.text = why ?? "";
+            Ui.Show(reasonLabel, why != null);
             leftLabel.text = UiText.ParcelsToGo(parcelsLeft);
             priceLabel.text = Anim.Format(cost);
             Ui.Show(continueButton, canContinue);
