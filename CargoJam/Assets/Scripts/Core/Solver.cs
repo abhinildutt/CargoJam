@@ -39,17 +39,17 @@ namespace CargoJam.Core
             if (!visited.Add(session.StateKey())) return false;
             result.NodesVisited++;
 
-            var free = new List<Parcel>();
-            session.Board.GetFreeParcels(free);
+            var moves = new List<Parcel>();
+            session.GetMoves(moves);
             var truck = session.CurrentTruck;
 
-            // Loading a matching parcel never costs a slot, so try those first.
-            free.Sort((a, b) => Rank(a, truck).CompareTo(Rank(b, truck)));
+            // Express parcels about to run out come first; then loading a matching parcel, which never
+            // costs a slot; then the rest.
+            moves.Sort((a, b) => Rank(session, a, truck).CompareTo(Rank(session, b, truck)));
 
-            foreach (var parcel in free)
+            foreach (var parcel in moves)
             {
-                if (session.IsLocked(parcel)) continue;
-                if (session.Dock.IsFull && (truck == null || !truck.Accepts(parcel))) continue;
+                if (!session.CanTake(parcel)) continue;
                 var next = session.Clone();
                 next.Tap(parcel.Cell);
                 if (Search(next, visited, result, nodeLimit))
@@ -61,6 +61,11 @@ namespace CargoJam.Core
             return false;
         }
 
-        static int Rank(Parcel p, Truck truck) => truck != null && truck.Accepts(p) ? 0 : 1;
+        static int Rank(GameSession session, Parcel p, Truck truck)
+        {
+            int left = session.ExpressLeft(p);
+            if (left > 0 && left <= 2) return 0;
+            return truck != null && truck.Accepts(p) ? 1 : 2;
+        }
     }
 }
