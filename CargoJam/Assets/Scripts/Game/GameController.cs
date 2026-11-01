@@ -139,6 +139,7 @@ namespace CargoJam.Game
         int cargoHintStamp = -1;
         CargoKind cargoHintKind;
         bool cargoHintFound;
+        bool cargoHintFromAbove;
         Cell cargoHintCell;
 
         // ---- Events for the UI ------------------------------------------------------------------
@@ -542,9 +543,38 @@ namespace CargoJam.Game
                 cargoHintStamp = boardStamp;
                 cargoHintKind = kind;
                 cargoHintFound = FindCargoHintCell(kind, out cargoHintCell);
+                cargoHintFromAbove = cargoHintFound && TaughtFromAbove(kind, cargoHintCell);
             }
             cell = cargoHintCell;
             return cargoHintFound;
+        }
+
+        /// <summary>
+        /// The cargo hint (see <see cref="TryGetCargoHintCell"/>) should be pointed at from above: what it
+        /// teaches (the frozen crate, the hidden parcel, the strap partner) lies just below the cell, where
+        /// a hand reaching up from below would cover it.
+        /// </summary>
+        public bool CargoHintFromAbove => cargoHintFound && cargoHintFromAbove;
+
+        bool TaughtFromAbove(CargoKind kind, Cell cell)
+        {
+            var target = session?.Board.Get(cell);
+            if (target == null) return false;
+            return Teaching(kind, target, new Cell(cell.X, cell.Y + 1)) && !Teaching(kind, target, new Cell(cell.X, cell.Y - 1));
+        }
+
+        /// <summary>Whether the parcel at <paramref name="c"/> is what tapping <paramref name="target"/> teaches about.</summary>
+        bool Teaching(CargoKind kind, Parcel target, Cell c)
+        {
+            var n = session.Board.Get(c);
+            if (n == null) return false;
+            switch (kind)
+            {
+                case CargoKind.Frost: return session.FrostLeft(n) > 0;
+                case CargoKind.Mystery: return session.IsHidden(n);
+                case CargoKind.Strap: return session.StrapPartner(target) == n;
+                default: return false;
+            }
         }
 
         bool FindCargoHintCell(CargoKind kind, out Cell cell)
@@ -636,6 +666,17 @@ namespace CargoJam.Game
         {
             var top = layout.ParcelRest(cell, true) + Vector3.up * (Layout.ParcelSize.y * 0.5f);
             return cam.WorldToScreenPoint(top);
+        }
+
+        /// <summary>
+        /// A point on the lid of the parcel at a cell, just inside its front edge (<paramref name="front"/>,
+        /// toward the camera, lower on screen) or its back edge.
+        /// </summary>
+        public Vector2 LidEdgeToScreen(Cell cell, bool front)
+        {
+            var top = layout.ParcelRest(cell, true) + Vector3.up * (Layout.ParcelSize.y * 0.5f);
+            var edge = top + Vector3.forward * (Layout.ParcelSize.z * 0.42f * (front ? -1f : 1f));
+            return cam.WorldToScreenPoint(edge);
         }
 
         // ---- Taps and event playback ------------------------------------------------------------

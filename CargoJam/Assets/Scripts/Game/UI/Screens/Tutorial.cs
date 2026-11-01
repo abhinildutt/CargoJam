@@ -14,6 +14,8 @@ namespace CargoJam.Game.UI
         const float HandSize = 150f;
         // Where the fingertip is inside the hand icon (fractions of its size).
         const float TipX = 0.41f, TipY = 0.04f;
+        /// <summary>How far past a lid's edge the fingertip rests when pointing at cargo (panel units).</summary>
+        const float EdgeGap = 2f;
 
         static readonly string[] Tips =
         {
@@ -134,15 +136,34 @@ namespace CargoJam.Game.UI
                 return;
             }
             SetHandShown(true);
-            var p = ctx.Space.ScreenToPanel(c.CellToScreen(cell));
             float time = Time.unscaledTime - handFrom;
             // A calm tap motion: ease down onto the parcel, rest, lift away.
             float cycle = (time / 1.3f) % 1f;
             float lift = cycle < 0.35f ? 1f - Easing.OutQuint(cycle / 0.35f)
                 : cycle < 0.55f ? 0f
                 : Easing.InOutSine((cycle - 0.55f) / 0.45f);
-            Anim.SetTranslate(hand, p.x - HandSize * TipX, p.y - HandSize * TipY + 10f + lift * 30f);
-            Anim.SetScale(hand, 1f - (1f - lift) * 0.05f);
+            float scale = 1f - (1f - lift) * 0.05f;
+            if (!cargoKind.HasValue)
+            {
+                var p = ctx.Space.ScreenToPanel(c.CellToScreen(cell));
+                Anim.SetTranslate(hand, p.x - HandSize * TipX, p.y - HandSize * TipY + 10f + lift * 30f);
+                Anim.SetScale(hand, scale);
+                return;
+            }
+            // Teaching cargo, the hand must not hide what it teaches: it touches the lid's front edge and
+            // hangs below it, or, when that would cover the lesson, reaches down (mirrored) from above.
+            bool above = c.CargoHintFromAbove;
+            var edge = ctx.Space.ScreenToPanel(c.LidEdgeToScreen(cell, !above));
+            if (above)
+            {
+                Anim.SetTranslate(hand, edge.x - HandSize * TipX, edge.y - HandSize * (1f - TipY) - EdgeGap - lift * 30f);
+                Anim.SetScale(hand, scale, -scale);
+            }
+            else
+            {
+                Anim.SetTranslate(hand, edge.x - HandSize * TipX, edge.y - HandSize * TipY + EdgeGap + lift * 30f);
+                Anim.SetScale(hand, scale);
+            }
         }
     }
 }
