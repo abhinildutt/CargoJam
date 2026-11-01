@@ -12,21 +12,34 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// Owns the UI Toolkit document and sequences the game: Home (⇄ Journey) → Level → Win
-    /// (→ Chest → Unlock) → next Level, or Fail → Continue / Try again. A level that debuts a cargo kind
+    /// Owns the UI Toolkit document and sequences the game: Title (once per launch) → Home (⇄ Journey)
+    /// → Level → Win (→ Chest → Unlock) → next Level, or Fail → Continue / Try again. A level that debuts a cargo kind
     /// shows its "New cargo!" card once the board has landed (after any arrival or HARD banner), then
     /// the tutorial hand. Wires boosters and continues
     /// to the economy, keeps board input off while anything covers it, tells the camera which part
-    /// of the screen belongs to the UI (<see cref="IHudLayout"/>) and where to frame the home
-    /// diorama (<see cref="IMenuLayout"/>), and hands the journey's arrival rules to the controller.
+    /// of the screen belongs to the UI (<see cref="IHudLayout"/>) and where to frame the menu
+    /// diorama on the title and on Home (<see cref="IMenuLayout"/>), and hands the journey's arrival
+    /// rules to the controller.
     /// </summary>
     public sealed class GameFlow : MonoBehaviour, IHudLayout, IMenuLayout
     {
         static readonly string[] StyleSheets = { "UI/CargoJamBase", "UI/CargoJamScreens" };
         static readonly Rect FallbackMenuViewport = new Rect(0.02f, 0.34f, 0.96f, 0.56f);
+        static readonly Rect FallbackTitleViewport = new Rect(0.16f, 0.22f, 0.68f, 0.48f);
+        /// <summary>
+        /// Side margin of the title's establishing shot (0..1 of the width). Narrower than Home's, so
+        /// the camera stands further back and takes in more of the destination around the depot.
+        /// </summary>
+        const float TitleSideMargin = 0.16f;
+        /// <summary>Play on the title: the camera's glide from the establishing shot to the home framing.</summary>
+        const float TitleGlide = 1.05f;
+        /// <summary>Play on the title: when the home screen starts its own show, once the title has lifted away.</summary>
+        const float TitleHomeAt = 0.45f;
 
         enum State
         {
+            /// <summary>The launch title, up to and through its hand-over to Home.</summary>
+            Title,
             Home,
             Playing,
             Won,
@@ -40,6 +53,7 @@ namespace CargoJam.Game.UI
         PanelSpace space;
         Action stopAnalytics;
 
+        TitleScreen title;
         HomeScreen home;
         JourneyScreen journey;
         LevelHud hud;
@@ -54,8 +68,6 @@ namespace CargoJam.Game.UI
         CargoIntroPopup cargoIntro;
         DailyPopup daily;
         LevelPickerPopup picker;
-        VisualElement splash;
-        const string SplashSeenKey = "cj.splashSeen";
         /// <summary>When the HARD banner starts on an ordinary level, in seconds after the level starts (as the board drops in).</summary>
         const float BannerAt = 0.3f;
         /// <summary>On an arrival level the HARD banner waits for the destination reveal and card, then this long.</summary>
@@ -63,8 +75,10 @@ namespace CargoJam.Game.UI
         /// <summary>From the board being ready (or the HARD banner ending) to the first cargo card.</summary>
         const float CargoCardGap = 0.25f;
 
-        State state = State.Home;
+        State state = State.Title;
         int continuesUsed;
+        /// <summary>False while the title hides the coin pill; Home brings it back.</summary>
+        bool coinsShown = true;
         int attemptIndex = -1;
         int attempt;
         /// <summary>The level index the Journey screen last showed, so the truck can drive from there.</summary>
@@ -133,14 +147,7 @@ namespace CargoJam.Game.UI
         {
             if (ctx == null) return;
             ApplySafeArea();
-            ShowHome();
-            // The wordmark splash is a first-launch moment; returning players go straight to Home.
-            if (PlayerPrefs.GetInt(SplashSeenKey, 0) == 0)
-            {
-                PlayerPrefs.SetInt(SplashSeenKey, 1);
-                PlayerPrefs.Save();
-                PlaySplash();
-            }
+            ShowTitle();
         }
 
         void OnDestroy()
@@ -211,12 +218,14 @@ namespace CargoJam.Game.UI
 
         /// <summary>
         /// The home diorama fills the screen between the top row and the bottom block (destination
-        /// name, journey strip, Level button): roughly the top two thirds.
+        /// name, journey strip, Level button): roughly the top two thirds. While the title holds the
+        /// frame it is the establishing shot instead (<see cref="TitleViewport"/>).
         /// </summary>
         public Rect MenuViewport
         {
             get
             {
+                if (title != null && title.Framing) return TitleViewport;
                 if (space == null || home == null) return FallbackMenuViewport;
                 var size = space.PanelSize;
                 if (size.y <= 1f || float.IsNaN(size.y)) return FallbackMenuViewport;
@@ -231,11 +240,30 @@ namespace CargoJam.Game.UI
             }
         }
 
+        /// <summary>
+        /// The title's establishing shot: the diorama sits between the wordmark and the Play button,
+        /// inset from the sides (<see cref="TitleSideMargin"/>) so the camera stands well back.
+        /// </summary>
+        Rect TitleViewport
+        {
+            get
+            {
+                if (space == null) return FallbackTitleViewport;
+                var size = space.PanelSize;
+                if (size.y <= 1f || float.IsNaN(size.y)) return FallbackTitleViewport;
+                // A little air under the wordmark and above the button.
+                float yMax = 1f - (title.StageTop + 40f) / size.y;
+                float yMin = 1f - (title.StageBottom - 40f) / size.y;
+                if (yMax - yMin < 0.25f) return FallbackTitleViewport;
+                return Rect.MinMaxRect(TitleSideMargin, Mathf.Clamp01(yMin), 1f - TitleSideMargin, Mathf.Clamp01(yMax));
+            }
+        }
+
         /// <summary>True when a press would hit the UI (or the board is covered).</summary>
         public bool Captures(Vector2 screenPosition)
         {
             if (ctx == null) return false;
-            if (ctx.AnyModalOpen || home.Visible || journey.Visible) return true;
+            if (ctx.AnyModalOpen || title.Visible || home.Visible || journey.Visible) return true;
             var panel = ctx.Root.panel;
             if (panel == null) return false;
             var picked = panel.Pick(space.ScreenToPanel(screenPosition));
@@ -281,6 +309,7 @@ namespace CargoJam.Game.UI
                 Root = root,
                 HudLayer = Ui.El(root, "cj-fill"),
                 HomeLayer = Ui.El(root, "cj-fill"),
+                TitleLayer = Ui.El(root, "cj-fill"),
                 ScreenLayer = Ui.El(root, "cj-fill"),
                 OverlayLayer = Ui.El(root, "cj-fill"),
                 ModalLayer = Ui.El(root, "cj-fill"),
@@ -298,8 +327,6 @@ namespace CargoJam.Game.UI
             ctx.Coins = new CoinCounter();
             topRow.Add(ctx.Coins);
             ctx.Coins.SetValue(progression.Coins, false);
-
-            splash = Ui.El(root, "cj-fill cj-splash", true);
         }
 
         void BuildScreens()
@@ -307,6 +334,18 @@ namespace CargoJam.Game.UI
             hud = new LevelHud(ctx);
             hud.PauseClicked += OnPauseClicked;
             hud.BoosterClicked += OnBoosterClicked;
+
+            title = new TitleScreen(ctx, ctx.TitleLayer);
+            title.PlayClicked += LeaveTitle;
+            title.SettingsClicked += () =>
+            {
+                if (title.Framing && !ctx.AnyModalOpen) pause.ShowSettings(null);
+            };
+            // The wordmark and Play block decide the establishing shot: refit when they lay out.
+            title.LayoutChanged += () =>
+            {
+                if (title.Framing) controller.MenuLayout = this;
+            };
 
             home = new HomeScreen(ctx);
             home.PlayClicked += OnPlayClicked;
@@ -379,33 +418,58 @@ namespace CargoJam.Game.UI
             if (controller.MenuLayout == (IMenuLayout)this) controller.MenuLayout = this;
         }
 
-        /// <summary>The launch splash: the wordmark over a dark wash, gone after a moment or a tap.</summary>
-        void PlaySplash()
-        {
-            var logo = new Logo();
-            splash.Add(logo);
-            Ui.Show(splash, true);
-            logo.PlayIntro();
-            bool gone = false;
-            Action dismiss = () =>
-            {
-                if (gone) return;
-                gone = true;
-                Anim.Fade(splash, 1f, 0f, Anim.Panel, 0f, () =>
-                {
-                    Ui.Show(splash, false);
-                    splash.Clear();
-                });
-            };
-            splash.RegisterCallback<PointerDownEvent>(_ => dismiss());
-            UiTween.Delay(1.5f, dismiss);
-        }
-
         // ---- Flow -------------------------------------------------------------------------------
 
         void At(float time, Action action) => timed.Add(new KeyValuePair<float, Action>(time, action));
 
-        void ShowHome()
+        /// <summary>
+        /// The launch title over the menu diorama in its establishing shot. Home lays out unseen
+        /// beneath it (so the camera knows where it will end up) and the coin pill stays away until
+        /// Home, so nothing on screen speaks of progress.
+        /// </summary>
+        void ShowTitle()
+        {
+            state = State.Title;
+            // Title first, so the scene's first fit already reads the establishing shot.
+            title.Show();
+            home.Prepare();
+            coinsShown = false;
+            Ui.Show(ctx.Coins, false);
+            controller.ShowMenuScene(progression.LevelIndex);
+        }
+
+        /// <summary>
+        /// Play on the title: the wordmark and button lift away, the camera glides in from the
+        /// establishing shot to the home framing (<see cref="TitleGlide"/>), and part-way through Home
+        /// plays its own show over the same diorama (no rebuild, no cut).
+        /// </summary>
+        void LeaveTitle()
+        {
+            if (state != State.Title || !title.Framing || ctx.AnyModalOpen) return;
+            // From here MenuViewport reads the home framing, which is what the glide aims at.
+            title.Leave();
+            controller.GlideMenuCamera(TitleGlide);
+            UiTween.Delay(TitleHomeAt, () =>
+            {
+                if (state == State.Title) ShowHome(false);
+            });
+        }
+
+        /// <summary>Drops the title at once (tools that jump straight into a level).</summary>
+        void SkipTitle()
+        {
+            if (state != State.Title) return;
+            title.HideNow();
+            // The title's framing is gone: fit the home one now rather than gliding.
+            controller.MenuLayout = this;
+            ShowHome(false);
+        }
+
+        /// <summary>
+        /// Home over its living diorama. <paramref name="buildScene"/> is false coming from the title,
+        /// which already shows the same diorama for the same level.
+        /// </summary>
+        void ShowHome(bool buildScene = true)
         {
             state = State.Home;
             timed.Clear();
@@ -416,9 +480,17 @@ namespace CargoJam.Game.UI
             ctx.Toast.Hide();
             controller.CancelCrane();
             // The home screen has its own living diorama; the level loads when Play is tapped.
-            controller.ShowMenuScene(progression.LevelIndex);
+            if (buildScene) controller.ShowMenuScene(progression.LevelIndex);
             home.Show();
-            // No daily popup: the Daily icon's dot on the left edge is the only prompt.
+            if (!coinsShown)
+            {
+                coinsShown = true;
+                Ui.Show(ctx.Coins, true);
+                Anim.Fade(ctx.Coins, 0f, 1f, Anim.Panel);
+            }
+            // No daily popup: the Daily icon's dot on the left edge is the only prompt. Anything that
+            // should ever open by itself on reaching Home goes here, after home.Show(), so it waits for
+            // Home and never pops over the title.
         }
 
         void OpenJourney()
@@ -446,6 +518,7 @@ namespace CargoJam.Game.UI
         /// <summary>Dev picker and <c>PerfBench</c>: moves progress to the chosen level (0-based) and plays it.</summary>
         internal void JumpToLevel(int index)
         {
+            SkipTitle();
             if (state != State.Home) return;
             var debuts = new List<(int, int)>();
             foreach (var (number, kind) in LevelPickerPopup.Debuts) debuts.Add((number - 1, (int)kind));

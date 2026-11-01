@@ -4,7 +4,7 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// The "Cargo Jam" wordmark for the launch splash: the name in display type over a row of six
+    /// The "Cargo Jam" wordmark for the launch title: the name in display type over a row of six
     /// parcel-colored tiles (the game's only saturated colors). Rises in once; no idle motion.
     /// </summary>
     public sealed class Logo : VisualElement

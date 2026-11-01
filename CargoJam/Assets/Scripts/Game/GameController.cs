@@ -93,6 +93,11 @@ namespace CargoJam.Game
         float inputBlockedUntil;
         LevelViews views;
         MenuDiorama menu;
+        /// <summary>A <see cref="GlideMenuCamera"/> is in flight, heading for <see cref="menuGlideTo"/>.</summary>
+        bool menuGliding;
+        Vector3 menuGlideTo;
+        /// <summary>Bumped per glide, so an older glide's tween stops steering once a new one starts.</summary>
+        int menuGlideToken;
 
         /// <summary>Where the home screen's 3D backdrop sits on screen (0..1 viewport) when no <see cref="IMenuLayout"/> says.</summary>
         static readonly Rect DefaultMenuViewport = new Rect(0.02f, 0.31f, 0.96f, 0.27f);
@@ -375,6 +380,30 @@ namespace CargoJam.Game
 
         public bool MenuSceneActive => menu != null;
 
+        /// <summary>
+        /// Glides the camera from where it is to the menu framing <see cref="MenuLayout"/> asks for now,
+        /// eased in and out over <paramref name="seconds"/>: the title's establishing shot settling into
+        /// the home screen's. A refit meanwhile (a resize, the home screen laying out) retargets the
+        /// glide instead of cutting. Snaps when the menu diorama isn't showing or the time is zero.
+        /// </summary>
+        public void GlideMenuCamera(float seconds)
+        {
+            if (menu == null || seconds <= 0f)
+            {
+                menuGliding = false;
+                FitCamera();
+                return;
+            }
+            var from = cam.transform.position;
+            menuGliding = true;
+            FitCamera();
+            int token = ++menuGlideToken;
+            tweener.Run(tweener.Now, seconds,
+                t => { if (cam && token == menuGlideToken) cam.transform.position = Vector3.LerpUnclamped(from, menuGlideTo, Ease.InOutCubic(t)); },
+                null,
+                () => { if (token == menuGlideToken) menuGliding = false; });
+        }
+
         /// <summary>Tears down whatever is on stage: the current level or the menu backdrop.</summary>
         void ClearLevel()
         {
@@ -385,6 +414,7 @@ namespace CargoJam.Game
             }
             fx?.LevelCleared();
             tweener.Clear();
+            menuGliding = false;
             parcels.Clear();
             trucks.Clear();
             gates.Clear();
@@ -1331,7 +1361,17 @@ namespace CargoJam.Game
             lastScreenHeight = ScreenInfo.Height;
             if (menu != null)
             {
-                CameraRig.Fit(cam, MenuDiorama.Bounds, menuLayout != null ? menuLayout.MenuViewport : DefaultMenuViewport);
+                var menuViewport = menuLayout != null ? menuLayout.MenuViewport : DefaultMenuViewport;
+                if (!menuGliding)
+                {
+                    CameraRig.Fit(cam, MenuDiorama.Bounds, menuViewport);
+                    return;
+                }
+                // Mid-glide: aim the glide at the new framing and leave the camera where the glide has it.
+                var at = cam.transform.position;
+                CameraRig.Fit(cam, MenuDiorama.Bounds, menuViewport);
+                menuGlideTo = cam.transform.position;
+                cam.transform.position = at;
                 return;
             }
             if (layout == null) return;

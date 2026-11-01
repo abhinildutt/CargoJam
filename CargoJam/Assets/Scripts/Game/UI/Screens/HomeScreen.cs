@@ -146,11 +146,25 @@ namespace CargoJam.Game.UI
             Ui.Show(edge, dailyReady || p.ChestReady);
         }
 
+        /// <summary>
+        /// Lays the screen out without showing it (hidden, so nothing on it draws or takes taps), so
+        /// <see cref="BottomBlockTop"/> is exact before the first <see cref="Show"/>: the title's camera
+        /// glide can aim at the real home framing.
+        /// </summary>
+        public void Prepare()
+        {
+            if (visible) return;
+            Refresh();
+            root.style.visibility = Visibility.Hidden;
+            Ui.Show(ctx.HomeLayer, true);
+        }
+
         public void Show()
         {
             Refresh();
             if (visible) return;
             visible = true;
+            root.style.visibility = StyleKeyword.Null;
             Ui.Show(ctx.HomeLayer, true);
             Anim.Fade(root, 0f, 1f, Anim.Small);
             Anim.SlideIn(topRow, 0f, -40f, Anim.Panel);

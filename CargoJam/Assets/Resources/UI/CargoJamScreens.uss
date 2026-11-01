@@ -1,13 +1,6 @@
 /* Cargo Jam UI, design v3: screens and popups. Tokens live on .cj-root (CargoJamBase.uss). */
 
-/* ---- Launch splash ------------------------------------------------------------------------ */
-
-.cj-splash {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--ink);
-}
+/* ---- Wordmark (title screen) -------------------------------------------------------------- */
 
 .cj-logo {
     align-items: center;
@@ -783,4 +776,42 @@
 
 .cj-picker__chip .cj-btn__label {
     font-size: 34px;
+}
+
+/* ---- Title (launch) ----------------------------------------------------------------------- */
+
+/* Dark fades behind the wordmark and the Play button, over the establishing shot. */
+.cj-title__shade {
+    position: absolute;
+    left: 0;
+    right: 0;
+}
+
+.cj-title__shade--top {
+    top: 0;
+    height: 42%;
+}
+
+.cj-title__shade--bottom {
+    bottom: 0;
+    height: 30%;
+}
+
+.cj-title__top {
+    flex-direction: row;
+    align-items: center;
+    padding: 0 44px;
+}
+
+.cj-title__header {
+    align-items: center;
+    margin-top: 72px;
+}
+
+.cj-title__footer {
+    padding: 0 120px 140px 120px;
+}
+
+.cj-title__play-button .cj-btn__label {
+    font-size: 76px;
 }
