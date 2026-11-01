@@ -59,6 +59,8 @@ namespace CargoJam.Game.Feel
         int ladder;
         float lastDepartAt = float.NegativeInfinity;
         float nextTrailAt;
+        /// <summary>Bumped by every tension change, so a scheduled change only applies if nothing newer came after it.</summary>
+        int tensionVersion;
 
         /// <summary>One-shot sound effects (also used by the debug HUD).</summary>
         public AudioService Audio => sfx;
@@ -149,6 +151,7 @@ namespace CargoJam.Game.Feel
             particles.Clear();
             dockFx.End();
             music.ClearDuck();
+            tensionVersion++;
             music.SetTension(false);
         }
 
@@ -460,14 +463,19 @@ namespace CargoJam.Game.Feel
             });
         }
 
+        /// <summary>
+        /// The latest call wins: a change scheduled for later is dropped if another call (or a fail or
+        /// teardown) comes in before it fires, so the music always ends up matching the board.
+        /// </summary>
         public void TensionChanged(bool tense, float at)
         {
+            int version = ++tensionVersion;
             if (views == null || at <= views.Tweener.Now)
             {
                 music.SetTension(tense);
                 return;
             }
-            views.Tweener.At(at, () => music.SetTension(tense));
+            views.Tweener.At(at, () => { if (version == tensionVersion) music.SetTension(tense); });
         }
 
         // ---- Win and fail -------------------------------------------------------------------------
@@ -545,9 +553,11 @@ namespace CargoJam.Game.Feel
             overlay.ClearCallouts();
             music.Duck(at, 2.2f);
             bool missed = reason == FailReason.ExpressMissed;
+            // Nothing scheduled before the fail may turn the tension layer back on under the sheet.
+            int version = ++tensionVersion;
             views.Tweener.At(at, () =>
             {
-                music.SetTension(false);
+                if (version == tensionVersion) music.SetTension(false);
                 overlay.SetFailMood(true);
                 if (missed)
                 {
