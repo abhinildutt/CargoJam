@@ -29,6 +29,7 @@ namespace CargoJam.LevelGen
 
             var gateCells = new List<int>();
             if (plan.Gates > 0 && !PlaceGateWalls(plan, rng, kind, gateCells)) return null;
+            if (plan.Pens) PlacePens(plan, rng, kind);
             int bollards = PlaceBollards(plan, rng, kind);
             if (bollards < 0) return null;
 
@@ -229,6 +230,25 @@ namespace CargoJam.LevelGen
                 r += 2;
             }
             return true;
+        }
+
+        /// <summary>
+        /// Pens: walls of bollards running from row 2 or 3 to the back, splitting the back of the yard into
+        /// narrow lanes (5 wide: 2|2; 6 wide: 3|2; 7 wide: 2|1|2) that open only from their front, so the
+        /// yard can't hollow out and every truck to the last has to be dug for. Half the time a wall
+        /// stops one short of the back row, leaving a way round underneath.
+        /// </summary>
+        static void PlacePens(LevelPlan plan, Random rng, byte[] kind)
+        {
+            int w = plan.Width, h = plan.Height;
+            int[] walls = w switch { 5 => new[] { 2 }, 6 => new[] { 3 }, 7 => new[] { 2, 4 }, _ => Array.Empty<int>() };
+            int top = 2 + rng.Next(2);
+            foreach (int x in walls)
+            {
+                int bottom = rng.Next(2) == 0 ? h - 1 : h - 2;
+                for (int y = top; y <= bottom; y++)
+                    if (kind[y * w + x] == Parcel) kind[y * w + x] = Bollard;
+            }
         }
 
         /// <summary>
@@ -667,14 +687,15 @@ namespace CargoJam.LevelGen
         }
 
         /// <summary>
-        /// Express parcels sit at dig position p (2 &lt;= p &lt;= min(12, n/3)) on a plain parcel, with
+        /// Express parcels sit at dig position p (2 &lt;= p &lt;= min(6, n/3)) on a plain parcel, with
         /// taps = p + 1 + slack and never less than p + 2. Returns taps per cell (0 = none), or null.
         /// </summary>
         static int[] PickExpress(LevelPlan plan, Random rng, List<int> digOrder, bool[] mystery, int[] keyOf, bool[] isKey, int[] frost, int[] group)
         {
             var taps = new int[mystery.Length];
             if (plan.Express == 0) return taps;
-            int last = Math.Min(12, digOrder.Count / 3);
+            // An early dig position keeps the timer short (playtesters found 10+ moves never bit).
+            int last = Math.Min(6, digOrder.Count / 3);
             if (last < 2) return null;
             int placed = 0;
             for (int attempt = 0; attempt < 200 && placed < plan.Express; attempt++)

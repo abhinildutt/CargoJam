@@ -3,19 +3,19 @@
   "hard": false,
   "holdingSlots": 3,
   "truckCapacity": 3,
-  "trucks": "YGYBGROBOPRPYRB",
+  "trucks": "OBPROYRBGPGY",
   "rows": [
-    "YGYYGGG",
-    "bBYbPBO",
-    "BOYBYOY",
-    "..PBGO.",
-    "RpB.YrG",
-    "PRBRPYP",
-    "ORRRRRO"
+    "OYOPBPR",
+    "BYPBYGO",
+    "GP#.#RG",
+    "r.#B#oO",
+    ".R#G#PY",
+    "rG#.#YO",
+    "RYPB#bG"
   ],
   "frost": [
-    { "x": 0, "y": 0, "layers": 4 },
-    { "x": 3, "y": 0, "layers": 4 },
-    { "x": 5, "y": 1, "layers": 5 }
+    { "x": 1, "y": 0, "layers": 5 },
+    { "x": 2, "y": 0, "layers": 6 },
+    { "x": 1, "y": 1, "layers": 2 }
   ]
 }

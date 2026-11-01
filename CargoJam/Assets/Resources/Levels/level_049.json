@@ -3,27 +3,27 @@
   "hard": false,
   "holdingSlots": 3,
   "truckCapacity": 3,
-  "trucks": "OGBRPROGRYPYBPG",
+  "trucks": "OYPBOGYRGBRP",
   "rows": [
-    "PBBOYPO",
-    "ROGG.YG",
-    "RGRPRYR",
-    "RGBGP.P",
-    "YBP.GPO",
-    "PROORRB",
-    "BYPY.GG"
+    "BPRRBPO",
+    "GGORGPY",
+    "GO#R#GB",
+    "YY#O#O.",
+    ".O#R#BY",
+    "P.#P#YY",
+    "BB#R#PG"
   ],
   "locks": [
-    { "x": 4, "y": 0, "keyX": 2, "keyY": 3 },
-    { "x": 2, "y": 2, "keyX": 3, "keyY": 3 }
+    { "x": 2, "y": 0, "keyX": 3, "keyY": 1 },
+    { "x": 0, "y": 1, "keyX": 5, "keyY": 3 }
   ],
   "frost": [
-    { "x": 0, "y": 0, "layers": 5 },
-    { "x": 3, "y": 0, "layers": 4 },
-    { "x": 2, "y": 6, "layers": 5 }
+    { "x": 3, "y": 0, "layers": 6 },
+    { "x": 6, "y": 1, "layers": 8 },
+    { "x": 0, "y": 6, "layers": 7 }
   ],
   "straps": [
-    { "x": 1, "y": 0, "x2": 2, "y2": 0 },
-    { "x": 2, "y": 5, "x2": 3, "y2": 5 }
+    { "x": 5, "y": 5, "x2": 6, "y2": 5 },
+    { "x": 5, "y": 0, "x2": 5, "y2": 1 }
   ]
 }

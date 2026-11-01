@@ -25,6 +25,7 @@ namespace CargoJam.LevelGen
         const int GradeRuns = 1000;
         const int GradeSeed = 777;
         const int SmartGradeRuns = 300;
+        const int GreedyRuns = 200;
         /// <summary>How far the search may push the round-robin truck deal (see BoardMaker.Make).</summary>
         const double MaxSpread = 0.8;
         /// <summary>On express levels, express misses may be at most this share of the bot's fails.</summary>
@@ -54,6 +55,7 @@ namespace CargoJam.LevelGen
             public bool HitNodeLimit;
             /// <summary>The fewest waiting slots perfect play needs (searched down from the level's own).</summary>
             public int SlotsNeeded;
+            public double GreedyFail;
             public double Noise;
             public double Spread;
         }
@@ -155,6 +157,8 @@ namespace CargoJam.LevelGen
                     if (error >= bestError) continue;
                     // A level that perfect play wins with slots to spare never asks the player to count them.
                     if (plan.SpareSlots is int spare && SlotsNeeded(c.data) < c.data.holdingSlots - spare) error += 0.5;
+                    // A level a reactive player wins doesn't ask for a plan.
+                    if (GreedyBot.FailRate(c.level, GreedyRuns, GradeSeed + plan.Id) < plan.GreedyFloor) error += 0.5;
                     if (stats.StuckRate > 0.03 || error >= bestError) continue;
                     if (express && stats.ExpressShare > MaxExpressShare) continue;
                     var solved = Solver.Solve(c.level);
@@ -227,6 +231,7 @@ namespace CargoJam.LevelGen
                 Stats = CasualBot.Grade(level, GradeRuns, GradeSeed + data.id),
                 Smart = SmartBot.Grade(level, SmartGradeRuns, GradeSeed + data.id),
                 SlotsNeeded = SlotsNeeded(data),
+                GreedyFail = GreedyBot.FailRate(level, GreedyRuns, GradeSeed + data.id),
             };
         }
 
@@ -374,6 +379,7 @@ namespace CargoJam.LevelGen
                     Stats = CasualBot.Grade(level, GradeRuns, GradeSeed + data.id),
                     Smart = SmartBot.Grade(level, SmartGradeRuns, GradeSeed + data.id),
                     SlotsNeeded = SlotsNeeded(data),
+                    GreedyFail = GreedyBot.FailRate(level, GreedyRuns, GradeSeed + data.id),
                 };
             });
             PrintTable(results);
@@ -426,8 +432,8 @@ namespace CargoJam.LevelGen
 
         static void PrintTable(Result[] results)
         {
-            Console.WriteLine("| Level | Kind | Size | Colors | Trucks | Slots | Hard | Bollards | Frost | Mystery | Express | Locks | Straps | Gates | Target | Bot fail | Stuck | Express fails | Smart fail | Decisions | Slots needed | Solver nodes |");
-            Console.WriteLine("|---:|---|---|---:|---:|---:|---|---:|---|---:|---|---:|---:|---|---:|---:|---:|---|---:|---:|---:|---:|");
+            Console.WriteLine("| Level | Kind | Size | Colors | Trucks | Slots | Hard | Bollards | Frost | Mystery | Express | Locks | Straps | Gates | Target | Bot fail | Stuck | Express fails | Smart fail | Decisions | Slots needed | Greedy fail | Solver nodes |");
+            Console.WriteLine("|---:|---|---|---:|---:|---:|---|---:|---|---:|---|---:|---:|---|---:|---:|---:|---|---:|---:|---:|---:|---:|");
             foreach (var r in results)
             {
                 if (r == null) continue;
@@ -450,7 +456,7 @@ namespace CargoJam.LevelGen
                 Console.WriteLine($"| {d.id} | {r.Plan.Kind} | {l.Width}x{l.Height} | {colors.Count} | {l.Trucks.Count} | {l.HoldingSlots} | " +
                                   $"{(l.Hard ? "yes" : "")} | {Blank(bollards)} | {frost} | {Blank(mystery)} | {express} | {Blank(l.Locks.Count)} | " +
                                   $"{Blank(l.Straps.Count)} | {gates} | {r.Plan.TargetFail:0.00} | {r.Stats.FailRate:0.000} | " +
-                                  $"{r.Stats.StuckRate:0.000} | {expressFails} | {r.Smart.FailRate:0.000} | {r.Smart.DecisionShare:0.00} | {r.SlotsNeeded} | {nodes} |");
+                                  $"{r.Stats.StuckRate:0.000} | {expressFails} | {r.Smart.FailRate:0.000} | {r.Smart.DecisionShare:0.00} | {r.SlotsNeeded} | {r.GreedyFail:0.00} | {nodes} |");
             }
         }
 

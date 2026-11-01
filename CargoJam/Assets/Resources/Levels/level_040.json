@@ -1,33 +1,33 @@
 {
   "id": 40,
   "hard": true,
-  "holdingSlots": 3,
+  "holdingSlots": 2,
   "truckCapacity": 3,
-  "trucks": "OYGBPOGYOBGPRYR",
+  "trucks": "OPRBORYBGPBYRPG",
   "rows": [
-    "BBGBPGG",
-    ".OORGPY",
-    "YOGR.YG",
-    "GOOBYYP",
+    "RBPYOPB",
+    "ORYOOBB",
+    "YPRBRPO",
+    ".BPRBOY",
+    ".RRRBG.",
     "+######",
-    "YB.PORY",
-    "ROGBOYP",
-    "GO.YRRP"
+    "PGGYBRP",
+    "GY.PPGG"
   ],
   "locks": [
-    { "x": 3, "y": 2, "keyX": 5, "keyY": 3 },
-    { "x": 5, "y": 0, "keyX": 4, "keyY": 3 },
-    { "x": 3, "y": 0, "keyX": 6, "keyY": 1 }
+    { "x": 2, "y": 0, "keyX": 5, "keyY": 3 },
+    { "x": 0, "y": 0, "keyX": 1, "keyY": 2 },
+    { "x": 3, "y": 1, "keyX": 5, "keyY": 2 }
   ],
   "express": [
-    { "x": 4, "y": 0, "taps": 11 }
+    { "x": 5, "y": 1, "taps": 5 }
   ],
   "straps": [
-    { "x": 4, "y": 5, "x2": 4, "y2": 6 },
-    { "x": 1, "y": 1, "x2": 1, "y2": 2 },
-    { "x": 1, "y": 3, "x2": 2, "y2": 3 }
+    { "x": 1, "y": 6, "x2": 2, "y2": 6 },
+    { "x": 5, "y": 7, "x2": 6, "y2": 7 },
+    { "x": 6, "y": 0, "x2": 6, "y2": 1 }
   ],
   "gates": [
-    { "x": 0, "y": 4, "color": "Y", "count": 3 }
+    { "x": 0, "y": 5, "color": "R", "count": 6 }
   ]
 }

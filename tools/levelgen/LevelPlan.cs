@@ -46,6 +46,8 @@ namespace CargoJam.LevelGen
         public bool FrostOnKey;
         /// <summary>Twist: at least one frozen crate sits in the front row.</summary>
         public bool FrostInRow0;
+        /// <summary>Walls that split the back of the yard into lanes (see BoardMaker.PlacePens).</summary>
+        public bool Pens;
         /// <summary>The cargo this level introduces, or null.</summary>
         public CargoKind? Debut;
         /// <summary>The <see cref="SmartBot"/> fail rate to aim for.</summary>
@@ -57,6 +59,11 @@ namespace CargoJam.LevelGen
         /// fewer, so every slot counts. Null for tutorials.
         /// </summary>
         public int? SpareSlots;
+        /// <summary>
+        /// The least a reactive player (<see cref="GreedyBot"/>: load what fits, else park whatever's truck
+        /// comes soonest) must fail, so the level rewards planning over reacting.
+        /// </summary>
+        public double GreedyFloor;
 
         public const int LevelCount = 100;
         public const int TruckCapacity = 3;
@@ -142,8 +149,18 @@ namespace CargoJam.LevelGen
             // Few waiting slots are what make a level ask for a plan: with four, a careful player can't
             // lose a 6-7 wide yard however it is dealt, so every level past the tutorials has three.
             plan.Slots = 3;
+            // Late HARD levels: two slots. Playtesters found 3 slots plus "park for the next truck" always enough.
+            if (plan.Hard && id >= 40) plan.Slots = 2;
 
             plan.MaxOpeningMatches = plan.Kind == "tutorial" ? 3 : plan.Kind == "debut" ? 2 : 1;
+            plan.GreedyFloor = plan.Kind switch
+            {
+                "easy" => 0.3,
+                "medium" => 0.5,
+                "harder" => 0.6,
+                "HARD" => 0.7,
+                _ => 0,
+            };
             plan.SpareSlots = plan.Kind switch
             {
                 "tutorial" => null,
@@ -152,6 +169,11 @@ namespace CargoJam.LevelGen
             };
 
             SetCargo(plan);
+            // With two slots, a covered crate's color can decide the level before a careful player can
+            // know it (playtest round 5), so those levels keep at most one.
+            if (plan.Slots == 2) plan.Mystery = Math.Min(plan.Mystery, 1);
+            // Lanes keep every level tense to the end; relief levels stay open, and gates bring their own wall.
+            plan.Pens = id >= 6 && plan.Kind != "relief" && plan.Gates == 0;
             SetSize(plan, id);
             return plan;
         }
@@ -182,7 +204,7 @@ namespace CargoJam.LevelGen
             {
                 kinds = new[] { p.Debut.Value };
                 p.GateMaxCount = 3;
-                p.ExpressSlack = 6;
+                p.ExpressSlack = 4;
                 straps = 2;
                 frost = 2;
             }

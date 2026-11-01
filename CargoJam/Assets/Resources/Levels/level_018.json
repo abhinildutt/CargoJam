@@ -19,7 +19,7 @@
     { "x": 2, "y": 4, "layers": 6 }
   ],
   "express": [
-    { "x": 0, "y": 2, "taps": 10 }
+    { "x": 3, "y": 1, "taps": 8 }
   ],
   "gates": [
     { "x": 4, "y": 3, "color": "R", "count": 6 }
