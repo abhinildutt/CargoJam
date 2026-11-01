@@ -49,7 +49,7 @@ namespace CargoJam.EditorTools
                     var action = afterExit;
                     afterExit = null;
                     // Next tick, so the editor has finished tearing Play mode down before a scene opens.
-                    EditorApplication.delayCall += () => action();
+                    NextUpdate(action);
                     return;
                 }
                 if (state != PlayModeStateChange.ExitingEditMode) return;
@@ -65,6 +65,21 @@ namespace CargoJam.EditorTools
         {
             get => EditorPrefs.GetBool(ResetOnPlayPref, true);
             set => EditorPrefs.SetBool(ResetOnPlayPref, value);
+        }
+
+        /// <summary>
+        /// Runs <paramref name="action"/> once on the next editor update. Unlike delayCall, the update loop
+        /// keeps ticking while the editor is in the background (as it is when driven from the command line).
+        /// </summary>
+        static void NextUpdate(Action action)
+        {
+            EditorApplication.CallbackFunction once = null;
+            once = () =>
+            {
+                EditorApplication.update -= once;
+                action();
+            };
+            EditorApplication.update += once;
         }
 
         /// <summary>
@@ -121,10 +136,10 @@ namespace CargoJam.EditorTools
             EditorApplication.isPlaying = true;
             // If Play mode is refused (compile errors, say), drop the request: left behind, it would
             // wipe the save on the next ordinary Play.
-            EditorApplication.delayCall += () =>
+            NextUpdate(() =>
             {
                 if (!EditorApplication.isPlayingOrWillChangePlaymode) SessionState.EraseInt(StartLevelKey);
-            };
+            });
         }
 
         [MenuItem("Cargo Jam/Reset Progress Now", priority = 2)]
