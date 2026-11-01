@@ -125,6 +125,8 @@ namespace CargoJam.Game
         readonly List<Parcel> missedExpress = new List<Parcel>();
         /// <summary>When this batch's effect on tension shows: the latest hold landing, dock-chain load or express tick.</summary>
         float tensionAt;
+        /// <summary>A beat between the losing move's last visible change (a tick, a landing) and the fail explanation.</summary>
+        const float FailAfterLastBeat = 0.25f;
 
         // ---- Events for the UI ------------------------------------------------------------------
 
@@ -1033,7 +1035,8 @@ namespace CargoJam.Game
         /// </summary>
         void ExplainFail(float now, FailReason reason)
         {
-            float at = now + Timing.FailExplainDelay;
+            // After the losing move has shown itself: the express tag's last tick, or the last hold landing.
+            float at = Mathf.Max(now + Timing.FailExplainDelay, tensionAt + FailAfterLastBeat);
             var truck = session.CurrentTruck;
             var tv = truck != null ? trucks[truck.Index] : null;
             var needed = new List<ParcelView>();
