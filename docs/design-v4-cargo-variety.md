@@ -160,6 +160,8 @@ ParcelRevealed*        (RevealFree; also sees cells opened by gates)
 LevelWon | ExpressMissed, LevelFailed(ExpressMissed) | LevelFailed(OutOfSpace|Stuck)
 ```
 
+With two or more gates, a load's gate events interleave per gate: `GateProgress(0)`, `GateOpened(0)`, then `GateProgress(1)`, `GateOpened(1)`. The controller keeps per-gate timings to match.
+
 `FinishMove(events, tick)` runs TickExpress, then RevealFree, then CheckForEnd. Undo and AddHoldingSlot call it with `tick: false`.
 
 ### New events
@@ -185,7 +187,7 @@ A permanent obstacle. It cannot be tapped or targeted by the Crane.
 ### Frozen crate
 
 - **Taps and paths.** A frozen crate stays in place and blocks paths. A tap on it is `ParcelBlocked`: nothing changes and nothing ticks.
-- **Cracking.** Each parcel leaving the yard cracks one layer on each frozen orthogonal neighbour. This covers loads, holds, Crane lifts, and both members of a pair. A crate next to both members of a pair loses 2 layers.
+- **Cracking.** Each parcel leaving the yard cracks one layer on each frozen orthogonal neighbour. This covers loads, holds, Crane lifts, and both members of a pair.
 - **Crane.** Thaws the crate fully first.
 - **Undo.** Never re-freezes it.
 - **Frozen mystery.** A frozen mystery parcel is still revealed once it has a path, so the player sees its color under the ice.
@@ -211,6 +213,8 @@ A permanent obstacle. It cannot be tapped or targeted by the Crane.
 **Why routing works this way.** Every parcel follows the rule "go to the dock only if the current truck rejects it", so the game never freezes waiting for a parcel already in the dock.
 
 **Rejecting.** If `CanTake` fails, the tap is `DockFullRejected` and nothing changes.
+
+**Lifetime.** A strap lasts while the pair is in the yard. `StrapMoved` ends it as the pair leaves, because the two members may end up in different places (a truck, the dock). `StrapRestored` brings it back when Undo returns both. On screen the band slips off as the pair leaves (`StrapView.Release`) and grows back on Restore.
 
 **Undo.** If the last held parcel p was `heldAsPair` and its partner is the next entry in holdOrder and still in the dock, Undo returns both (`ParcelReturned` ×2, then `StrapRestored`). Otherwise p returns alone and the strap stays cut.
 
@@ -263,6 +267,7 @@ Each debut is on an easy, non-HARD level. None falls on an arrival level (11, 21
 ### Fail targets and sizes
 
 - Fail-rate targets: medium caps at 0.40; HARD runs 0.55–0.72; debut and relief levels stay ≤0.05.
+- Across L61–100 the targets ramp gently, inside those caps: easy 0.30→0.36, medium 0.34→0.385, harder 0.41→0.47, HARD 0.64→0.70. Relief stays at 0.03.
 - Board sizes from L60: easy 6×7, medium and harder 7×8, HARD 7×9.
 - Parcels = (cells − holes − bollards − gates) / 3 × 3.
 
@@ -305,7 +310,7 @@ Content loops after L100 from `LoopStart = 60`.
   - `ProfileData` v3 adds `bool[] cargoSeen`, with `CargoKinds = 7`.
   - The v2→v3 migration marks Mystery as seen if levelIndex ≥ 14, and Lock as seen if levelIndex ≥ 24.
   - A test asserts `Enum.GetValues(CargoKind).Length == ProfileData.CargoKinds`.
-- **`CargoIntroPopup`** shows "New cargo!", an icon disc, the cargo's name, one line, and a "Got it" button.
+- **`CargoIntroPopup`** shows "New cargo!", an icon disc, the cargo's name, one line, and a "Got it" button. Each icon draws the cargo as it looks on the board (a white post with a dark band, a grey tarp with a "?", the dark express display).
   - It is queued after the level intro (and after the arrival or HARD banner when present).
   - "Got it" marks the cargo seen. The next card follows, or else the hand pointer starts.
 - **Card lines:**
@@ -333,22 +338,23 @@ Content loops after L100 from `LoopStart = 60`.
 
 ## 6. Visuals
 
-All visuals are grayscale-safe and built from cached static meshes.
+All visuals are grayscale-safe and built from cached static meshes. Cargo parts (ice, express labels, straps, gates) draw with the parcel skin, a 16×1 texture whose extra columns hold the ice, snow, express, strap and frost-tint colors, so they batch with the parcels. None of them casts a shadow.
 
 - **ParcelView.Create** takes `in ParcelLook look`, with fields `Hidden, Locked, IsKey, Frost, Express`.
-- **Frost:** an ice collar with 1, 2 or 3 bands, using a new `Ice` material that is opaque, pale cyan-white and smooth.
-  - The lid label stays visible, and the parcel body uses the dim skin while frozen.
-  - `Crack(tweener, at, left)` swaps the band mesh with a punch. At 0 the collar shrinks away.
-- **Express:** a tag on the lid's front corner, tilted toward the camera, with seven-segment digits.
-  - Digits are cached per value and drawn on the ParcelSkin UV columns, so they share the parcel's draw call.
-  - At ≤2 it switches to red ink and pulses.
+- **Frost:** a raised collar of clear ice around the top of the box, readable from the 58° camera. It rings the lid in pale cyan while the lid keeps its color and label, and frost runs down the upper sides.
+  - Layers read apart in grayscale: each layer makes the collar markedly wider (a thin rim, a band, a thick slab) and taller, and adds one ice crystal on its corners (1, 2 or 3).
+  - The parcel body uses the dim skin while frozen.
+  - `Crack(tweener, at, left)` swaps the collar mesh with a punch. At 0 the collar shrinks away.
+- **Express:** a dark countdown display with an amber rim replaces the shipping label, with the moves left in amber seven-segment figures over 40% of the lid tall. The color's symbol sits on a paper chip in its corner. Dark and amber stand out on every parcel color, so an express parcel reads at a glance at any count.
+  - Each color, count and ink is one cached mesh, drawn on the parcel skin, so it shares the parcel's draw call.
+  - At ≤2 the display turns red with white figures and the parcel pulses.
   - API: `SetExpress(left, tweener, at)`.
-- **StrapView:** a dark woven band over both lids with a steel buckle, as one mesh.
+- **StrapView:** a flat slate webbing band with pale stitched edges and a steel buckle over both lids, as one mesh. Its ends fold over the outer lid chamfers and never hang past the pair.
   - It is parented to the member in the later row.
-  - API: `Snap(at)`, `Restore(at)`.
+  - API: `Snap(at)`, `Release(at)`, `Restore(at)`.
 - **Bollards:** concrete posts in the Curb material with a dark band, merged into the Scenery yard mesh for +1 draw call. The floor tile under each one is skipped. Bollards are never yellow.
-- **GateView:** a post, a boom arm, and a sign with the color plate, `Symbols.MeshFor(color)` and the count digits.
-  - `SetCount(left, at)` punches the sign. `Open(at)` raises the boom 80°, sinks the gate (0.35 s) and deactivates it.
+- **GateView:** a post and a boom arm carrying a road-sign plate in the gate's color with the count in big white figures (dark on yellow). The color's symbol sits on a label atop the post, away from the count, so a purple ✖ never reads as "× 3". Two renderers: the post, and the boom with its sign (one mesh per color and count).
+  - `SetCount(left, at)` twitches the boom. `Open(at)` raises the boom 80°, sinks the gate (0.35 s) and deactivates it.
 - **ILevelFx additions:**
   - `FrostCracked(ParcelView, int left, float at)`
   - `ExpressTicked(ParcelView, int left, float at)`
@@ -398,6 +404,7 @@ All visuals are grayscale-safe and built from cached static meshes.
   - The pad is rendered once and copy-added into the B half.
   - Pluck notes last `min(0.9, 4.6/decay)` s.
   - The existing per-frame budgets of 60k and 20k samples are kept.
+  - Music renders at 16 kHz (`MusicSynth.Rate`), down from 22.05 kHz, to keep the cue cache near 7–9 MB. It trims the hats' air above 8 kHz.
 
 ### Tension layer
 
