@@ -12,16 +12,18 @@ $DOTNET run --project tools/levelgen -c Release -- --dry-run        # same, but 
 $DOTNET run --project tools/levelgen -c Release -- --levels 25-30   # only some levels
 $DOTNET run --project tools/levelgen -c Release -- grade            # grade the files that are there now
 $DOTNET run --project tools/levelgen -c Release -- explore --levels 40   # bot fail rate vs. noise, for tuning
+$DOTNET run --project tools/levelgen -c Release -- play --level 7 --moves "a0 c0"   # play a level as text, one call at a time
 ```
 
 Options: `--seed N` (default 20261026) and `--out DIR`. A full run takes about 20 s on a 10-core Mac. New level files need a Unity `.meta` (copy `level_001.json.meta` with a fresh guid).
 
 ## How it works
 
-- **Plan** (`LevelPlan.cs`): the knobs for each level, such as board size, colors, holding slots, the cargo it uses and the target fail rate. The content curve is design v4 §4:
-  - The difficulty is a sawtooth: within each block of five levels it goes relief or easy, easy, medium, harder, then HARD (every 5th level from 10, so every storm finale is HARD). Fail targets: debut and relief about 0.03 (at most 0.05), medium up to 0.36 (cap 0.40), HARD 0.58 rising to 0.64 (band 0.55–0.72). Levels 61–100 ramp up again inside the caps: easy 0.30→0.36, medium 0.34→0.385, harder 0.41→0.47, HARD 0.64→0.70.
-  - `generate` and `grade` print a `FAIL` line and exit 1 when a level lands outside its band, gets stuck in more than 1% of games, loses more than half its fails to express misses, or hits the solver's node limit.
-  - Each cargo kind debuts on a hand-made level (bollard L5, frost L7, mystery L12, express L17, lock L22, strap L27, gate L42), is practised and twisted on the levels after it (the ramp table), and from L51 levels mix two or three kinds from a fixed rotation.
+- **Plan** (`LevelPlan.cs`): the knobs for each level, such as board size, colors, waiting slots, the cargo it uses and the target fail rate (design v5):
+  - The difficulty is a sawtooth: within each block of five levels it goes relief or easy, easy, medium, harder, then HARD (every 5th level from 10, plus L14; every storm finale is HARD). Targets are thoughtful-bot fail rates: debut 0.10, relief 0.12, easy 0.18→0.28, medium 0.28→0.38, harder 0.36→0.49, HARD 0.50→0.64, rising from L4 to L100 (bands in `SpecBand`).
+  - Waiting slots are 3 on HARD, debut, early (L4-9), early relief (<L30) and harder (from L20) levels, else 4. Colors share the trucks evenly.
+  - `generate` and `grade` print a `FAIL` line and exit 1 when a level lands outside its band, gets the thoughtful bot stuck in more than 3% of games, loses more than half its fails to express misses, or hits the solver's node limit.
+  - Every cargo kind debuts by L15 (bollard L4, frost L5, mystery L7, lock L9, express L12, strap L13, gate L15). A debut uses only its new cargo; every other level from L6 mixes two to four kinds (hand-picked to L21, then a rotation of pairs and triples).
   - From L60 board sizes are fixed per kind: easy 6×7, medium and harder 7×8, HARD 7×9.
 - **Board** (`BoardMaker.cs`):
   - It lays out gate walls (a row of bollards with the gate in its gap; each gate gets its own wall and must wall something off on its own), mirrored bollards and holes, then picks padlocks, mystery parcels and frozen crates. Frozen crates thaw after a number of moves (`layers` in the JSON, 2-6 by level kind), so three in four go in the front two rows, where the ice is what holds them; at most a third of the front row is frozen.
@@ -29,8 +31,8 @@ Options: `--seed N` (default 20261026) and `--out DIR`. A full run takes about 2
   - It colors the parcels in groups of three along that order. With `noise` 0 the truck order follows the dig order exactly. More noise moves parcels further from their truck, which fills the dock.
   - Then it places what depends on color and order: each gate's color and count (from the trucks that fill before it opens), express parcels (at an early dig position, with spare moves on top) and straps (two adjacent parcels of one color).
   - Every candidate must validate and start with a legal move.
-- **Grading** (`CasualBot.cs`): the casual bot takes an express parcel with 3 or fewer moves left 75% of the time, else a visible match 60% of the time, else a random legal move (`GetMoves` + `CanTake`). Its fail rate is the difficulty measure.
+- **Grading** (`SmartBot.cs`): the thoughtful bot sees what a player sees (the yard with covered colors hidden, the dock, the loading truck and the next two), scores every legal tap one move ahead (two when no free match exists or the dock is nearly full) and picks with a little human error (a softmax). Its fail rate is the difficulty measure. `CasualBot.cs` (a random tapper that takes visible matches 60% of the time) is still printed as "Bot fail" for contrast; the "Decisions" column is the share of moves with no free match.
   - The generator searches noise across many candidate boards until the fail rate is close to the plan's target and inside its band.
   - It rejects candidates where the bot gets stuck (`FailReason.Stuck`) or where express misses are more than half the fails.
   - It keeps only boards that `Solver` proves solvable without boosters. When no candidate works, it retries with one fewer cargo item.
-- **Debut and tutorial levels** are hand-made in `Program.cs`. Each one checks its teaching intent when it is built; for example, the lock debut's key must be free and fit the first truck.
+- **Tutorial levels** 1-3 are hand-made in `Program.cs`. **Debut levels** are generated like the rest, but a candidate must also teach its cargo (`Teaches`): the new cargo sits where the player meets it in the first few moves, for example a frozen crate with an open path that thaws in 2-4 moves.

@@ -563,7 +563,10 @@ namespace CargoJam.LevelGen
 
         // ---- color and order-dependent cargo ----------------------------------------------------
 
-        /// <summary>Every color gets at least one truck, and the same color rarely comes twice in a row.</summary>
+        /// <summary>
+        /// The colors share the trucks as evenly as the count allows (one color flooding the yard makes
+        /// every move a match), and the same color rarely comes twice in a row.
+        /// </summary>
         static int[] TruckColors(LevelPlan plan, Random rng, int count)
         {
             var palette = new List<int>();
@@ -572,7 +575,7 @@ namespace CargoJam.LevelGen
             var colors = palette.GetRange(0, plan.Colors);
 
             var trucks = new int[count];
-            for (int i = 0; i < count; i++) trucks[i] = i < colors.Count ? colors[i] : colors[rng.Next(colors.Count)];
+            for (int i = 0; i < count; i++) trucks[i] = colors[i % colors.Count];
             Shuffle(trucks, rng);
             for (int pass = 0; pass < 4; pass++)
             for (int i = 1; i < count; i++)

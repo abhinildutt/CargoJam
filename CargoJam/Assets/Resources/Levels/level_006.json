@@ -1,14 +1,20 @@
 {
   "id": 6,
   "hard": false,
-  "holdingSlots": 5,
+  "holdingSlots": 3,
   "truckCapacity": 3,
-  "trucks": "PGYPGPG",
+  "trucks": "OYPBOYBYP",
   "rows": [
-    "GPPPG",
-    "P#Y#G",
-    "GPG.Y",
-    "PPP.G",
-    "GPGYG"
+    "BOOOY",
+    "PYB.B",
+    "BOBPY",
+    "YYYPO",
+    "YPBPY",
+    "O#Y#P"
+  ],
+  "frost": [
+    { "x": 0, "y": 0, "layers": 4 },
+    { "x": 2, "y": 1, "layers": 3 },
+    { "x": 4, "y": 4, "layers": 5 }
   ]
 }

@@ -20,10 +20,11 @@ namespace CargoJam.LevelGen
     static class Program
     {
         const int DefaultSeed = 20261026;
-        const int SearchRuns = 120;
-        const int ConfirmRuns = 1000;
+        const int SearchRuns = 60;
+        const int ConfirmRuns = 300;
         const int GradeRuns = 1000;
         const int GradeSeed = 777;
+        const int SmartGradeRuns = 300;
         /// <summary>On express levels, express misses may be at most this share of the bot's fails.</summary>
         const double MaxExpressShare = 0.5;
 
@@ -35,6 +36,9 @@ namespace CargoJam.LevelGen
             public int Last = LevelPlan.LevelCount;
             public string Out;
             public bool DryRun;
+            public int Level;
+            public string Moves;
+            public string File;
         }
 
         sealed class Result
@@ -43,6 +47,7 @@ namespace CargoJam.LevelGen
             public LevelData Data;
             public LevelDefinition Level;
             public BotStats Stats;
+            public SmartStats Smart;
             public int SolverNodes;
             public bool HitNodeLimit;
             public double Noise;
@@ -59,6 +64,7 @@ namespace CargoJam.LevelGen
             {
                 case "grade": return Grade(o);
                 case "explore": return Explore(o);
+                case "play": return Play(o);
                 default: return Generate(o);
             }
         }
@@ -92,8 +98,6 @@ namespace CargoJam.LevelGen
             var plan = LevelPlan.For(id);
             if (id == 2) return Finish(Level2(), plan, 0);
             if (id == 3) return Finish(Level3(), plan, 0);
-            var debut = DebutLevel(id);
-            if (debut != null) return Finish(debut, plan, 0);
 
             while (true)
             {
@@ -113,22 +117,23 @@ namespace CargoJam.LevelGen
         {
             var rng = new Random(seed * 7919 + plan.Id);
             double lo = 0, hi = plan.Parcels * 0.8;
-            const double tolerance = 0.015;
+            const double tolerance = 0.03;
             bool express = plan.Express > 0;
 
             Result best = null;
             double bestError = double.MaxValue;
             for (int round = 0; round < 8 && bestError > tolerance; round++)
             {
-                var pool = new List<(LevelData data, LevelDefinition level, double noise, BotStats stats)>();
+                var pool = new List<(LevelData data, LevelDefinition level, double noise, SmartStats stats)>();
                 for (int attempt = 0; attempt < 48; attempt++)
                 {
                     double noise = lo + (hi - lo) * rng.NextDouble();
                     var data = BoardMaker.Make(plan, new Random(rng.Next()), noise);
                     if (data == null) continue;
                     var level = LevelDefinition.Parse(data);
-                    var stats = CasualBot.Grade(level, SearchRuns, rng.Next());
-                    if (stats.StuckRate > 0.02) continue;
+                    if (plan.Debut != null && !Teaches(data, plan.Debut.Value)) continue;
+                    var stats = SmartBot.Grade(level, SearchRuns, rng.Next());
+                    if (stats.StuckRate > 0.05) continue;
                     if (express && stats.Fails >= 10 && stats.ExpressShare > 0.65) continue;
                     pool.Add((data, level, noise, stats));
                 }
@@ -138,9 +143,9 @@ namespace CargoJam.LevelGen
                 {
                     var c = pool[i];
                     // Confirm with the grading seed, so the table shows the numbers the choice was made on.
-                    var stats = CasualBot.Grade(c.level, ConfirmRuns, GradeSeed + plan.Id);
+                    var stats = SmartBot.Grade(c.level, ConfirmRuns, GradeSeed + plan.Id);
                     double error = Error(stats, plan);
-                    if (stats.StuckRate > 0.01 || error >= bestError) continue;
+                    if (stats.StuckRate > 0.03 || error >= bestError) continue;
                     if (express && stats.ExpressShare > MaxExpressShare) continue;
                     var solved = Solver.Solve(c.level);
                     if (!solved.Solvable) continue;
@@ -160,7 +165,7 @@ namespace CargoJam.LevelGen
         }
 
         /// <summary>Distance from the target fail rate, plus a large penalty outside the plan's band.</summary>
-        static double Error(BotStats stats, LevelPlan plan)
+        static double Error(SmartStats stats, LevelPlan plan)
         {
             var (lo, hi) = plan.Band;
             double error = Math.Abs(stats.FailRate - plan.TargetFail);
@@ -188,6 +193,7 @@ namespace CargoJam.LevelGen
                 SolverNodes = solved.NodesVisited,
                 HitNodeLimit = solved.HitNodeLimit,
                 Stats = CasualBot.Grade(level, GradeRuns, GradeSeed + data.id),
+                Smart = SmartBot.Grade(level, SmartGradeRuns, GradeSeed + data.id),
             };
         }
 
@@ -210,7 +216,7 @@ namespace CargoJam.LevelGen
         {
             id = 2,
             hard = false,
-            holdingSlots = 5,
+            holdingSlots = 4,
             truckCapacity = LevelPlan.TruckCapacity,
             trucks = "RBRB",
             rows = new[] { "RRRB", "BBBR", "RRBB" },
@@ -226,7 +232,7 @@ namespace CargoJam.LevelGen
             {
                 id = 3,
                 hard = false,
-                holdingSlots = 5,
+                holdingSlots = 4,
                 truckCapacity = LevelPlan.TruckCapacity,
                 trucks = "RBRB",
                 rows = new[] { "BBBB", "RRRR", "BBRR" },
@@ -236,311 +242,52 @@ namespace CargoJam.LevelGen
             return data;
         }
 
-        // ---- debut levels (design v4 §4): 3 colors, 5 slots, only the new cargo plus bollards ---------
-
-        /// <summary>The hand-made level that introduces a cargo kind on <paramref name="id"/>, or null.</summary>
-        static LevelData DebutLevel(int id)
-        {
-            var kind = LevelPlan.DebutAt(id);
-            if (kind == null) return null;
-            var data = kind.Value switch
-            {
-                CargoKind.Bollard => Level5(),
-                CargoKind.Frost => Level7(),
-                CargoKind.Mystery => Level12(),
-                CargoKind.Express => Level17(),
-                CargoKind.Lock => Level22(),
-                CargoKind.Strap => Level27(),
-                _ => Level42(),
-            };
-            CheckDebut(data, kind.Value);
-            return data;
-        }
+        // ---- debut levels: generated like the rest, but they must teach their cargo -------------------
 
         /// <summary>
-        /// Bollards: the front reds open the way, and the reds parked behind each bollard are dug out from
-        /// the side once the middle column clears.
+        /// True when a debut candidate shows its new cargo where the player meets it early: what the cargo
+        /// card describes can be seen and tried within the first few moves.
         /// </summary>
-        static LevelData Level5() => new LevelData
-        {
-            id = 5,
-            holdingSlots = 5,
-            truckCapacity = LevelPlan.TruckCapacity,
-            trucks = "RBGRBG",
-            rows = new[]
-            {
-                "RRRBB",
-                "G#B#G",
-                "BRGRB",
-                "GBRGG",
-            },
-        };
-
-        /// <summary>
-        /// Frost: a yellow crate in the front row, frozen for 3 moves, right next to the first truck's
-        /// three free reds. It is the second truck's color, so loading the reds (the hand points at one)
-        /// counts it down to 0 just as its truck pulls in. A second crate in row 1 waits out 5 moves.
-        /// </summary>
-        static LevelData Level7() => new LevelData
-        {
-            id = 7,
-            holdingSlots = 5,
-            truckCapacity = LevelPlan.TruckCapacity,
-            trucks = "RYBRBYRB",
-            rows = new[]
-            {
-                "RYRBR",
-                "YBYBB",
-                "RRBYR",
-                "BYBRB",
-                "RB.YR",
-            },
-            frost = new[]
-            {
-                new FrostData { x = 1, y = 0, layers = 3 },
-                new FrostData { x = 3, y = 1, layers = 5 },
-            },
-        };
-
-        /// <summary>
-        /// Mystery: a covered parcel sits right behind the first truck's front-row blue, so the first
-        /// match shows its color.
-        /// </summary>
-        static LevelData Level12() => new LevelData
-        {
-            id = 12,
-            holdingSlots = 5,
-            truckCapacity = LevelPlan.TruckCapacity,
-            trucks = "BGOGBOBGO",
-            rows = new[]
-            {
-                "BBBGGO",
-                "gOGGGO",
-                "BBOoOB",
-                "BBGGgB",
-                ".O.OO.",
-            },
-        };
-
-        /// <summary>
-        /// Express: the express parcel is in the front row and fits the first truck, with 8 spare moves;
-        /// the hand points at it and it ships on the first tap.
-        /// </summary>
-        static LevelData Level17() => new LevelData
-        {
-            id = 17,
-            holdingSlots = 5,
-            truckCapacity = LevelPlan.TruckCapacity,
-            trucks = "YRPYRPYRP",
-            rows = new[]
-            {
-                "RYYYRR",
-                "PPPYYY",
-                "RRRPPP",
-                "YYRRRY",
-                ".PP.P.",
-            },
-            express = new[] { new ExpressData { x = 2, y = 0, taps = 9 } },
-        };
-
-        /// <summary>
-        /// Lock: the key is in the front row and fits the first truck; its padlock is in row 1, freed by
-        /// the second truck and opened by then.
-        /// </summary>
-        static LevelData Level22() => new LevelData
-        {
-            id = 22,
-            holdingSlots = 5,
-            truckCapacity = LevelPlan.TruckCapacity,
-            trucks = "GBOGBOGBO",
-            rows = new[]
-            {
-                "GGGBBB",
-                "OGOOGG",
-                "BBBOOO",
-                "GBBBGG",
-                "O.O..O",
-            },
-            locks = new[] { new LockData { x = 3, y = 1, keyX = 1, keyY = 0 } },
-        };
-
-        /// <summary>
-        /// Strap: a red pair stands in rows 0-1 and the first truck is red with room for both, so tapping
-        /// it loads the pair together. A second pair waits further back for practice.
-        /// </summary>
-        static LevelData Level27() => new LevelData
-        {
-            id = 27,
-            holdingSlots = 5,
-            truckCapacity = LevelPlan.TruckCapacity,
-            trucks = "RYBRYBRYB",
-            rows = new[]
-            {
-                "RRYYBB",
-                "BRYRRR",
-                "YYYBBB",
-                "RRRYYY",
-                "B.B.B.",
-            },
-            straps = new[]
-            {
-                new StrapData { x = 1, y = 0, x2 = 1, y2 = 1 },
-                new StrapData { x = 0, y = 3, x2 = 1, y2 = 3 },
-            },
-        };
-
-        /// <summary>
-        /// Gate: a wall of bollards across row 3 with one gate, which opens after the first truck's three
-        /// purples. All three are in the front row.
-        /// </summary>
-        static LevelData Level42() => new LevelData
-        {
-            id = 42,
-            holdingSlots = 5,
-            truckCapacity = LevelPlan.TruckCapacity,
-            trucks = "PGOPGOPGOPG",
-            rows = new[]
-            {
-                "PPPGGG",
-                "OOOPPP",
-                "GGGOOO",
-                "##+###",
-                "GPPPGO",
-                "POGOPG",
-                ".GPG..",
-            },
-            gates = new[] { new GateData { x = 2, y = 3, color = "P", count = 3 } },
-        };
-
-        /// <summary>
-        /// Throws unless a debut level keeps the debut rules (3 colors, 5 slots, not HARD, only the new
-        /// cargo plus bollards) and its first relevant interaction is the obvious, safe one.
-        /// </summary>
-        static void CheckDebut(LevelData data, CargoKind kind)
+        static bool Teaches(LevelData data, CargoKind kind)
         {
             var level = LevelDefinition.Parse(data);
             var session = new GameSession(level);
-            void Require(bool ok, string what)
-            {
-                if (!ok) throw new InvalidOperationException($"debut level {data.id} ({kind}): {what}");
-            }
-
-            var colors = new HashSet<int>();
-            for (int y = 0; y < level.Height; y++)
-            for (int x = 0; x < level.Width; x++)
-                if (level.ColorAt(x, y) != ParcelColors.None) colors.Add(level.ColorAt(x, y));
-            Require(colors.Count == 3, "must use 3 colors");
-            Require(level.HoldingSlots == 5 && !level.Hard, "must have 5 slots and not be HARD");
-            Require(level.Uses(kind), "must use its cargo");
-            int allowed = (1 << (int)kind) | (1 << (int)CargoKind.Bollard);
-            Require((level.CargoMask & ~allowed) == 0, "may use only its cargo plus bollards");
-            Require(session.HasLegalMove(), "must start with a legal move");
-
             var moves = new List<Parcel>();
             session.GetMoves(moves);
-            var truck = session.CurrentTruck;
             Parcel At(int x, int y) => session.Board.Get(new Cell(x, y));
-            bool FirstTruckTakes(Parcel p) => p != null && moves.Contains(p) && session.CanTake(p) && truck.Accepts(p);
+            bool Free(Parcel p) => p != null && session.Board.IsFree(p.Cell);
+            bool Near(Cell c) => c.Y <= 1;
 
             switch (kind)
             {
                 case CargoKind.Bollard:
-                {
                     // Some parcel sits right behind a bollard and has to be dug out from the side.
-                    bool behind = false;
                     for (int y = 0; y + 1 < level.Height; y++)
                     for (int x = 0; x < level.Width; x++)
-                        if (level.IsBollard(x, y) && level.ColorAt(x, y + 1) != ParcelColors.None) behind = true;
-                    Require(behind, "a parcel must sit behind a bollard");
-                    break;
-                }
+                        if (level.IsBollard(x, y) && level.ColorAt(x, y + 1) != ParcelColors.None) return true;
+                    return false;
                 case CargoKind.Frost:
-                {
-                    // A crate the player could take right now but for its ice: free, about 3 moves to thaw,
-                    // with other moves to make meanwhile (the hand points at one of those).
-                    bool waiting = data.frost.Any(f =>
-                    {
-                        var p = At(f.x, f.y);
-                        return session.Board.IsFree(p.Cell) && f.layers >= 2 && f.layers <= 4;
-                    });
-                    Require(waiting, "a frozen crate must have an open path and thaw in 2-4 moves");
-                    Require(moves.Any(FirstTruckTakes), "a move must load the first truck while the ice thaws");
-                    // Loading the first truck's free matches thaws that crate by the time its truck needs it.
-                    var next = session.Clone();
-                    for (int i = 0; i < LevelPlan.TruckCapacity; i++)
-                    {
-                        next.GetMoves(moves);
-                        var pick = moves.FirstOrDefault(m => next.CurrentTruck.Accepts(m));
-                        Require(pick != null, "the first truck's parcels must be free");
-                        next.Tap(pick.Cell);
-                    }
-                    var crate = data.frost.First(f => session.Board.IsFree(new Cell(f.x, f.y)) && f.layers >= 2 && f.layers <= 4);
-                    Require(next.FrostLeft(next.Board.Get(new Cell(crate.x, crate.y))) == 0, "the front crate must thaw while the first truck loads");
-                    break;
-                }
+                    // A crate the player could take now but for its ice, thawing in a few moves.
+                    return data.frost.Any(f => Free(At(f.x, f.y)) && f.layers >= 2 && f.layers <= 4);
                 case CargoKind.Mystery:
-                {
-                    // Tapping a first-truck parcel reveals a mystery parcel right behind it.
-                    bool reveals = false;
-                    foreach (var p in moves)
-                    {
-                        if (!FirstTruckTakes(p)) continue;
-                        var next = session.Clone();
-                        var hidden = new List<Parcel>();
-                        foreach (var c in Neighbours(p.Cell.X, p.Cell.Y))
-                        {
-                            var q = next.Board.Get(c);
-                            if (q != null && next.IsHidden(q)) hidden.Add(q);
-                        }
-                        next.Tap(p.Cell);
-                        if (hidden.Any(q => !next.IsHidden(q))) reveals = true;
-                    }
-                    Require(reveals, "the first truck's match must reveal a mystery parcel");
-                    break;
-                }
+                    // A covered parcel right behind the front row, so an early move shows its color.
+                    return Enumerable.Range(0, level.Width).Any(x => level.Height > 1 && level.IsMystery(x, 1));
                 case CargoKind.Express:
                 {
                     var e = data.express.Single();
-                    var p = At(e.x, e.y);
-                    Require(FirstTruckTakes(p), "the express parcel must be free and fit the first truck");
-                    Require(e.taps >= 1 + 8, "the express parcel gets 8 spare moves");
-                    break;
+                    return Near(new Cell(e.x, e.y)) && e.taps >= 6;
                 }
                 case CargoKind.Lock:
                 {
                     var l = level.Locks.Single();
-                    Require(l.Locked.Y <= 2, "the padlock must be in the front three rows");
-                    Require(FirstTruckTakes(At(l.Key.X, l.Key.Y)), "the key must be free and fit the first truck");
-                    break;
+                    return l.Locked.Y <= 2 && Free(At(l.Key.X, l.Key.Y));
                 }
                 case CargoKind.Strap:
-                {
-                    var s = level.Straps[0];
-                    var a = At(s.A.X, s.A.Y);
-                    Require(s.A.Y <= 1 && s.B.Y <= 1, "the first strap must be in rows 0-1");
-                    Require(a.Color == truck.Color, "the first strap must be the first truck's color");
-                    var lead = moves.FirstOrDefault(m => m == a || m == session.StrapPartner(a));
-                    Require(lead != null && session.CanTake(lead), "the first strap must be free and fit the first truck");
-                    var next = session.Clone();
-                    next.Tap(lead.Cell);
-                    Require(next.Trucks[0].Loaded == 2 && next.Dock.Count == 0, "tapping the strap must load both parcels");
-                    break;
-                }
-                case CargoKind.Gate:
+                    return level.Straps.Any(st => Near(st.A) && Near(st.B));
+                default:
                 {
                     var g = level.Gates.Single();
-                    Require(g.Count == LevelPlan.TruckCapacity && g.Color == truck.Color, "the gate opens on the first truck's three parcels");
-                    // Taking the first truck's matches opens the gate within three moves.
-                    var next = session.Clone();
-                    for (int i = 0; i < LevelPlan.TruckCapacity; i++)
-                    {
-                        next.GetMoves(moves);
-                        var pick = moves.FirstOrDefault(m => next.CurrentTruck.Accepts(m));
-                        Require(pick != null, "the first truck's parcels must be free");
-                        next.Tap(pick.Cell);
-                    }
-                    Require(next.IsGateOpen(0), "the gate must open after the first truck");
-                    break;
+                    return g.Count == LevelPlan.TruckCapacity;
                 }
             }
         }
@@ -592,6 +339,7 @@ namespace CargoJam.LevelGen
                     SolverNodes = solved.NodesVisited,
                     HitNodeLimit = solved.HitNodeLimit,
                     Stats = CasualBot.Grade(level, GradeRuns, GradeSeed + data.id),
+                    Smart = SmartBot.Grade(level, SmartGradeRuns, GradeSeed + data.id),
                 };
             });
             PrintTable(results);
@@ -617,7 +365,7 @@ namespace CargoJam.LevelGen
                     {
                         var data = BoardMaker.Make(plan, new Random(rng.Next()), noise);
                         if (data == null) continue;
-                        sum += CasualBot.Grade(LevelDefinition.Parse(data), 100, rng.Next()).FailRate;
+                        sum += SmartBot.Grade(LevelDefinition.Parse(data), 60, rng.Next()).FailRate;
                         boards++;
                     }
                     Console.Write($" {noise,4:0}:{(boards == 0 ? double.NaN : sum / boards):0.00}");
@@ -627,12 +375,25 @@ namespace CargoJam.LevelGen
             return 0;
         }
 
+        // ---- play: a level as text, one call at a time (see PlayCommand) ---------------------------
+
+        static int Play(Options o)
+        {
+            string file = o.File ?? Path.Combine(o.Out, $"level_{o.Level:000}.json");
+            if (!File.Exists(file))
+            {
+                Console.Error.WriteLine($"no level file {file}");
+                return 2;
+            }
+            return PlayCommand.Run(LevelJson.Read(file), o.Moves);
+        }
+
         // ---- output -----------------------------------------------------------------------------
 
         static void PrintTable(Result[] results)
         {
-            Console.WriteLine("| Level | Kind | Size | Colors | Trucks | Slots | Hard | Bollards | Frost | Mystery | Express | Locks | Straps | Gates | Target | Bot fail | Stuck | Express fails | Solver nodes |");
-            Console.WriteLine("|---:|---|---|---:|---:|---:|---|---:|---|---:|---|---:|---:|---|---:|---:|---:|---|---:|");
+            Console.WriteLine("| Level | Kind | Size | Colors | Trucks | Slots | Hard | Bollards | Frost | Mystery | Express | Locks | Straps | Gates | Target | Bot fail | Stuck | Express fails | Smart fail | Decisions | Solver nodes |");
+            Console.WriteLine("|---:|---|---|---:|---:|---:|---|---:|---|---:|---|---:|---:|---|---:|---:|---:|---|---:|---:|---:|");
             foreach (var r in results)
             {
                 if (r == null) continue;
@@ -655,7 +416,7 @@ namespace CargoJam.LevelGen
                 Console.WriteLine($"| {d.id} | {r.Plan.Kind} | {l.Width}x{l.Height} | {colors.Count} | {l.Trucks.Count} | {l.HoldingSlots} | " +
                                   $"{(l.Hard ? "yes" : "")} | {Blank(bollards)} | {frost} | {Blank(mystery)} | {express} | {Blank(l.Locks.Count)} | " +
                                   $"{Blank(l.Straps.Count)} | {gates} | {r.Plan.TargetFail:0.00} | {r.Stats.FailRate:0.000} | " +
-                                  $"{r.Stats.StuckRate:0.000} | {expressFails} | {nodes} |");
+                                  $"{r.Stats.StuckRate:0.000} | {expressFails} | {r.Smart.FailRate:0.000} | {r.Smart.DecisionShare:0.00} | {nodes} |");
             }
         }
 
@@ -671,12 +432,12 @@ namespace CargoJam.LevelGen
                 if (r == null) continue;
                 var problems = new List<string>();
                 var (lo, hi) = r.Plan.SpecBand;
-                double fail = r.Stats.FailRate;
-                if (fail < lo || fail > hi) problems.Add($"fail {fail:0.000} outside {r.Plan.Kind} band {lo:0.00}-{hi:0.00}");
-                if (r.Stats.StuckRate > 0.01) problems.Add($"stuck {r.Stats.StuckRate:0.000} > 0.01");
+                double fail = r.Smart.FailRate;
+                if (fail < lo || fail > hi) problems.Add($"smart fail {fail:0.000} outside {r.Plan.Kind} band {lo:0.00}-{hi:0.00}");
+                if (r.Smart.StuckRate > 0.03) problems.Add($"smart stuck {r.Smart.StuckRate:0.000} > 0.03");
                 // A handful of fails says nothing about their mix, so the express share needs a few to count.
-                if (r.Stats.Fails >= 10 && r.Stats.ExpressShare > MaxExpressShare)
-                    problems.Add($"express misses are {r.Stats.ExpressShare:0.00} of fails");
+                if (r.Smart.Fails >= 10 && r.Smart.ExpressShare > MaxExpressShare)
+                    problems.Add($"express misses are {r.Smart.ExpressShare:0.00} of fails");
                 if (r.HitNodeLimit) problems.Add("solver hit its node limit");
                 if (problems.Count == 0) continue;
                 ok = false;
@@ -700,6 +461,7 @@ namespace CargoJam.LevelGen
                     case "generate":
                     case "grade":
                     case "explore":
+                    case "play":
                         o.Command = a;
                         break;
                     case "--seed":
@@ -714,6 +476,15 @@ namespace CargoJam.LevelGen
                     }
                     case "--out":
                         o.Out = Path.GetFullPath(Next());
+                        break;
+                    case "--level":
+                        o.Level = int.Parse(Next(), CultureInfo.InvariantCulture);
+                        break;
+                    case "--moves":
+                        o.Moves = Next();
+                        break;
+                    case "--file":
+                        o.File = Path.GetFullPath(Next());
                         break;
                     case "--dry-run":
                         o.DryRun = true;

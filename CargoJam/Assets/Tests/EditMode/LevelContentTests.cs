@@ -12,8 +12,8 @@ namespace CargoJam.Core.Tests
         const string LevelsFolder = "Assets/Resources/Levels";
         const int LevelCount = 100;
 
-        /// <summary>The level each cargo kind first appears on (design v4 §4), indexed by <see cref="CargoKind"/>.</summary>
-        static readonly int[] DebutLevel = { 5, 7, 12, 17, 22, 27, 42 };
+        /// <summary>The level each cargo kind first appears on (design v5: all by level 15), indexed by <see cref="CargoKind"/>.</summary>
+        static readonly int[] DebutLevel = { 4, 5, 7, 12, 9, 13, 15 };
 
         static string[] Files() => Directory.GetFiles(LevelsFolder, "*.json").OrderBy(f => f).ToArray();
 
@@ -141,7 +141,7 @@ namespace CargoJam.Core.Tests
                 string name = $"level {id} ({(CargoKind)k} debut)";
 
                 Assert.That(data.hard, Is.False, $"{name} is HARD");
-                Assert.That(data.holdingSlots, Is.EqualTo(5), $"{name} must have 5 slots");
+                Assert.That(data.holdingSlots, Is.EqualTo(3), $"{name} must have 3 slots");
                 Assert.That(id % CargoJam.Meta.Journey.LevelsPerStop, Is.Not.EqualTo(1), $"{name} is an arrival level");
                 // A debut never shares the screen with a booster unlock.
                 foreach (CargoJam.Meta.BoosterType booster in System.Enum.GetValues(typeof(CargoJam.Meta.BoosterType)))
@@ -151,7 +151,7 @@ namespace CargoJam.Core.Tests
                 for (int y = 0; y < level.Height; y++)
                 for (int x = 0; x < level.Width; x++)
                     if (level.ColorAt(x, y) != ParcelColors.None) colors.Add(level.ColorAt(x, y));
-                Assert.That(colors.Count, Is.LessThanOrEqualTo(3), $"{name} has {colors.Count} colors");
+                Assert.That(colors.Count, Is.LessThanOrEqualTo(4), $"{name} has {colors.Count} colors");
 
                 // Only the new cargo, plus bollards.
                 int allowed = (1 << k) | (1 << (int)CargoKind.Bollard);
