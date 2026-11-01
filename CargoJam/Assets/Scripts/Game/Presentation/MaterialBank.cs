@@ -36,20 +36,40 @@ namespace CargoJam.Game.Presentation
         /// <summary>Bare steel (buckles, gate posts) and dark strap webbing.</summary>
         static readonly Color SkinSteel = new Color(0.70f, 0.72f, 0.76f);
         static readonly Color SkinWebbing = new Color(0.17f, 0.18f, 0.21f);
+        /// <summary>Clear ice and its bright, snowy highlights (frozen crates).</summary>
+        static readonly Color IceClear = new Color(0.62f, 0.87f, 1.00f);
+        static readonly Color IceSnow = new Color(0.97f, 0.99f, 1.00f);
+        /// <summary>The express card: a bright amber that no parcel color shares, and the ink printed on it.</summary>
+        static readonly Color ExpressCard = new Color(1.00f, 0.80f, 0.12f);
+        static readonly Color ExpressCardDim = new Color(0.92f, 0.74f, 0.16f);
+        static readonly Color ExpressInk = new Color(0.10f, 0.11f, 0.16f);
+        /// <summary>Strap webbing: a slate that reads as fabric (not a black cable) on every parcel color.</summary>
+        static readonly Color StrapWebbing = new Color(0.33f, 0.37f, 0.46f);
+
+        const float SkinColumns = 16f;
 
         /// <summary>
-        /// Texel centers (u) of the 8×1 parcel skin texture: body, tape, stamp ink, label paper, then
-        /// the cargo columns, which are the same in every color's skin (alert ink, tag card, steel,
-        /// webbing), so express tags, straps and gates draw with the parcel skin's material.
+        /// Texel centers (u) of the 16×1 parcel skin texture: body, tape, stamp ink, label paper, then
+        /// the cargo columns (alert ink, tag card, steel, webbing, clear ice, snow, express amber and
+        /// display ink, the body seen through frost, strap webbing), so express labels, ice, straps and
+        /// gates draw with the parcel skin's material. All but the frost tint are the same in every
+        /// color's skin (the tag card and express amber dim a little on a blocked parcel's skin).
         /// </summary>
-        public const float SkinBodyU = 0.0625f;
-        public const float SkinTapeU = 0.1875f;
-        public const float SkinSymbolU = 0.3125f;
-        public const float SkinLabelU = 0.4375f;
-        public const float SkinAlertU = 0.5625f;
-        public const float SkinTagU = 0.6875f;
-        public const float SkinSteelU = 0.8125f;
-        public const float SkinWebbingU = 0.9375f;
+        public const float SkinBodyU = 0.5f / SkinColumns;
+        public const float SkinTapeU = 1.5f / SkinColumns;
+        public const float SkinSymbolU = 2.5f / SkinColumns;
+        public const float SkinLabelU = 3.5f / SkinColumns;
+        public const float SkinAlertU = 4.5f / SkinColumns;
+        public const float SkinTagU = 5.5f / SkinColumns;
+        public const float SkinSteelU = 6.5f / SkinColumns;
+        public const float SkinWebbingU = 7.5f / SkinColumns;
+        public const float SkinIceU = 8.5f / SkinColumns;
+        public const float SkinSnowU = 9.5f / SkinColumns;
+        public const float SkinExpressU = 10.5f / SkinColumns;
+        public const float SkinExpressInkU = 11.5f / SkinColumns;
+        /// <summary>This color's body under a layer of frost: pale, but still plainly its color.</summary>
+        public const float SkinFrostU = 12.5f / SkinColumns;
+        public const float SkinStrapU = 13.5f / SkinColumns;
 
         const string CarKitColormap = "Env/Cars/Textures/colormap";
 
@@ -79,8 +99,6 @@ namespace CargoJam.Game.Presentation
         public Material TarpDim { get; }
         public Material Gold { get; }
         public Material Steel { get; }
-        /// <summary>The ice collar on frozen crates: opaque, pale cyan-white and smooth.</summary>
-        public Material Ice { get; }
 
         /// <summary>The concrete slab under the yard and dock.</summary>
         public Material Apron { get; }
@@ -109,8 +127,8 @@ namespace CargoJam.Game.Presentation
                 bright[i] = Make(Swatches[i]);
                 dim[i] = Make(Dim(Swatches[i]));
                 truckBody[i] = Make(Color.Lerp(Swatches[i], Color.white, 0.25f));
-                skinBright[i] = MakeSkin(Swatches[i], InkFor(i), LabelPaper, TagCard, $"Parcel {i}");
-                skinDim[i] = MakeSkin(Dim(Swatches[i]), InkFor(i), LabelPaperDim, TagCardDim, $"Parcel {i} dim");
+                skinBright[i] = MakeSkin(Swatches[i], InkFor(i), LabelPaper, TagCard, ExpressCard, Frost(Swatches[i]), $"Parcel {i}");
+                skinDim[i] = MakeSkin(Dim(Swatches[i]), InkFor(i), LabelPaperDim, TagCardDim, ExpressCardDim, Frost(Swatches[i]), $"Parcel {i} dim");
                 labelInk[i] = Make(InkFor(i));
             }
             Label = Make(LabelPaper);
@@ -130,9 +148,6 @@ namespace CargoJam.Game.Presentation
             TarpDim = Make(new Color(0.45f, 0.46f, 0.5f));
             Gold = Make(new Color(1f, 0.78f, 0.22f));
             Steel = Make(new Color(0.7f, 0.72f, 0.76f));
-            Ice = Make(new Color(0.80f, 0.93f, 0.98f));
-            Ice.name = "Ice";
-            Ice.SetFloat("_Smoothness", 0.9f);
 
             Apron = Make(new Color(0.70f, 0.69f, 0.66f));
             LaneMark = Make(new Color(0.93f, 0.91f, 0.84f));
@@ -265,6 +280,14 @@ namespace CargoJam.Game.Presentation
         readonly Material symbolLight;
         readonly Material symbolDark;
 
+        /// <summary>A parcel color seen through ice: lifted toward the ice's pale cyan, keeping its hue.</summary>
+        static Color Frost(Color c)
+        {
+            var f = Color.Lerp(c, IceClear, 0.5f);
+            f.a = 1f;
+            return f;
+        }
+
         /// <summary>
         /// Blocked parcels are duller and a little darker, but keep their hue: dimming toward plain
         /// grey turned yellow into olive and made it read as a different color.
@@ -284,22 +307,26 @@ namespace CargoJam.Game.Presentation
         }
 
         /// <summary>
-        /// Body, tape, stamp ink, label paper and the shared cargo columns (see <see cref="SkinBodyU"/>)
-        /// in an 8×1 point-filtered texture under a white base color.
+        /// Body, tape, stamp ink, label paper and the cargo columns (see <see cref="SkinBodyU"/>) in a
+        /// 16×1 point-filtered texture under a white base color.
         /// </summary>
-        Material MakeSkin(Color body, Color ink, Color paper, Color tag, string name)
+        Material MakeSkin(Color body, Color ink, Color paper, Color tag, Color express, Color frost, string name)
         {
             // Packing tape: a slightly darker, slightly greyer band of the body color.
             float luma = 0.299f * body.r + 0.587f * body.g + 0.114f * body.b;
             var tape = Color.Lerp(body * 0.8f, new Color(luma, luma, luma) * 0.8f, 0.2f);
             tape.a = 1f;
-            var tex = new Texture2D(8, 1, TextureFormat.RGBA32, false)
+            var tex = new Texture2D((int)SkinColumns, 1, TextureFormat.RGBA32, false)
             {
                 name = name,
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp,
             };
-            tex.SetPixels(new[] { body, tape, ink, paper, AlertInk, tag, SkinSteel, SkinWebbing });
+            tex.SetPixels(new[]
+            {
+                body, tape, ink, paper, AlertInk, tag, SkinSteel, SkinWebbing,
+                IceClear, IceSnow, express, ExpressInk, frost, StrapWebbing, StrapWebbing, StrapWebbing,
+            });
             tex.Apply(false, true);
             var m = Make(Color.white);
             m.name = name;

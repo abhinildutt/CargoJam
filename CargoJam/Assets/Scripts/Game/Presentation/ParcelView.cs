@@ -19,14 +19,22 @@ namespace CargoJam.Game.Presentation
         /// <summary>A small hand-applied tilt per color, so labels don't read as a printed grid.</summary>
         static readonly float[] LabelYaw = { -7f, 5f, -4f, 6f, -5f, 3f };
 
-        /// <summary>The most ice a crate can carry (one collar band per layer).</summary>
+        /// <summary>The most ice a crate can carry.</summary>
         public const int MaxIce = 3;
-        /// <summary>Ice collar bands, in unit-box space: the lowest band's center, the step up, each band's size.</summary>
-        const float IceBottom = -0.32f;
-        const float IceStep = 0.27f;
-        const float IceBandHeight = 0.22f;
-        const float IceOuter = 0.56f;
-        const float IceWall = 0.07f;
+        /// <summary>
+        /// The ice shell, in world units on the parcel: how far the collar stands proud of the box and
+        /// how far it laps over the lid's edge (at three layers it reaches the label, never the symbol),
+        /// each plus a share per layer, and per layer how much taller the collar grows and how much
+        /// further down the sides the frost reaches.
+        /// </summary>
+        const float IceProud = 0.035f;
+        const float IceProudPerLayer = 0.015f;
+        const float IceCollarLap = 0.045f;
+        const float IceCollarLapPerLayer = 0.042f;
+        const float IceFrameBase = 0.04f;
+        const float IceFramePerLayer = 0.04f;
+        const float IceSkirtBase = 0.07f;
+        const float IceSkirtPerLayer = 0.075f;
         /// <summary>How long a crack punches the collar, and how long the last layer takes to shatter away.</summary>
         const float CrackPunch = 0.2f;
         const float ShatterTime = 0.25f;
@@ -316,9 +324,12 @@ namespace CargoJam.Game.Presentation
         void AddIce(int layers)
         {
             frost = frostShown = Mathf.Clamp(layers, 1, MaxIce);
-            var r = MeshKit.Show("Ice", transform, IceMesh(frostShown), materials.Ice);
+            // The parcel skin's ice and frost columns: batches with the parcels, and casts no shadow.
+            var r = MeshKit.Show("Ice", transform, IceMesh(frostShown), materials.ParcelSkin(Parcel.Color, true), castShadows: false);
             iceCollar = r.transform;
             iceFilter = r.GetComponent<MeshFilter>();
+            // A key on a frozen crate sits on top of the ice rather than inside it.
+            if (keyBadge != null) keyBadge.localPosition += Vector3.up * (IceFrameHeight(MaxIce) / Layout.ParcelSize.y);
             ApplyMaterial();
         }
 
@@ -431,33 +442,81 @@ namespace CargoJam.Game.Presentation
                 Vector3.one * TagDigit), ink);
         }
 
+        /// <summary>How high the ice frame on the lid stands at a number of layers (world units).</summary>
+        static float IceFrameHeight(int layers) => IceFrameBase + IceFramePerLayer * Mathf.Clamp(layers, 1, MaxIce);
+
         /// <summary>
-        /// The ice collar: one band of thick ice around the box's sides per layer (lowest first), each
-        /// with a crystal chip on every face. The lid stays clear so the label reads.
+        /// The ice shell, readable from the game camera: a thick collar of clear ice hugging the top of
+        /// the box and rising above the lid, so from above it rings the lid in pale cyan while the lid
+        /// keeps its color and label; frost down the upper sides; and one ice crystal per layer on the
+        /// collar's corners. Each layer makes the collar markedly wider (thin rim, band, thick slab) and
+        /// taller, the frost reach further down, and adds a crystal, so 1, 2 and 3 read apart even in
+        /// grayscale. Laid out in world units, then mapped
+        /// into the unit box.
         /// </summary>
         static Mesh IceMesh(int layers)
         {
             int n = Mathf.Clamp(layers, 1, MaxIce);
             if (iceMeshes[n] != null) return iceMeshes[n];
+            var size = Layout.ParcelSize;
+            var toUnit = Matrix4x4.Scale(new Vector3(1f / size.x, 1f / size.y, 1f / size.z));
+            var frost = new Vector2(MaterialBank.SkinFrostU, 0.5f);
+            var clear = new Vector2(MaterialBank.SkinIceU, 0.5f);
+            var snow = new Vector2(MaterialBank.SkinSnowU, 0.5f);
             var b = new MeshBuilder();
-            for (int k = 0; k < n; k++) AddIceBand(b, IceBottom + k * IceStep, k);
-            iceMeshes[n] = b.ToMesh($"Ice Collar {n}");
+            void Block(Vector3 min, Vector3 max, float bevel, Vector2 uv) =>
+                MeshKit.AddBox(b, 0, toUnit * Matrix4x4.TRS((min + max) * 0.5f, Quaternion.identity, max - min), bevel, uv);
+            void Ring(float outer, float inner, float bottom, float top, float bevel, Vector2 uv)
+            {
+                Block(new Vector3(-outer, bottom, -outer), new Vector3(outer, top, -inner), bevel, uv);
+                Block(new Vector3(-outer, bottom, inner), new Vector3(outer, top, outer), bevel, uv);
+                Block(new Vector3(-outer, bottom, -inner), new Vector3(-inner, top, inner), bevel, uv);
+                Block(new Vector3(inner, bottom, -inner), new Vector3(outer, top, inner), bevel, uv);
+            }
+
+            float box = size.x * 0.5f;
+            float lid = size.y * 0.5f;
+            float outer = box + IceProud + IceProudPerLayer * n;
+            float inner = box - IceCollarLap - IceCollarLapPerLayer * n;
+            float top = lid + IceFrameHeight(n);
+            float skirt = lid - (IceSkirtBase + IceSkirtPerLayer * n);
+
+            // Frost down the sides: the box seen through a skin of ice.
+            Ring(box + 0.02f, box - 0.01f, skirt, lid - 0.02f, 0.2f, frost);
+            // The collar of clear ice around the top, with a cap of snow along its crown.
+            Ring(outer, inner, lid - 0.08f, top, 0.12f, clear);
+            Ring(outer - 0.025f, inner + 0.025f, top - 0.01f, top + 0.016f, 0.2f, snow);
+
+            // One crystal per layer, on the collar's corners: back left, back right, then front left.
+            float corner = (outer + inner) * 0.5f;
+            for (int k = 0; k < n; k++)
+            {
+                float x = (k == 1 ? 1f : -1f) * corner;
+                float z = (k == 2 ? -1f : 1f) * corner;
+                AddCrystal(b, toUnit, new Vector3(x, top, z), Mathf.Sign(x), clear, snow);
+            }
+
+            // Icicles hang from the frost's front edge, one more per layer.
+            for (int k = 0; k <= n; k++)
+            {
+                float x = -box + (k + 0.5f) * (2f * box / (n + 1));
+                float length = 0.11f + 0.04f * ((k + n) % 2);
+                var tip = toUnit * Matrix4x4.TRS(new Vector3(x, skirt - length * 0.3f, -box - 0.01f),
+                    Quaternion.Euler(0f, 0f, 45f), new Vector3(0.075f, 0.075f, 0.045f) * (length / 0.11f));
+                MeshKit.AddBox(b, 0, tip, 0f, clear);
+            }
+
+            iceMeshes[n] = b.ToMesh($"Ice Shell {n}");
             return iceMeshes[n];
         }
 
-        static void AddIceBand(MeshBuilder b, float y, int band)
+        /// <summary>A pointed ice crystal (a tall shard and a short one) standing on <paramref name="foot"/>.</summary>
+        static void AddCrystal(MeshBuilder b, Matrix4x4 toUnit, Vector3 foot, float outward, Vector2 clear, Vector2 snow)
         {
-            const float mid = IceOuter - IceWall * 0.5f;
-            for (int side = 0; side < 4; side++)
-            {
-                // Side 0 is the front (-z); the others turn around the box.
-                var turn = Quaternion.Euler(0f, side * 90f, 0f);
-                MeshKit.AddBox(b, 0, Matrix4x4.TRS(turn * new Vector3(0f, y, -mid), turn,
-                    new Vector3(IceOuter * 2f, IceBandHeight, IceWall)), 0.12f, Vector2.zero);
-                float along = (band + side) % 2 == 0 ? 0.24f : -0.24f;
-                MeshKit.AddBox(b, 0, Matrix4x4.TRS(turn * new Vector3(along, y - IceBandHeight * 0.1f, -IceOuter - 0.005f),
-                    turn * Quaternion.Euler(0f, 0f, 45f), new Vector3(0.13f, 0.13f, 0.06f)), 0f, Vector2.zero);
-            }
+            MeshKit.AddBox(b, 0, toUnit * Matrix4x4.TRS(foot + new Vector3(0f, 0.14f, 0f),
+                Quaternion.Euler(0f, 45f, -10f * outward), new Vector3(0.16f, 0.34f, 0.16f)), 0.3f, snow);
+            MeshKit.AddBox(b, 0, toUnit * Matrix4x4.TRS(foot + new Vector3(-0.09f * outward, 0.06f, -0.06f),
+                Quaternion.Euler(0f, 45f, 28f * outward), new Vector3(0.1f, 0.18f, 0.1f)), 0.3f, clear);
         }
 
         static Mesh PlainMesh()
