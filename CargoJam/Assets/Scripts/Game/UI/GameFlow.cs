@@ -74,6 +74,11 @@ namespace CargoJam.Game.UI
         readonly List<CargoKind> cargoQueue = new List<CargoKind>();
         /// <summary>Bumped on every level start so a card callback from an older level does nothing.</summary>
         int cargoToken;
+        /// <summary>
+        /// Cards are queued or showing for the level that just started: the board takes no taps until the
+        /// last "Got it", so nobody plays a new cargo kind before it has been explained.
+        /// </summary>
+        bool cardsPending;
         /// <summary>The cargo the hand teaches on <see cref="teachLevel"/>, so a retry points it out again.</summary>
         CargoKind teachKind;
         int teachLevel = -1;
@@ -179,7 +184,7 @@ namespace CargoJam.Game.UI
                 i = -1; // the action may have changed the list
             }
 
-            controller.InputEnabled = state == State.Playing && !ctx.AnyModalOpen && !home.Visible && !journey.Visible;
+            controller.InputEnabled = state == State.Playing && !cardsPending && !ctx.AnyModalOpen && !home.Visible && !journey.Visible;
             tutorial.Update();
         }
 
@@ -401,6 +406,7 @@ namespace CargoJam.Game.UI
         {
             state = State.Home;
             timed.Clear();
+            cardsPending = false;
             hud.Hide();
             tutorial.Stop();
             banner.Stop();
@@ -470,6 +476,7 @@ namespace CargoJam.Game.UI
             ctx.Toast.Hide();
             cargoQueue.Clear();
             cargoToken++;
+            cardsPending = false;
             if (state == State.Playing)
             {
                 bool arrival = controller.EnvironmentShown.Arrival;
@@ -477,7 +484,8 @@ namespace CargoJam.Game.UI
                 float bannerAt = arrival ? readyAt - Time.time + ArrivalBannerGap : BannerAt;
                 if (info.Hard) banner.Play(bannerAt);
                 QueueCargoCards(info);
-                if (cargoQueue.Count > 0)
+                cardsPending = cargoQueue.Count > 0;
+                if (cardsPending)
                 {
                     // The cards come first (after the HARD banner, if any); the hand follows the last one.
                     tutorial.Stop();
@@ -549,7 +557,8 @@ namespace CargoJam.Game.UI
             if (token != cargoToken || state != State.Playing) return;
             if (cargoQueue.Count == 0)
             {
-                // All met: now show where to start (unless they already have).
+                // All met: the board opens, and the hand shows where to start (unless they already have).
+                cardsPending = false;
                 if (!controller.MovedThisLevel) tutorial.BeginCargo(teachKind);
                 return;
             }
@@ -566,6 +575,7 @@ namespace CargoJam.Game.UI
         {
             if (state != State.Playing) return;
             state = State.Won;
+            cardsPending = false;
             tutorial.Stop();
             banner.Stop();
             ctx.Toast.Hide();
@@ -605,6 +615,7 @@ namespace CargoJam.Game.UI
         {
             if (state != State.Playing) return;
             state = State.Failed;
+            cardsPending = false;
             tutorial.Stop();
             ctx.Toast.Hide();
             controller.CancelCrane();
@@ -753,7 +764,8 @@ namespace CargoJam.Game.UI
         void OnBoardChanged(int _)
         {
             hud.RefreshBoosters();
-            tutorial.OnMove();
+            // Only a real move ends the teaching: a rejected tap (a frozen crate, a padlock) keeps the hand up.
+            if (controller.MovedThisLevel) tutorial.OnMove();
         }
 
         void OnDockChanged(int count, int capacity) => OnBoardChanged(count);
