@@ -42,16 +42,20 @@ namespace CargoJam.Game.Presentation
         /// <summary>Express tags at or below this count print in red ink and pulse.</summary>
         public const int ExpressUrgent = 2;
         /// <summary>
-        /// The express tag, in world units on the parcel: card height, minimum width, digit height,
-        /// padding around the digits, the dark border, and how far it tilts up off the lid toward the
-        /// camera (90° minus the camera pitch, so it faces the camera square on).
+        /// The express label, in unit-box space on the lid: its size (a little bigger than a shipping
+        /// label), the amber rim around it, the count's digit height (over 40% of the lid) and depth, and the
+        /// paper chip in the top left corner that carries the color's symbol.
         /// </summary>
-        const float TagHeight = 0.24f;
-        const float TagMinWidth = 0.24f;
-        const float TagDigit = 0.15f;
-        const float TagPad = 0.05f;
-        const float TagBorder = 0.018f;
-        const float TagTilt = 32f;
+        const float ExpressLabel = 0.7f;
+        const float ExpressRim = 0.04f;
+        const float ExpressDigit = 0.44f;
+        const float ExpressDigitZ = -0.075f;
+        /// <summary>Two-digit counts are a little smaller and lower, so they fit beside the chip.</summary>
+        const float ExpressDigitPair = 0.36f;
+        const float ExpressDigitPairZ = -0.1f;
+        const float ChipSize = 0.18f;
+        static readonly Vector2 ChipAt = new Vector2(-0.245f, 0.245f);
+        const float ChipStamp = 0.2f;
         /// <summary>The bump each tick gives the parcel, and the urgent pulse's size and rate (radians per second).</summary>
         const float ExpressKick = 0.22f;
         const float PulseAmount = 0.045f;
@@ -388,20 +392,30 @@ namespace CargoJam.Game.Presentation
 
         static void AppendBox(MeshBuilder b, int i)
         {
-            MeshKit.AddBox(b, 0, Matrix4x4.identity, Bevel, new Vector2(MaterialBank.SkinBodyU, 0.5f));
-            AddTape(b, new Vector2(MaterialBank.SkinTapeU, 0.5f));
+            AppendCarton(b);
             // A paper shipping label over the tape, with the color's symbol stamped on it in ink.
-            var label = Matrix4x4.TRS(new Vector3(0f, 0.5f + TapeLift * 2f + LabelThickness * 0.5f, 0f),
-                Quaternion.Euler(0f, LabelYaw[i % LabelYaw.Length], 0f), Vector3.one);
+            var label = LabelFrame(i);
             MeshKit.AddBox(b, 0, label * Matrix4x4.Scale(new Vector3(LabelSize, LabelThickness, LabelSize)), 0f,
                 new Vector2(MaterialBank.SkinLabelU, 0.5f));
             Symbols.Append(b, 0, i, label * Matrix4x4.Translate(new Vector3(0f, LabelThickness * 0.5f, 0f)) * Matrix4x4.Scale(Vector3.one * StampScale),
                 new Vector2(MaterialBank.SkinSymbolU, 0.5f));
         }
 
+        /// <summary>The beveled box and its packing tape.</summary>
+        static void AppendCarton(MeshBuilder b)
+        {
+            MeshKit.AddBox(b, 0, Matrix4x4.identity, Bevel, new Vector2(MaterialBank.SkinBodyU, 0.5f));
+            AddTape(b, new Vector2(MaterialBank.SkinTapeU, 0.5f));
+        }
+
+        /// <summary>The label's frame: centered on the lid, its thickness centered on y, with the color's hand-applied tilt.</summary>
+        static Matrix4x4 LabelFrame(int i) =>
+            Matrix4x4.TRS(new Vector3(0f, 0.5f + TapeLift * 2f + LabelThickness * 0.5f, 0f),
+                Quaternion.Euler(0f, LabelYaw[i % LabelYaw.Length], 0f), Vector3.one);
+
         /// <summary>
-        /// The parcel box with an express tag on the lid's front right corner, one cached mesh per
-        /// color, count and ink. The tag uses the skin's tag, ink, webbing and alert columns, so it
+        /// The parcel box wearing the express label instead of its shipping label, one cached mesh per
+        /// color, count and ink. The label uses the skin's express, ink, paper and alert columns, so it
         /// shares the parcel's draw call.
         /// </summary>
         static Mesh ExpressMesh(int color, int left, bool urgent)
@@ -411,35 +425,38 @@ namespace CargoJam.Game.Presentation
             int key = (i * (Digits.Max + 1) + v) * 2 + (urgent ? 1 : 0);
             if (expressMeshes.TryGetValue(key, out var mesh) && mesh != null) return mesh;
             var b = new MeshBuilder();
-            AppendBox(b, i);
-            AppendTag(b, v, urgent);
+            AppendCarton(b);
+            AppendExpressLabel(b, i, v, urgent);
             mesh = b.ToMesh($"Parcel Express {i} {v}{(urgent ? " urgent" : "")}");
             expressMeshes[key] = mesh;
             return mesh;
         }
 
         /// <summary>
-        /// A card hinged on the lid's front edge and tilted up to face the camera: a dark (red when
-        /// urgent) border, the white card and the count. Laid out in world units, then mapped into the
-        /// unit box so the parcel's squat scale doesn't squash it.
+        /// The express label in place of the shipping label: a dark countdown display with an amber rim
+        /// and the count in big amber figures (a red display with white figures when urgent), and the
+        /// color's symbol stamped on a paper chip in its top left corner, so it still reads without
+        /// color. Dark and amber stand out on every parcel color and in grayscale, so an express parcel
+        /// reads at a glance whatever its count.
         /// </summary>
-        static void AppendTag(MeshBuilder b, int value, bool urgent)
+        static void AppendExpressLabel(MeshBuilder b, int color, int value, bool urgent)
         {
-            var size = Layout.ParcelSize;
-            var toUnit = Matrix4x4.Scale(new Vector3(1f / size.x, 1f / size.y, 1f / size.z));
-            float flat = (0.5f - Bevel) * size.z;
-            float w = Mathf.Max(TagMinWidth, Digits.Width(value) * TagDigit + TagPad * 2f);
-            var hinge = new Vector3(size.x * 0.5f - 0.03f - w * 0.5f, size.y * 0.5f + 0.003f, -flat);
-            var frame = toUnit * Matrix4x4.TRS(hinge, Quaternion.Euler(-TagTilt, 0f, 0f), Vector3.one)
-                * Matrix4x4.Translate(new Vector3(0f, 0f, TagHeight * 0.5f + TagBorder));
-            var ink = new Vector2(urgent ? MaterialBank.SkinAlertU : MaterialBank.SkinSymbolU, 0.5f);
-            var border = new Vector2(urgent ? MaterialBank.SkinAlertU : MaterialBank.SkinWebbingU, 0.5f);
-            MeshKit.AddBox(b, 0, frame * Matrix4x4.TRS(new Vector3(0f, 0.006f, 0f), Quaternion.identity,
-                new Vector3(w + TagBorder * 2f, 0.012f, TagHeight + TagBorder * 2f)), 0f, border);
-            MeshKit.AddBox(b, 0, frame * Matrix4x4.TRS(new Vector3(0f, 0.019f, 0f), Quaternion.identity,
-                new Vector3(w, 0.014f, TagHeight)), 0f, new Vector2(MaterialBank.SkinTagU, 0.5f));
-            Digits.Append(b, 0, value, frame * Matrix4x4.TRS(new Vector3(0f, 0.029f, 0f), Quaternion.identity,
-                Vector3.one * TagDigit), ink);
+            var label = LabelFrame(color);
+            var amber = new Vector2(MaterialBank.SkinExpressU, 0.5f);
+            var display = new Vector2(urgent ? MaterialBank.SkinAlertU : MaterialBank.SkinExpressInkU, 0.5f);
+            var figures = urgent ? new Vector2(MaterialBank.SkinTagU, 0.5f) : amber;
+            float rimmed = ExpressLabel + ExpressRim * 2f;
+            MeshKit.AddBox(b, 0, label * Matrix4x4.Scale(new Vector3(rimmed, LabelThickness, rimmed)), 0f, amber);
+            MeshKit.AddBox(b, 0, label * Matrix4x4.TRS(new Vector3(0f, 0.003f, 0f), Quaternion.identity,
+                new Vector3(ExpressLabel, LabelThickness, ExpressLabel)), 0f, display);
+            float face = LabelThickness * 0.5f + 0.004f;
+            var chip = label * Matrix4x4.Translate(new Vector3(ChipAt.x, face, ChipAt.y));
+            MeshKit.AddBox(b, 0, chip * Matrix4x4.Scale(new Vector3(ChipSize, 0.01f, ChipSize)), 0f, new Vector2(MaterialBank.SkinLabelU, 0.5f));
+            Symbols.Append(b, 0, color, chip * Matrix4x4.Translate(new Vector3(0f, 0.005f, 0f)) * Matrix4x4.Scale(Vector3.one * ChipStamp),
+                new Vector2(MaterialBank.SkinSymbolU, 0.5f));
+            bool pair = value >= 10;
+            Digits.Append(b, 0, value, label * Matrix4x4.TRS(new Vector3(pair ? 0.03f : 0.045f, face, pair ? ExpressDigitPairZ : ExpressDigitZ),
+                Quaternion.identity, Vector3.one * (pair ? ExpressDigitPair : ExpressDigit)), figures);
         }
 
         /// <summary>How high the ice frame on the lid stands at a number of layers (world units).</summary>
