@@ -1,3 +1,4 @@
+using System;
 using CargoJam.Core;
 using CargoJam.Game.Meta;
 using CargoJam.Meta;
@@ -36,10 +37,21 @@ namespace CargoJam.EditorTools
             (42, CargoKind.Gate),
         };
 
+        /// <summary>A Play From request made during Play mode, run once the editor is back in Edit mode.</summary>
+        static Action afterExit;
+
         static CargoJamDevMenu()
         {
             EditorApplication.playModeStateChanged += state =>
             {
+                if (state == PlayModeStateChange.EnteredEditMode && afterExit != null)
+                {
+                    var action = afterExit;
+                    afterExit = null;
+                    // Next tick, so the editor has finished tearing Play mode down before a scene opens.
+                    EditorApplication.delayCall += () => action();
+                    return;
+                }
                 if (state != PlayModeStateChange.ExitingEditMode) return;
                 int start = SessionState.GetInt(StartLevelKey, -1);
                 SessionState.EraseInt(StartLevelKey);
@@ -55,10 +67,27 @@ namespace CargoJam.EditorTools
             set => EditorPrefs.SetBool(ResetOnPlayPref, value);
         }
 
-        [MenuItem("Cargo Jam/Play From Level 1", priority = 0)]
-        static void PlayFromStart()
+        /// <summary>
+        /// Runs <paramref name="action"/> in Edit mode: now, or after leaving Play mode (saving or opening
+        /// a scene throws while playing, and leaving Play mode only happens at the end of the frame).
+        /// A newer request made while leaving replaces an older one.
+        /// </summary>
+        static void InEditMode(Action action)
         {
-            if (EditorApplication.isPlaying) EditorApplication.isPlaying = false;
+            if (!EditorApplication.isPlaying)
+            {
+                action();
+                return;
+            }
+            afterExit = action;
+            EditorApplication.isPlaying = false;
+        }
+
+        [MenuItem("Cargo Jam/Play From Level 1", priority = 0)]
+        static void PlayFromStart() => InEditMode(PlayFromStartNow);
+
+        static void PlayFromStartNow()
+        {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             EditorSceneManager.OpenScene(MainScene);
             ResetProgress();
@@ -82,9 +111,10 @@ namespace CargoJam.EditorTools
         /// level's own debut card shows), the previous destination's arrival already seen. Like
         /// "Play From Level 1", this replaces the saved progress.
         /// </summary>
-        public static void PlayFromLevel(int number)
+        public static void PlayFromLevel(int number) => InEditMode(() => PlayFromLevelNow(number));
+
+        static void PlayFromLevelNow(int number)
         {
-            if (EditorApplication.isPlaying) EditorApplication.isPlaying = false;
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             EditorSceneManager.OpenScene(MainScene);
             SessionState.SetInt(StartLevelKey, Mathf.Max(1, number) - 1);
