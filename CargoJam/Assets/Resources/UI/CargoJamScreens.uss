@@ -744,3 +744,43 @@
     width: 76px;
     height: 76px;
 }
+
+/* ---- Level picker (editor and development builds only) ------------------------------------ */
+
+.cj-home__dev {
+    margin-left: 24px;
+}
+
+.cj-picker__number {
+    margin-top: 8px;
+    -unity-text-align: middle-center;
+}
+
+.cj-picker__detail {
+    margin-top: 4px;
+}
+
+.cj-picker__steps {
+    align-self: stretch;
+}
+
+.cj-picker__caption {
+    margin-top: 40px;
+    -unity-text-align: middle-center;
+}
+
+.cj-picker__grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 8px -8px 0 -8px;
+}
+
+.cj-picker__chip {
+    margin: 8px;
+    padding: 0 28px;
+}
+
+.cj-picker__chip .cj-btn__label {
+    font-size: 34px;
+}

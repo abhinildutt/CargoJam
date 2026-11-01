@@ -140,6 +140,25 @@ namespace CargoJam.Meta
             return true;
         }
 
+        /// <summary>
+        /// Testing aid (the dev level picker): moves progress to <paramref name="levelIndex"/> as if the
+        /// player had just got there. Boosters available by then are unlocked, earlier destinations'
+        /// arrivals count as shown, and each cargo kind counts as seen exactly when it debuts before that
+        /// level, so the level's own "New cargo!" card still shows. <paramref name="cargoDebuts"/> lists
+        /// (0-based debut level, int <c>CargoKind</c>). Coins and streaks are kept.
+        /// </summary>
+        public void JumpTo(int levelIndex, IEnumerable<(int levelIndex, int kind)> cargoDebuts)
+        {
+            Data.levelIndex = Math.Max(0, levelIndex);
+            Data.lastArrivalShown = Data.levelIndex > 0 ? Journey.LegFor(Data.levelIndex - 1) : -1;
+            var seen = Data.cargoSeen = ProfileMigration.ResizeCargoSeen(Data.cargoSeen);
+            foreach (var (debut, kind) in cargoDebuts)
+                if (kind >= 0 && kind < seen.Length) seen[kind] = debut < Data.levelIndex;
+            ApplyUnlocks(Data.levelIndex);
+            Normalize(Data);
+            RaiseChanged();
+        }
+
         // ---- Streak tiers (docs/design-v3-premium-journey.md, section 6) ----
 
         /// <summary>

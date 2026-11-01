@@ -53,6 +53,7 @@ namespace CargoJam.Game.UI
         UnlockPopup unlock;
         CargoIntroPopup cargoIntro;
         DailyPopup daily;
+        LevelPickerPopup picker;
         VisualElement splash;
         const string SplashSeenKey = "cj.splashSeen";
         /// <summary>When the HARD banner starts on an ordinary level, in seconds after the level starts (as the board drops in).</summary>
@@ -323,6 +324,7 @@ namespace CargoJam.Game.UI
                     chest.Show(progression.NextChestIsBig, progression.OpenChest, home.Refresh);
             };
             home.JourneyClicked += OpenJourney;
+            home.LevelsClicked += OpenLevelPicker;
             // The bottom block's real height decides the diorama's frame: refit when it lays out.
             home.LayoutChanged += () =>
             {
@@ -350,6 +352,7 @@ namespace CargoJam.Game.UI
             chest = new ChestPopup(ctx);
             unlock = new UnlockPopup(ctx);
             cargoIntro = new CargoIntroPopup(ctx);
+            if (LevelPickerPopup.Enabled) picker = new LevelPickerPopup(ctx);
             daily = new DailyPopup(ctx);
         }
 
@@ -432,6 +435,25 @@ namespace CargoJam.Game.UI
             if (!journey.Visible) return;
             SetSceneVisible(true);
             journey.Hide(() => { if (state == State.Home) home.Refresh(); });
+        }
+
+        void OpenLevelPicker()
+        {
+            if (picker == null || state != State.Home || ctx.AnyModalOpen || journey.Visible) return;
+            picker.Show(progression.LevelIndex, controller.LevelCount, JumpToLevel);
+        }
+
+        /// <summary>Dev picker: moves progress to the chosen level (0-based) and plays it.</summary>
+        void JumpToLevel(int index)
+        {
+            if (state != State.Home) return;
+            var debuts = new List<(int, int)>();
+            foreach (var (number, kind) in LevelPickerPopup.Debuts) debuts.Add((number - 1, (int)kind));
+            progression.JumpTo(index, debuts);
+            journeySeenIndex = progression.LevelIndex;
+            ProfileStore.Save(progression.Data);
+            home.Refresh();
+            OnPlayClicked();
         }
 
         void SetSceneVisible(bool on)

@@ -1,6 +1,6 @@
 using System;
-using CargoJam.Core;
 using CargoJam.Game.Meta;
+using CargoJam.Game.UI;
 using CargoJam.Meta;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -12,6 +12,7 @@ namespace CargoJam.EditorTools
     /// Editor-only "Cargo Jam" menu for playtesting from a clean start: reset saved progress now, or
     /// automatically every time Play is pressed (on by default), or jump straight into Main from level 1
     /// or any other level (presets for each cargo debut). Sound, music and haptics settings are kept.
+    /// In Play mode the home screen's "Levels" button does the same without leaving the game.
     /// </summary>
     [InitializeOnLoad]
     static class CargoJamDevMenu
@@ -24,18 +25,6 @@ namespace CargoJam.EditorTools
         const string SplashSeenKey = "cj.splashSeen";
         /// <summary>The 0-based level the next Play starts at (set by the Play From Level items; -1 = none).</summary>
         const string StartLevelKey = "CargoJam.PlayFromLevel";
-
-        /// <summary>Where each cargo kind debuts (level numbers, design v4 section 4).</summary>
-        static readonly (int number, CargoKind kind)[] Debuts =
-        {
-            (5, CargoKind.Bollard),
-            (7, CargoKind.Frost),
-            (12, CargoKind.Mystery),
-            (17, CargoKind.Express),
-            (22, CargoKind.Lock),
-            (27, CargoKind.Strap),
-            (42, CargoKind.Gate),
-        };
 
         /// <summary>A Play From request made during Play mode, run once the editor is back in Edit mode.</summary>
         static Action afterExit;
@@ -173,7 +162,7 @@ namespace CargoJam.EditorTools
             data.levelIndex = index;
             data.lastArrivalShown = index > 0 ? Journey.LegFor(index - 1) : -1;
             data.cargoSeen = ProfileMigration.ResizeCargoSeen(data.cargoSeen);
-            foreach (var (number, kind) in Debuts)
+            foreach (var (number, kind) in LevelPickerPopup.Debuts)
                 if (number - 1 < index) data.cargoSeen[(int)kind] = true;
             ProfileStore.Save(data);
             // The IMGUI debug HUD (no UI in the scene) reads the old level key.
