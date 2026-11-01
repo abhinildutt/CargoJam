@@ -52,8 +52,17 @@ namespace CargoJam.Game.UI
         {
             public static readonly Color Ice = Hex(0x5E9BC4);
             public static readonly Color IceLight = Hex(0xBFDDF0);
-            public static readonly Color Mystery = Hex(0x7A67B5);
-            public static readonly Color MysteryDeep = Hex(0x5A4A8E);
+            /// <summary>The grey tarp over a mystery parcel, as on the board.</summary>
+            public static readonly Color Mystery = Hex(0x8D9099);
+            public static readonly Color MysteryDeep = Hex(0x6C6F78);
+            /// <summary>The white concrete bollard and its dark band, as on the board.</summary>
+            public static readonly Color Concrete = Hex(0xEDEBE6);
+            public static readonly Color ConcreteShade = Hex(0xC9C6BF);
+            public static readonly Color ConcreteEdge = Hex(0x8F8C85);
+            public static readonly Color BollardBand = Hex(0x23252B);
+            /// <summary>The express parcel's countdown display: near-black with an amber rim and figures.</summary>
+            public static readonly Color ExpressDisplay = Hex(0x1A1C29);
+            public static readonly Color ExpressAmber = Hex(0xFFCC1F);
             public static readonly Color Strap = Hex(0x3F7FE6);
             public static readonly Color StrapDeep = Hex(0x2F62B8);
         }

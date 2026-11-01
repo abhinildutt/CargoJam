@@ -467,14 +467,19 @@ namespace CargoJam.Game.UI
 
         // ---- Cargo icons (the "New cargo!" card) --------------------------------------------------
 
-        /// <summary>A steel post with a hazard band and a rounded cap.</summary>
+        /// <summary>A white concrete post with a dark band and a rounded cap, as on the board.</summary>
         static void Bollard(Painter2D p, Frame f)
         {
             RoundRect(p, f, 18f, 84f, 64f, 10f, 5f, UiPalette.Ink3);
-            RoundRect(p, f, 30f, 26f, 40f, 62f, 6f, UiPalette.Secondary);
-            Circle(p, f, 50f, 30f, 20f, UiPalette.Secondary);
-            RoundRect(p, f, 30f, 54f, 40f, 12f, 0f, UiPalette.Gold);
-            RoundRect(p, f, 36f, 14f, 7f, 62f, 3.5f, UiPalette.A(Color.white, 0.2f));
+            // A soft edge, so the white post holds up on a light card.
+            RoundRect(p, f, 27f, 23f, 46f, 67f, 8f, UiPalette.Cargo.ConcreteEdge);
+            Circle(p, f, 50f, 30f, 23f, UiPalette.Cargo.ConcreteEdge);
+            RoundRect(p, f, 30f, 26f, 40f, 62f, 6f, UiPalette.Cargo.ConcreteShade);
+            Circle(p, f, 50f, 30f, 20f, UiPalette.Cargo.ConcreteShade);
+            RoundRect(p, f, 30f, 26f, 32f, 62f, 6f, UiPalette.Cargo.Concrete);
+            Circle(p, f, 46f, 29f, 16f, UiPalette.Cargo.Concrete);
+            RoundRect(p, f, 30f, 58f, 40f, 11f, 0f, UiPalette.Cargo.BollardBand);
+            RoundRect(p, f, 36f, 16f, 7f, 38f, 3.5f, UiPalette.A(Color.white, 0.6f));
         }
 
         /// <summary>A six-armed snowflake: three crossing strokes with a pair of tips on each arm.</summary>
@@ -499,7 +504,7 @@ namespace CargoJam.Game.UI
             Circle(p, f, 50f, 50f, 4.5f, UiPalette.Cargo.IceLight);
         }
 
-        /// <summary>A covered parcel: a draped purple crate with a question mark.</summary>
+        /// <summary>A covered parcel: a crate under a grey tarp with a white question mark, as on the board.</summary>
         static void Mystery(Painter2D p, Frame f)
         {
             RoundRect(p, f, 14f, 18f, 72f, 72f, 16f, UiPalette.Cargo.MysteryDeep);
@@ -513,11 +518,15 @@ namespace CargoJam.Game.UI
             Circle(p, f, 50f, 74f, 5.5f, Color.white);
         }
 
-        /// <summary>A lightning bolt: ship it fast.</summary>
+        /// <summary>
+        /// The express parcel's countdown display, as on the board: a dark tile with an amber rim and an
+        /// amber lightning bolt (ship it fast).
+        /// </summary>
         static void Express(Painter2D p, Frame f)
         {
-            Poly(p, UiPalette.GoldDeep, f.P(63f, 8f), f.P(23f, 61f), f.P(47f, 61f), f.P(39f, 98f), f.P(81f, 42f), f.P(56f, 42f), f.P(70f, 8f));
-            Poly(p, UiPalette.Gold, f.P(60f, 4f), f.P(20f, 57f), f.P(44f, 57f), f.P(36f, 94f), f.P(78f, 38f), f.P(53f, 38f), f.P(67f, 4f));
+            RoundRect(p, f, 8f, 8f, 84f, 84f, 14f, UiPalette.Cargo.ExpressAmber);
+            RoundRect(p, f, 15f, 15f, 70f, 70f, 9f, UiPalette.Cargo.ExpressDisplay);
+            Poly(p, UiPalette.Cargo.ExpressAmber, f.P(58f, 20f), f.P(31f, 55f), f.P(47f, 55f), f.P(41f, 81f), f.P(69f, 44f), f.P(53f, 44f), f.P(63f, 20f));
         }
 
         /// <summary>Two parcels held together by a belt and buckle.</summary>
