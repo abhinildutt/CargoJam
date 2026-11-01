@@ -443,8 +443,8 @@ namespace CargoJam.Game.UI
             picker.Show(progression.LevelIndex, controller.LevelCount, JumpToLevel);
         }
 
-        /// <summary>Dev picker: moves progress to the chosen level (0-based) and plays it.</summary>
-        void JumpToLevel(int index)
+        /// <summary>Dev picker and <c>PerfBench</c>: moves progress to the chosen level (0-based) and plays it.</summary>
+        internal void JumpToLevel(int index)
         {
             if (state != State.Home) return;
             var debuts = new List<(int, int)>();
