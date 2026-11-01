@@ -283,49 +283,83 @@ namespace CargoJam.LevelGen
         // ---- debut levels: generated like the rest, but they must teach their cargo -------------------
 
         /// <summary>
-        /// True when a debut candidate shows its new cargo where the player meets it early: what the cargo
-        /// card describes can be seen and tried within the first few moves.
+        /// True when a debut candidate makes its new cargo matter in the opening: the player meets it in
+        /// the first few moves and has to act on its rule, not just see it (playtest round 7: frost,
+        /// covers, locks and express that were merely visible taught nothing).
         /// </summary>
         static bool Teaches(LevelData data, CargoKind kind)
         {
             var level = LevelDefinition.Parse(data);
             var session = new GameSession(level);
-            var moves = new List<Parcel>();
-            session.GetMoves(moves);
             Parcel At(int x, int y) => session.Board.Get(new Cell(x, y));
             bool Free(Parcel p) => p != null && session.Board.IsFree(p.Cell);
             bool Near(Cell c) => c.Y <= 1;
+            // The index of the first truck of a color (trucks.Count when none comes).
+            int FirstTruck(int color)
+            {
+                for (int i = 0; i < level.Trucks.Count; i++)
+                    if (level.Trucks[i] == color) return i;
+                return level.Trucks.Count;
+            }
 
             switch (kind)
             {
                 case CargoKind.Bollard:
-                    // Some parcel sits right behind a bollard and has to be dug out from the side.
-                    for (int y = 0; y + 1 < level.Height; y++)
+                    // A bollard near the front with a parcel the first or second truck wants right behind it: the
+                    // wall is met at once and the player picks which side to dig around.
+                    for (int y = 0; y + 1 < level.Height && y <= 1; y++)
                     for (int x = 0; x < level.Width; x++)
-                        if (level.IsBollard(x, y) && level.ColorAt(x, y + 1) != ParcelColors.None) return true;
+                    {
+                        if (!level.IsBollard(x, y)) continue;
+                        int color = level.ColorAt(x, y + 1);
+                        if (color != ParcelColors.None && FirstTruck(color) <= 1) return true;
+                    }
                     return false;
                 case CargoKind.Frost:
-                    // A crate the player could take now but for its ice, thawing in a few moves.
-                    return data.frost.Any(f => Free(At(f.x, f.y)) && f.layers >= 2 && f.layers <= 4);
+                    // A front-row crate in the first truck's color, iced for 3-4 moves: the player has to find
+                    // useful moves while it thaws.
+                    return data.frost.Any(f => f.y == 0 && f.layers >= 3 && f.layers <= 4
+                                               && level.ColorAt(f.x, f.y) == level.Trucks[0]);
                 case CargoKind.Mystery:
-                    // A covered parcel right behind the front row, so an early move shows its color.
-                    return Enumerable.Range(0, level.Width).Any(x => level.Height > 1 && level.IsMystery(x, 1));
+                {
+                    // One cover right behind the front row, and covers over more than one color, so counting
+                    // colors can't say what is under them.
+                    var covered = new HashSet<int>();
+                    bool early = false;
+                    for (int y = 0; y < level.Height; y++)
+                    for (int x = 0; x < level.Width; x++)
+                    {
+                        if (!level.IsMystery(x, y)) continue;
+                        covered.Add(level.ColorAt(x, y));
+                        if (y == 1) early = true;
+                    }
+                    return early && covered.Count >= 2;
+                }
                 case CargoKind.Express:
                 {
+                    // Two or three parcels deep, a short count, and a color no truck in sight wants: the player
+                    // has to choose between finishing the truck and digging to it, and spend a slot on it.
                     var e = data.express.Single();
-                    return Near(new Cell(e.x, e.y)) && e.taps >= 6;
+                    int color = level.ColorAt(e.x, e.y);
+                    return e.y >= 2 && e.y <= 3 && !Free(At(e.x, e.y)) && e.taps <= 6 && FirstTruck(color) >= 2;
                 }
                 case CargoKind.Lock:
                 {
+                    // The padlock sits at the front right in front of a parcel the first or second truck wants,
+                    // and the key's truck isn't the first or second: getting past the lock takes a plan
+                    // (parking the key doesn't open it).
                     var l = level.Locks.Single();
-                    return l.Locked.Y <= 2 && Free(At(l.Key.X, l.Key.Y));
+                    var behind = l.Locked.Y + 1 < level.Height ? level.ColorAt(l.Locked.X, l.Locked.Y + 1) : ParcelColors.None;
+                    return Near(l.Locked) && Near(l.Key) && FirstTruck(level.ColorAt(l.Key.X, l.Key.Y)) >= 2
+                           && behind != ParcelColors.None && FirstTruck(behind) <= 1;
                 }
                 case CargoKind.Strap:
                     return level.Straps.Any(st => Near(st.A) && Near(st.B));
                 default:
                 {
+                    // The gate's color comes fourth or later, so opening it is something to work towards.
                     var g = level.Gates.Single();
-                    return g.Count == LevelPlan.TruckCapacity;
+                    return g.Count == LevelPlan.TruckCapacity && FirstTruck(g.Color) >= 3;
                 }
             }
         }

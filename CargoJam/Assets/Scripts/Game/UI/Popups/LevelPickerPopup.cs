@@ -12,16 +12,16 @@ namespace CargoJam.Game.UI
     /// </summary>
     public sealed class LevelPickerPopup : Popup
     {
-        /// <summary>Where each cargo kind debuts (1-based level numbers, design v5: all by level 15).</summary>
+        /// <summary>Where each cargo kind debuts (1-based level numbers, design v5: one a level, 4 to 10).</summary>
         public static readonly (int number, CargoKind kind)[] Debuts =
         {
             (4, CargoKind.Bollard),
             (5, CargoKind.Frost),
-            (7, CargoKind.Mystery),
-            (9, CargoKind.Lock),
-            (12, CargoKind.Express),
-            (13, CargoKind.Strap),
-            (15, CargoKind.Gate),
+            (6, CargoKind.Mystery),
+            (7, CargoKind.Lock),
+            (8, CargoKind.Strap),
+            (9, CargoKind.Express),
+            (10, CargoKind.Gate),
         };
 
         /// <summary>Whether the picker exists in this build: the editor and development builds.</summary>

@@ -6,8 +6,8 @@ namespace CargoJam.LevelGen
     /// <summary>
     /// The knobs for one level: board size, colors, slots, cargo and the thoughtful-bot fail rate to aim
     /// for. The generator searches truck-order hostility (<see cref="BoardMaker"/>'s noise) to hit the
-    /// target. Design v5: every cargo kind debuts by level 15 and from then on levels mix two to four
-    /// kinds; difficulty is judged by <see cref="SmartBot"/>, a player who thinks before tapping.
+    /// target. Design v5: every cargo kind debuts by level 10, one a level from 4, and from then on
+    /// levels mix two to four kinds; difficulty is judged by <see cref="SmartBot"/>, a player who thinks before tapping.
     /// </summary>
     public sealed class LevelPlan
     {
@@ -71,10 +71,11 @@ namespace CargoJam.LevelGen
 
         /// <summary>
         /// The level each cargo kind first appears on, indexed by <see cref="CargoKind"/>: bollard 4,
-        /// frost 5, mystery 7, express 12, lock 9, strap 13, gate 15. None is an arrival level (11, 21) or
-        /// a booster unlock (6, 11, 16), and none is a storm finale (10, 20).
+        /// frost 5, mystery 6, lock 7, strap 8, express 9, gate 10 (the first destination's finale, so its
+        /// storm brings the last new cargo instead of a HARD level). Simple to involved: a wall, a timer
+        /// on a crate, a hidden color, a dependency, a pair, a deadline, then a counter.
         /// </summary>
-        public static readonly int[] DebutLevel = { 4, 5, 7, 12, 9, 13, 15 };
+        public static readonly int[] DebutLevel = { 4, 5, 6, 9, 7, 8, 10 };
 
         /// <summary>The cargo debuting on level <paramref name="id"/>, or null.</summary>
         public static CargoKind? DebutAt(int id)
@@ -127,7 +128,7 @@ namespace CargoJam.LevelGen
 
             if (id <= 3) plan.Kind = "tutorial";
             else if (plan.Debut != null) plan.Kind = "debut";
-            else if (id == 14 || (pos == 4 && id >= 10)) plan.Kind = "HARD";
+            else if (pos == 4 && id >= 10) plan.Kind = "HARD";
             else if (pos == 0 && id > 10) plan.Kind = "relief";
             else plan.Kind = pos switch { 0 or 1 => "easy", 2 => "medium", _ => "harder" };
             plan.Hard = plan.Kind == "HARD";
@@ -135,7 +136,8 @@ namespace CargoJam.LevelGen
             plan.TargetFail = plan.Kind switch
             {
                 "tutorial" => 0,
-                "debut" => 0.15,
+                // Later debuts ask a little more: by then the player knows the rest of the toolbox.
+                "debut" => 0.12 + 0.02 * (id - 4),
                 "relief" => 0.18,
                 "easy" => 0.24 + 0.05 * t + 0.04 * late,
                 "medium" => 0.33 + 0.05 * t + 0.04 * late,
@@ -204,7 +206,7 @@ namespace CargoJam.LevelGen
             {
                 kinds = new[] { p.Debut.Value };
                 p.GateMaxCount = 3;
-                p.ExpressSlack = 4;
+                p.ExpressSlack = 3;
                 straps = 2;
                 frost = 2;
             }
@@ -213,11 +215,13 @@ namespace CargoJam.LevelGen
                 kinds = id switch
                 {
                     2 or 3 => Array.Empty<CargoKind>(),
-                    6 => new[] { CargoKind.Bollard, CargoKind.Frost },
-                    8 => new[] { CargoKind.Mystery, CargoKind.Frost },
-                    10 => new[] { CargoKind.Lock, CargoKind.Mystery, CargoKind.Bollard },
-                    11 => new[] { CargoKind.Frost, CargoKind.Lock },
-                    14 => new[] { CargoKind.Express, CargoKind.Strap, CargoKind.Lock },
+                    // The first mixes pair each kind with the ones met just before it.
+                    11 => new[] { CargoKind.Bollard, CargoKind.Frost },
+                    // Not mystery + lock: playtesters found that pair asked nothing of an easy level.
+                    12 => new[] { CargoKind.Mystery, CargoKind.Strap },
+                    13 => new[] { CargoKind.Strap, CargoKind.Express, CargoKind.Frost },
+                    14 => new[] { CargoKind.Gate, CargoKind.Lock, CargoKind.Mystery },
+                    15 => new[] { CargoKind.Express, CargoKind.Strap, CargoKind.Lock },
                     16 => new[] { CargoKind.Gate, CargoKind.Mystery },
                     17 => new[] { CargoKind.Gate, CargoKind.Strap },
                     18 => new[] { CargoKind.Gate, CargoKind.Express, CargoKind.Frost },
@@ -235,7 +239,7 @@ namespace CargoJam.LevelGen
                 {
                     case CargoKind.Bollard: p.Bollards = bollards; break;
                     case CargoKind.Frost: p.Frost = frost; break;
-                    case CargoKind.Mystery: p.Mystery = p.Debut != null ? 2 : mystery; break;
+                    case CargoKind.Mystery: p.Mystery = p.Debut != null ? 3 : mystery; break;
                     case CargoKind.Express: p.Express = p.Hard && id >= 50 ? 2 : 1; break;
                     case CargoKind.Lock: p.Locks = p.Debut != null ? 1 : locks; break;
                     case CargoKind.Strap: p.Straps = straps; break;

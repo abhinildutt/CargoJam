@@ -12,8 +12,8 @@ namespace CargoJam.Core.Tests
         const string LevelsFolder = "Assets/Resources/Levels";
         const int LevelCount = 100;
 
-        /// <summary>The level each cargo kind first appears on (design v5: all by level 15), indexed by <see cref="CargoKind"/>.</summary>
-        static readonly int[] DebutLevel = { 4, 5, 7, 12, 9, 13, 15 };
+        /// <summary>The level each cargo kind first appears on (design v5: one a level, 4 to 10), indexed by <see cref="CargoKind"/>.</summary>
+        static readonly int[] DebutLevel = { 4, 5, 6, 9, 7, 8, 10 };
 
         static string[] Files() => Directory.GetFiles(LevelsFolder, "*.json").OrderBy(f => f).ToArray();
 
@@ -65,6 +65,8 @@ namespace CargoJam.Core.Tests
             for (int i = 0; i < files.Length; i++)
             {
                 if (CargoJam.Meta.Journey.MoodFor(i) != CargoJam.Meta.Mood.Storm) continue;
+                // The first finale (level 10) is the gate debut: its storm brings the last new cargo instead.
+                if (System.Array.IndexOf(DebutLevel, i + 1) >= 0) continue;
                 Assert.That(Read(files[i]).hard, Is.True, $"{Path.GetFileName(files[i])} is a storm finale but not HARD");
             }
         }
@@ -143,9 +145,6 @@ namespace CargoJam.Core.Tests
                 Assert.That(data.hard, Is.False, $"{name} is HARD");
                 Assert.That(data.holdingSlots, Is.EqualTo(3), $"{name} must have 3 slots");
                 Assert.That(id % CargoJam.Meta.Journey.LevelsPerStop, Is.Not.EqualTo(1), $"{name} is an arrival level");
-                // A debut never shares the screen with a booster unlock.
-                foreach (CargoJam.Meta.BoosterType booster in System.Enum.GetValues(typeof(CargoJam.Meta.BoosterType)))
-                    Assert.That(CargoJam.Meta.EconomyConfig.UnlockLevel(booster), Is.Not.EqualTo(id), $"{name} unlocks {booster}");
 
                 var colors = new HashSet<int>();
                 for (int y = 0; y < level.Height; y++)

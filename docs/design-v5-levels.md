@@ -7,10 +7,24 @@ changes.
 
 ## What changed
 
-**Curve.** Every cargo kind debuts by level 15: bollard 4, frost 5, mystery 7, lock 9, express 12,
-strap 13, gate 15. A debut uses only its new cargo. Every other level from 6 mixes two to four kinds
-(hand-picked to 21, then a rotation). The sawtooth stays: relief, easy, easy, medium, harder, then
-HARD every fifth level and on 14.
+**Curve.** Every cargo kind debuts by level 10, one a level: bollard 4, frost 5, mystery 6, lock 7,
+strap 8, express 9, gate 10 (simple to involved). A debut uses only its new cargo, and later debuts ask
+a little more (thoughtful-bot target 0.12 rising to 0.24). Every level from 11 mixes two to four kinds,
+each early mix pairing a kind with the ones met just before it (hand-picked to 21, then a rotation).
+The sawtooth stays: relief, easy, easy, medium, harder, then HARD every fifth level from 15. Level
+10's storm finale carries the gate debut instead of a HARD level. The Undo unlock (level 6) now lands
+on the mystery debut; the unlock card shows after level 5's win, the cargo card inside level 6.
+
+**A debut must make its cargo matter**, not just show it (playtest rounds 7-8 found frost, covers,
+padlocks, express and back-corner bollards that never changed a decision): a bollard in the first two
+rows with a parcel the first trucks want behind it;
+a front-row crate in the first truck's color iced for 3-4 moves; three covers over more than one
+color; a front padlock, right in front of a parcel the first trucks want, whose key's truck comes
+third or later; an express two or three parcels deep with at most 6 moves and a color no truck in
+sight wants; a gate whose color comes fourth or later.
+
+*Earlier in v5 the debuts ran 4-15 (mystery 7, lock 9, express 12, strap 13, gate 15); the owner
+asked for every mechanic by level 10.*
 
 **Waiting slots.** 3 on every level after the tutorials, 2 on HARD levels from 40 (it was 4-5).
 
@@ -51,6 +65,14 @@ trivial stretches and fairness. 35 levels per round, about 200 level-plays in al
 | 4 | pens | 2.74 | 5/35 | 5 | 14 |
 | 5 | 2-slot HARD from 40 | 3.00 | 4/35 | 10 | 10 |
 | 6 | one covered crate on 2-slot levels, express within 6 digs | 2.91 | 5/35 | 7 | 11 |
+
+Rounds 7-9 replayed only the new early curve (debuts 4-10, first mixes 11-15), 2 testers per level:
+
+| Round | Change before it | Levels | Avg challenge | Retries | Finding |
+|---|---|---|---|---|---|
+| 7 | debuts moved to 4-10, new mixes 11-15 | 4-15 | 2.7 | 2/24 | pace of one new type a level is fine; frost, covers, padlock and express debuts never changed a decision; L12 a dip |
+| 8 | debuts must make their cargo matter; L12 covers + straps | 4-12 | 2.6 | 0/18 | frost (5) and straps (8) teach well, L12 fixed; padlock (7), express (9), bollards (4) still passive |
+| 9 | front padlock blocking a wanted parcel, deeper express, bollards in the first two rows | 4, 7, 9 | 2.7 | 0/6 | padlock and express now force a plan; bollards stay mild |
 
 Rounds 5 and 6 match, so the loop stopped there. Testers agree that colors are no longer grouped,
 that every level from about 8 has a real opening puzzle, and that 2-slot HARD levels (38, 40, 43,
