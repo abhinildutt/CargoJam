@@ -50,6 +50,13 @@ namespace CargoJam.LevelGen
         public CargoKind? Debut;
         /// <summary>The <see cref="SmartBot"/> fail rate to aim for.</summary>
         public double TargetFail;
+        /// <summary>Most parcels the first truck can take straight away (so the opening isn't free).</summary>
+        public int MaxOpeningMatches = 1;
+        /// <summary>
+        /// Waiting slots perfect play may leave unused: 0 means the level can't be won with one slot
+        /// fewer, so every slot counts. Null for tutorials.
+        /// </summary>
+        public int? SpareSlots;
 
         public const int LevelCount = 100;
         public const int TruckCapacity = 3;
@@ -79,13 +86,15 @@ namespace CargoJam.LevelGen
         /// </summary>
         public (double Lo, double Hi) SpecBand => Kind switch
         {
+            // Floors are loose: on some mixes no deal makes the bot lose, and tightness (SpareSlots) is
+            // what keeps those levels honest. Ceilings keep levels from turning into guesswork.
             "tutorial" => (0, 0.05),
-            "debut" => (0.02, 0.22),
-            "relief" => (0.04, 0.24),
-            "easy" => (0.10, 0.36),
-            "medium" => (0.20, 0.46),
-            "harder" => (0.30, 0.56),
-            "HARD" => (0.44, 0.74),
+            "debut" => (0, 0.26),
+            "relief" => (0, 0.30),
+            "easy" => (0, 0.40),
+            "medium" => (0.10, 0.50),
+            "harder" => (0.15, 0.60),
+            "HARD" => (0.25, 0.74),
             _ => (0, 1),
         };
 
@@ -119,23 +128,28 @@ namespace CargoJam.LevelGen
             plan.TargetFail = plan.Kind switch
             {
                 "tutorial" => 0,
-                "debut" => 0.10,
-                "relief" => 0.12,
-                "easy" => 0.18 + 0.06 * t + 0.04 * late,
-                "medium" => 0.28 + 0.06 * t + 0.04 * late,
-                "harder" => 0.36 + 0.08 * t + 0.05 * late,
-                _ => 0.50 + 0.08 * t + 0.06 * late,
+                "debut" => 0.15,
+                "relief" => 0.18,
+                "easy" => 0.24 + 0.05 * t + 0.04 * late,
+                "medium" => 0.33 + 0.05 * t + 0.04 * late,
+                "harder" => 0.42 + 0.06 * t + 0.04 * late,
+                _ => 0.58 + 0.04 * t + 0.04 * late,
             };
 
             plan.Colors = id <= 3 ? 2 : id <= 19 ? 4 : id <= 39 ? 5 : 6;
             if (plan.Hard) plan.Colors = Math.Min(6, plan.Colors + 1);
             if (plan.Kind == "debut") plan.Colors = 4;
-            // Few waiting slots are what make a level ask for a plan: four, three on the hardest and on the
-            // small early boards and debuts (with four, a careful player can't lose a 5-wide yard however
-            // it is dealt).
-            if (plan.Hard || plan.Kind == "debut" || (plan.Kind == "harder" && id >= 20) || id <= 9) plan.Slots = 3;
-            // Relief yards are a row shorter, so below 7 columns they need the tighter dock too.
-            if (plan.Kind == "relief" && id < 30) plan.Slots = 3;
+            // Few waiting slots are what make a level ask for a plan: with four, a careful player can't
+            // lose a 6-7 wide yard however it is dealt, so every level past the tutorials has three.
+            plan.Slots = 3;
+
+            plan.MaxOpeningMatches = plan.Kind == "tutorial" ? 3 : plan.Kind == "debut" ? 2 : 1;
+            plan.SpareSlots = plan.Kind switch
+            {
+                "tutorial" => null,
+                "debut" or "relief" or "easy" => 1,
+                _ => 0,
+            };
 
             SetCargo(plan);
             SetSize(plan, id);
@@ -161,14 +175,14 @@ namespace CargoJam.LevelGen
                 _ => (3, 7),
             };
             p.GateMaxCount = 6;
-            p.ExpressSlack = p.Hard ? (id >= 50 ? 2 : 3) : relief ? 7 : 4;
+            p.ExpressSlack = p.Hard ? 1 : relief ? 4 : 2;
 
             CargoKind[] kinds;
             if (p.Debut != null)
             {
                 kinds = new[] { p.Debut.Value };
                 p.GateMaxCount = 3;
-                p.ExpressSlack = 7;
+                p.ExpressSlack = 6;
                 straps = 2;
                 frost = 2;
             }
@@ -203,7 +217,8 @@ namespace CargoJam.LevelGen
                     case CargoKind.Express: p.Express = p.Hard && id >= 50 ? 2 : 1; break;
                     case CargoKind.Lock: p.Locks = p.Debut != null ? 1 : locks; break;
                     case CargoKind.Strap: p.Straps = straps; break;
-                    case CargoKind.Gate: p.Gates = p.Hard && id >= 50 ? 2 : 1; break;
+                    // One gate: two count-6 gates wall off so much that the yard plays out the same every time.
+                    case CargoKind.Gate: p.Gates = 1; break;
                 }
             }
             // A few twists once the kinds are familiar.
@@ -302,20 +317,20 @@ namespace CargoJam.LevelGen
             int w, h;
             if (id >= FirstSizedLevel)
             {
-                // Easy 6x7, medium and harder 7x8, HARD 7x9.
-                if (plan.Hard) { w = 7; h = 9; }
-                else if (plan.Kind == "medium" || plan.Kind == "harder") { w = 7; h = 8; }
-                else { w = 6; h = 7; }
+                // Easy 6x6, medium and harder 7x7, HARD 7x8.
+                if (plan.Hard) { w = 7; h = 8; }
+                else if (plan.Kind == "medium" || plan.Kind == "harder") { w = 7; h = 7; }
+                else { w = 6; h = 6; }
             }
             else
             {
+                // Yards stay short: once a yard opens up, the rest of a long level is cleanup.
                 if (id <= 3) { w = 4; h = 3; }
                 else if (id <= 5) { w = 5; h = 5; }
                 else if (id <= 9) { w = 5; h = 6; }
-                else if (id <= 19) { w = 6; h = 6; }
-                else if (id <= 29) { w = 6; h = 7; }
-                else if (id <= 39) { w = 7; h = 7; }
-                else { w = 7; h = 8; }
+                else if (id <= 29) { w = 6; h = 6; }
+                else if (id <= 39) { w = 7; h = 6; }
+                else { w = 7; h = 7; }
 
                 // Relief levels get a shorter yard; HARD levels a longer one where there's room.
                 if (id > 5 && plan.Kind == "relief") h -= 1;

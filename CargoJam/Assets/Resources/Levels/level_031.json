@@ -1,18 +1,17 @@
 {
   "id": 31,
   "hard": false,
-  "holdingSlots": 4,
+  "holdingSlots": 3,
   "truckCapacity": 3,
-  "trucks": "ROPGBRGPGBRO",
+  "trucks": "PROPBRYOBY",
   "rows": [
-    "BPRBRRP",
-    "BGGOBBO",
-    "#OGRR.#",
-    "O#G.G#R",
-    "RGPPOOP",
-    "GBPRRGG"
+    "RBBRRPR",
+    "Y#BOB#R",
+    ".Y#P#YO",
+    "YBPYOPO",
+    "BYOPOPR"
   ],
   "express": [
-    { "x": 6, "y": 1, "taps": 11 }
+    { "x": 3, "y": 3, "taps": 13 }
   ]
 }

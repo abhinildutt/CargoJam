@@ -1,27 +1,26 @@
 {
   "id": 98,
   "hard": false,
-  "holdingSlots": 4,
+  "holdingSlots": 3,
   "truckCapacity": 3,
-  "trucks": "PGPRBOPOYOGRYBG",
+  "trucks": "ROGPRYPBPGOYB",
   "rows": [
-    "PPGOPPP",
-    "RRORGBY",
-    "ORBPBOP",
-    "YOPGGOO",
-    "#####+#",
-    "B.GO.RY",
-    "GYG.RYP",
-    "B.BOYGG"
+    "POOGGPR",
+    "PO.PRGB",
+    "BGPGPPR",
+    "####+##",
+    "BYYROPP",
+    "YOBRB.Y",
+    "YOR.BYG"
   ],
   "express": [
-    { "x": 2, "y": 0, "taps": 9 }
+    { "x": 5, "y": 0, "taps": 13 }
   ],
   "straps": [
-    { "x": 1, "y": 1, "x2": 1, "y2": 2 },
-    { "x": 5, "y": 0, "x2": 6, "y2": 0 }
+    { "x": 3, "y": 4, "x2": 3, "y2": 5 },
+    { "x": 1, "y": 4, "x2": 2, "y2": 4 }
   ],
   "gates": [
-    { "x": 5, "y": 4, "color": "G", "count": 3 }
+    { "x": 4, "y": 3, "color": "P", "count": 3 }
   ]
 }

@@ -21,7 +21,7 @@ namespace CargoJam.LevelGen
         static readonly int[] DX = { 0, -1, 1, 0 };
         static readonly int[] DY = { -1, 0, 0, 1 };
 
-        public static LevelData Make(LevelPlan plan, Random rng, double noise)
+        public static LevelData Make(LevelPlan plan, Random rng, double noise, double spread = 0)
         {
             int w = plan.Width, h = plan.Height, n = w * h;
             var kind = new byte[n];
@@ -66,9 +66,18 @@ namespace CargoJam.LevelGen
             var order = DigOrder(w, h, kind, keyOf, frost, gateCells, gateMin, rng);
             if (order == null) return null;
 
-            // Noise moves a parcel up to `noise` places away from where the dig order wants it.
+            // Spread deals the trucks round-robin along the dig order (truck k gets dig positions k,
+            // k+T, k+2T: one near the front, one mid-yard, one deep), so every truck sends the player
+            // digging and the yard never just opens up; 0 keeps each truck's three together. Noise then
+            // moves a parcel up to `noise` places away from where that order wants it.
+            int digCount = order.Count;
+            int trucks = Math.Max(1, digCount / LevelPlan.TruckCapacity);
             var sortKey = new double[n];
-            for (int i = 0; i < order.Count; i++) sortKey[order[i]] = i + noise * rng.NextDouble();
+            for (int i = 0; i < order.Count; i++)
+            {
+                double roundRobin = (i % trucks) * LevelPlan.TruckCapacity + (double)i / trucks;
+                sortKey[order[i]] = (1 - spread) * i + spread * roundRobin + noise * rng.NextDouble();
+            }
             ClampBehindGates(w, h, kind, gateCells, sortKey);
             var sorted = new List<int>(order);
             sorted.Sort((a, b) => sortKey[a].CompareTo(sortKey[b]));
@@ -101,10 +110,11 @@ namespace CargoJam.LevelGen
 
             var gates = PickGateColors(plan, rng, truckColors, gateCells, parcelsBefore, w);
             if (gates == null) return null;
+            SharpenFrost(rng, frost, group);
 
             var digOnly = new List<int>(parcels);
             foreach (int c in order) if (kind[c] == Parcel) digOnly.Add(c);
-            var expressTaps = PickExpress(plan, rng, digOnly, mystery, keyOf, isKey, frost);
+            var expressTaps = PickExpress(plan, rng, digOnly, mystery, keyOf, isKey, frost, group);
             if (expressTaps == null) return null;
 
             var straps = PickStraps(plan, rng, w, h, kind, color, group, mystery, keyOf, isKey, frost, expressTaps);
@@ -114,7 +124,18 @@ namespace CargoJam.LevelGen
             var errors = LevelDefinition.Validate(data, out var level);
             if (errors.Count > 0) return null;
             // A valid level can still open with nothing to tap (say, every free parcel frozen).
-            if (!new GameSession(level).HasLegalMove()) return null;
+            var session = new GameSession(level);
+            if (!session.HasLegalMove()) return null;
+            // The first truck's color mostly out of reach, so the opening asks for a plan.
+            var moves = new List<Parcel>();
+            session.GetMoves(moves);
+            int matches = 0;
+            foreach (var p in moves) if (session.CurrentTruck.Accepts(p)) matches++;
+            if (matches > plan.MaxOpeningMatches) return null;
+            // Past its debut a key starts buried, so reaching it in time is a choice, not a freebie.
+            if (plan.Debut == null)
+                foreach (var l in level.Locks)
+                    if (session.Board.IsFree(l.Key)) return null;
             return data;
         }
 
@@ -603,9 +624,14 @@ namespace CargoJam.LevelGen
                 for (int t = 0; t < full; t++) perColor[truckColors[t]]++;
                 var candidates = new List<int>();
                 int best = 0;
+                // The first truck's color would open the gate as a side effect of the opening.
+                bool others = false;
+                for (int c = 0; c < perColor.Length; c++)
+                    if (perColor[c] > 0 && !used.Contains(c) && c != truckColors[0]) others = true;
                 for (int c = 0; c < perColor.Length; c++)
                 {
                     if (perColor[c] == 0 || used.Contains(c)) continue;
+                    if (others && c == truckColors[0]) continue;
                     int count = Math.Min(plan.GateMaxCount, LevelPlan.TruckCapacity * perColor[c]);
                     if (count > best)
                     {
@@ -624,10 +650,27 @@ namespace CargoJam.LevelGen
         }
 
         /// <summary>
+        /// Ice only matters on a crate its truck wants before it thaws. A crate for one of the first
+        /// trucks (group g, whose truck can't load before about 3g moves) gets a thaw count past that,
+        /// so the player has to work around it; later crates keep their count.
+        /// </summary>
+        static void SharpenFrost(Random rng, int[] frost, int[] group)
+        {
+            for (int c = 0; c < frost.Length; c++)
+            {
+                if (frost[c] == 0) continue;
+                // Thaw a few moves after its truck could first want it, so the player has to wait it out
+                // or plan around it.
+                int due = LevelPlan.TruckCapacity * group[c] + 4 + rng.Next(3);
+                if (due <= LevelDefinition.MaxFrostMoves) frost[c] = Math.Max(frost[c], due);
+            }
+        }
+
+        /// <summary>
         /// Express parcels sit at dig position p (2 &lt;= p &lt;= min(12, n/3)) on a plain parcel, with
         /// taps = p + 1 + slack and never less than p + 2. Returns taps per cell (0 = none), or null.
         /// </summary>
-        static int[] PickExpress(LevelPlan plan, Random rng, List<int> digOrder, bool[] mystery, int[] keyOf, bool[] isKey, int[] frost)
+        static int[] PickExpress(LevelPlan plan, Random rng, List<int> digOrder, bool[] mystery, int[] keyOf, bool[] isKey, int[] frost, int[] group)
         {
             var taps = new int[mystery.Length];
             if (plan.Express == 0) return taps;
@@ -639,6 +682,9 @@ namespace CargoJam.LevelGen
                 int p = 2 + rng.Next(last - 1);
                 int c = digOrder[p];
                 if (taps[c] > 0 || mystery[c] || keyOf[c] >= 0 || isKey[c] || frost[c] > 0) continue;
+                // Prefer one whose truck is still two or more trucks away when it has to go, so shipping it
+                // in time means parking it: a slot spent for a while.
+                if (attempt < 150 && group[c] < p / LevelPlan.TruckCapacity + 2) continue;
                 taps[c] = Math.Min(LevelDefinition.MaxExpressTaps, Math.Max(p + 2, p + 1 + plan.ExpressSlack));
                 placed++;
             }
@@ -671,7 +717,9 @@ namespace CargoJam.LevelGen
                     if (x + 1 < w) Consider(i, i + 1);
                     if (y + 1 < h) Consider(i, i + w);
                 }
-                var pool = same.Count > 0 ? same : any;
+                // Pairs for a truck past the first two, so finding room for both is a question.
+                var late = same.FindAll(pr => group[pr.Item1] >= 2);
+                var pool = late.Count > 0 ? late : same.Count > 0 ? same : any;
                 if (pool.Count == 0) return null;
                 var pick = pool[rng.Next(pool.Count)];
                 strapped[pick.Item1] = strapped[pick.Item2] = true;

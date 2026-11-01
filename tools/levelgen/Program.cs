@@ -25,6 +25,8 @@ namespace CargoJam.LevelGen
         const int GradeRuns = 1000;
         const int GradeSeed = 777;
         const int SmartGradeRuns = 300;
+        /// <summary>How far the search may push the round-robin truck deal (see BoardMaker.Make).</summary>
+        const double MaxSpread = 0.8;
         /// <summary>On express levels, express misses may be at most this share of the bot's fails.</summary>
         const double MaxExpressShare = 0.5;
 
@@ -50,7 +52,10 @@ namespace CargoJam.LevelGen
             public SmartStats Smart;
             public int SolverNodes;
             public bool HitNodeLimit;
+            /// <summary>The fewest waiting slots perfect play needs (searched down from the level's own).</summary>
+            public int SlotsNeeded;
             public double Noise;
+            public double Spread;
         }
 
         static int Main(string[] args)
@@ -117,6 +122,7 @@ namespace CargoJam.LevelGen
         {
             var rng = new Random(seed * 7919 + plan.Id);
             double lo = 0, hi = plan.Parcels * 0.8;
+            double spreadLo = 0, spreadHi = MaxSpread;
             const double tolerance = 0.03;
             bool express = plan.Express > 0;
 
@@ -124,33 +130,37 @@ namespace CargoJam.LevelGen
             double bestError = double.MaxValue;
             for (int round = 0; round < 8 && bestError > tolerance; round++)
             {
-                var pool = new List<(LevelData data, LevelDefinition level, double noise, SmartStats stats)>();
+                var pool = new List<(LevelData data, LevelDefinition level, double noise, double spread, SmartStats stats)>();
                 for (int attempt = 0; attempt < 48; attempt++)
                 {
                     double noise = lo + (hi - lo) * rng.NextDouble();
-                    var data = BoardMaker.Make(plan, new Random(rng.Next()), noise);
+                    double spread = spreadLo + (spreadHi - spreadLo) * rng.NextDouble();
+                    var data = BoardMaker.Make(plan, new Random(rng.Next()), noise, spread);
                     if (data == null) continue;
                     var level = LevelDefinition.Parse(data);
                     if (plan.Debut != null && !Teaches(data, plan.Debut.Value)) continue;
                     var stats = SmartBot.Grade(level, SearchRuns, rng.Next());
                     if (stats.StuckRate > 0.05) continue;
                     if (express && stats.Fails >= 10 && stats.ExpressShare > 0.65) continue;
-                    pool.Add((data, level, noise, stats));
+                    pool.Add((data, level, noise, spread, stats));
                 }
                 pool.Sort((a, b) => Error(a.stats, plan).CompareTo(Error(b.stats, plan)));
 
-                for (int i = 0; i < pool.Count && i < 6; i++)
+                for (int i = 0; i < pool.Count && i < 10; i++)
                 {
                     var c = pool[i];
                     // Confirm with the grading seed, so the table shows the numbers the choice was made on.
                     var stats = SmartBot.Grade(c.level, ConfirmRuns, GradeSeed + plan.Id);
                     double error = Error(stats, plan);
+                    if (error >= bestError) continue;
+                    // A level that perfect play wins with slots to spare never asks the player to count them.
+                    if (plan.SpareSlots is int spare && SlotsNeeded(c.data) < c.data.holdingSlots - spare) error += 0.5;
                     if (stats.StuckRate > 0.03 || error >= bestError) continue;
                     if (express && stats.ExpressShare > MaxExpressShare) continue;
                     var solved = Solver.Solve(c.level);
                     if (!solved.Solvable) continue;
                     bestError = error;
-                    best = new Result { Plan = plan, Data = c.data, Level = c.level, Noise = c.noise, SolverNodes = solved.NodesVisited };
+                    best = new Result { Plan = plan, Data = c.data, Level = c.level, Noise = c.noise, Spread = c.spread, SolverNodes = solved.NodesVisited };
                 }
 
                 // Narrow the noise range around the best so far for the next round.
@@ -159,9 +169,31 @@ namespace CargoJam.LevelGen
                     double span = (hi - lo) * 0.35;
                     lo = Math.Max(0, best.Noise - span);
                     hi = best.Noise + span;
+                    double spreadSpan = (spreadHi - spreadLo) * 0.35;
+                    spreadLo = Math.Max(0, best.Spread - spreadSpan);
+                    spreadHi = Math.Min(MaxSpread, best.Spread + spreadSpan);
                 }
             }
             return best;
+        }
+
+        /// <summary>
+        /// The fewest waiting slots the level can be won with (perfect play, no boosters), from its own
+        /// count down to 1. A search that hits its node limit counts as winnable, so "tight" is only
+        /// claimed when it is proven.
+        /// </summary>
+        static int SlotsNeeded(LevelData data)
+        {
+            int need = data.holdingSlots;
+            for (int slots = data.holdingSlots - 1; slots >= 1; slots--)
+            {
+                var copy = LevelJson.Parse(LevelJson.Write(data));
+                copy.holdingSlots = slots;
+                var solved = Solver.Solve(LevelDefinition.Parse(copy), 60_000);
+                if (!solved.Solvable && !solved.HitNodeLimit) break;
+                need = slots;
+            }
+            return need;
         }
 
         /// <summary>Distance from the target fail rate, plus a large penalty outside the plan's band.</summary>
@@ -194,6 +226,7 @@ namespace CargoJam.LevelGen
                 HitNodeLimit = solved.HitNodeLimit,
                 Stats = CasualBot.Grade(level, GradeRuns, GradeSeed + data.id),
                 Smart = SmartBot.Grade(level, SmartGradeRuns, GradeSeed + data.id),
+                SlotsNeeded = SlotsNeeded(data),
             };
         }
 
@@ -340,6 +373,7 @@ namespace CargoJam.LevelGen
                     HitNodeLimit = solved.HitNodeLimit,
                     Stats = CasualBot.Grade(level, GradeRuns, GradeSeed + data.id),
                     Smart = SmartBot.Grade(level, SmartGradeRuns, GradeSeed + data.id),
+                    SlotsNeeded = SlotsNeeded(data),
                 };
             });
             PrintTable(results);
@@ -392,8 +426,8 @@ namespace CargoJam.LevelGen
 
         static void PrintTable(Result[] results)
         {
-            Console.WriteLine("| Level | Kind | Size | Colors | Trucks | Slots | Hard | Bollards | Frost | Mystery | Express | Locks | Straps | Gates | Target | Bot fail | Stuck | Express fails | Smart fail | Decisions | Solver nodes |");
-            Console.WriteLine("|---:|---|---|---:|---:|---:|---|---:|---|---:|---|---:|---:|---|---:|---:|---:|---|---:|---:|---:|");
+            Console.WriteLine("| Level | Kind | Size | Colors | Trucks | Slots | Hard | Bollards | Frost | Mystery | Express | Locks | Straps | Gates | Target | Bot fail | Stuck | Express fails | Smart fail | Decisions | Slots needed | Solver nodes |");
+            Console.WriteLine("|---:|---|---|---:|---:|---:|---|---:|---|---:|---|---:|---:|---|---:|---:|---:|---|---:|---:|---:|---:|");
             foreach (var r in results)
             {
                 if (r == null) continue;
@@ -416,7 +450,7 @@ namespace CargoJam.LevelGen
                 Console.WriteLine($"| {d.id} | {r.Plan.Kind} | {l.Width}x{l.Height} | {colors.Count} | {l.Trucks.Count} | {l.HoldingSlots} | " +
                                   $"{(l.Hard ? "yes" : "")} | {Blank(bollards)} | {frost} | {Blank(mystery)} | {express} | {Blank(l.Locks.Count)} | " +
                                   $"{Blank(l.Straps.Count)} | {gates} | {r.Plan.TargetFail:0.00} | {r.Stats.FailRate:0.000} | " +
-                                  $"{r.Stats.StuckRate:0.000} | {expressFails} | {r.Smart.FailRate:0.000} | {r.Smart.DecisionShare:0.00} | {nodes} |");
+                                  $"{r.Stats.StuckRate:0.000} | {expressFails} | {r.Smart.FailRate:0.000} | {r.Smart.DecisionShare:0.00} | {r.SlotsNeeded} | {nodes} |");
             }
         }
 

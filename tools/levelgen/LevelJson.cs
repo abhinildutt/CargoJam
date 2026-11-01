@@ -42,10 +42,12 @@ namespace CargoJam.LevelGen
             sb.Append("  ]");
         }
 
-        public static LevelData Read(string path)
+        public static LevelData Read(string path) => Parse(File.ReadAllText(path));
+
+        public static LevelData Parse(string json)
         {
             var options = new JsonSerializerOptions { IncludeFields = true };
-            return JsonSerializer.Deserialize<LevelData>(File.ReadAllText(path), options);
+            return JsonSerializer.Deserialize<LevelData>(json, options);
         }
     }
 }

@@ -50,7 +50,7 @@ namespace CargoJam.LevelGen
         public const int VisibleTrucks = 2;
 
         /// <summary>Score units per "unit of preference" in the softmax: higher plays sloppier.</summary>
-        public const double Temperature = 3.0;
+        public const double Temperature = 1.5;
 
         const int MaxSteps = 2000;
         const int BranchCap = 6;
@@ -148,6 +148,13 @@ namespace CargoJam.LevelGen
         /// How good a position looks to a careful player: parcels shipped, a roomy dock, and free parcels
         /// for the trucks it can see; express parcels close to running out count against it.
         /// </summary>
+        static bool ComingSoon(GameSession s, int color)
+        {
+            for (int t = 0; t <= VisibleTrucks && s.CurrentTruckIndex + t < s.Trucks.Count; t++)
+                if (s.Trucks[s.CurrentTruckIndex + t].Color == color) return true;
+            return false;
+        }
+
         static double Score(GameSession s)
         {
             if (s.Status == GameStatus.Won) return 1e6;
@@ -159,8 +166,10 @@ namespace CargoJam.LevelGen
             int shipped = index * s.Level.TruckCapacity + (s.CurrentTruck?.Loaded ?? 0);
             score += 10 * shipped;
 
+            // A parked parcel whose truck is in sight leaves again soon; one whose truck isn't blocks a slot.
             int free = s.Dock.Capacity - s.Dock.Count;
-            score -= 6 * s.Dock.Count;
+            for (int i = 0; i < s.Dock.Capacity; i++)
+                if (s.Dock[i] != null) score -= ComingSoon(s, s.Dock[i].Color) ? 2 : 9;
             if (free == 0) score -= 25;
             else if (free == 1) score -= 8;
 

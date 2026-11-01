@@ -3,16 +3,16 @@
   "hard": false,
   "holdingSlots": 3,
   "truckCapacity": 3,
-  "trucks": "OPOPYRYR",
+  "trucks": "PGYOPOGY",
   "rows": [
-    "OYOOP",
-    "PPYYR",
-    "O.RRY",
-    "PPPRR",
-    "OYROY"
+    "YYOOG",
+    "OGGPG",
+    "OGPOY",
+    ".OYPG",
+    "PPYYP"
   ],
   "frost": [
-    { "x": 1, "y": 0, "layers": 2 },
-    { "x": 4, "y": 4, "layers": 4 }
+    { "x": 3, "y": 0, "layers": 2 },
+    { "x": 1, "y": 2, "layers": 7 }
   ]
 }
