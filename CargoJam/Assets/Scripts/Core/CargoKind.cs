@@ -8,7 +8,7 @@ namespace CargoJam.Core
     {
         /// <summary>'#': a permanent obstacle.</summary>
         Bollard = 0,
-        /// <summary>A frozen crate, cracked by parcels leaving next to it.</summary>
+        /// <summary>A frozen crate, which thaws after a number of moves.</summary>
         Frost = 1,
         /// <summary>A covered parcel whose color shows once it is free.</summary>
         Mystery = 2,

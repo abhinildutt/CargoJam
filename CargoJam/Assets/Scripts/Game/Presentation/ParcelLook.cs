@@ -9,7 +9,7 @@ namespace CargoJam.Game.Presentation
         public bool Locked;
         /// <summary>The key to a padlocked parcel.</summary>
         public bool IsKey;
-        /// <summary>Layers of ice, 0 when not frozen.</summary>
+        /// <summary>Moves until a frozen crate thaws, 0 when not frozen.</summary>
         public int Frost;
         /// <summary>Moves left for an express parcel, 0 when not express.</summary>
         public int Express;

@@ -24,8 +24,8 @@ Options: `--seed N` (default 20261026) and `--out DIR`. A full run takes about 2
   - Each cargo kind debuts on a hand-made level (bollard L5, frost L7, mystery L12, express L17, lock L22, strap L27, gate L42), is practised and twisted on the levels after it (the ramp table), and from L51 levels mix two or three kinds from a fixed rotation.
   - From L60 board sizes are fixed per kind: easy 6×7, medium and harder 7×8, HARD 7×9.
 - **Board** (`BoardMaker.cs`):
-  - It lays out gate walls (a row of bollards with the gate in its gap; each gate gets its own wall and must wall something off on its own), mirrored bollards and holes, then picks padlocks, mystery parcels and frozen crates.
-  - It picks a random legal dig order: each parcel is free once the ones before it are gone, a padlocked parcel comes after its key, a frozen crate after `layers` of its neighbours, and a gate is a virtual cell that "opens" once enough parcels are gone.
+  - It lays out gate walls (a row of bollards with the gate in its gap; each gate gets its own wall and must wall something off on its own), mirrored bollards and holes, then picks padlocks, mystery parcels and frozen crates. Frozen crates thaw after a number of moves (`layers` in the JSON, 2-6 by level kind), so three in four go in the front two rows, where the ice is what holds them; at most a third of the front row is frozen.
+  - It picks a random legal dig order: each parcel is free once the ones before it are gone, a padlocked parcel comes after its key, a frozen crate once its thaw count of parcels has gone (one per move), and a gate is a virtual cell that "opens" once enough parcels are gone.
   - It colors the parcels in groups of three along that order. With `noise` 0 the truck order follows the dig order exactly. More noise moves parcels further from their truck, which fills the dock.
   - Then it places what depends on color and order: each gate's color and count (from the trucks that fill before it opens), express parcels (at an early dig position, with spare moves on top) and straps (two adjacent parcels of one color).
   - Every candidate must validate and start with a legal move.

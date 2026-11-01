@@ -136,20 +136,21 @@ namespace CargoJam.Core
     }
 
     /// <summary>
-    /// A frozen crate lost a layer of ice. <see cref="By"/> is the parcel whose leaving cracked it, or null
-    /// when the Crane thawed it outright (then <see cref="LayersLeft"/> is 0).
+    /// A move went by while a crate was frozen: <see cref="Left"/> moves remain until it thaws, and at 0
+    /// it has thawed (free from the next move on). With <see cref="Lifted"/> the Crane thawed it outright
+    /// just before lifting it (then <see cref="Left"/> is 0).
     /// </summary>
     public sealed class FrostCracked : GameEvent
     {
         public Parcel Parcel { get; }
-        public int LayersLeft { get; }
-        public Parcel By { get; }
+        public int Left { get; }
+        public bool Lifted { get; }
 
-        public FrostCracked(Parcel parcel, int layersLeft, Parcel by)
+        public FrostCracked(Parcel parcel, int left, bool lifted = false)
         {
             Parcel = parcel;
-            LayersLeft = layersLeft;
-            By = by;
+            Left = left;
+            Lifted = lifted;
         }
     }
 

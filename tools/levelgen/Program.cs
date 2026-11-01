@@ -277,27 +277,28 @@ namespace CargoJam.LevelGen
         };
 
         /// <summary>
-        /// Frost: two one-layer crates in row 1, each next to a front-row parcel. The first truck's reds
-        /// sit beside the left crate, so the obvious first moves crack it.
+        /// Frost: a yellow crate in the front row, frozen for 3 moves, right next to the first truck's
+        /// three free reds. It is the second truck's color, so loading the reds (the hand points at one)
+        /// counts it down to 0 just as its truck pulls in. A second crate in row 1 waits out 5 moves.
         /// </summary>
         static LevelData Level7() => new LevelData
         {
             id = 7,
             holdingSlots = 5,
             truckCapacity = LevelPlan.TruckCapacity,
-            trucks = "RYBYRBRB",
+            trucks = "RYBRBYRB",
             rows = new[]
             {
-                "RRYYB",
-                "RYBBY",
-                "RRYRY",
-                "BBB.R",
-                "RRBBB",
+                "RYRBR",
+                "YBYBB",
+                "RRBYR",
+                "BYBRB",
+                "RB.YR",
             },
             frost = new[]
             {
-                new FrostData { x = 1, y = 1, layers = 1 },
-                new FrostData { x = 4, y = 1, layers = 1 },
+                new FrostData { x = 1, y = 0, layers = 3 },
+                new FrostData { x = 3, y = 1, layers = 5 },
             },
         };
 
@@ -455,13 +456,26 @@ namespace CargoJam.LevelGen
                 }
                 case CargoKind.Frost:
                 {
-                    // Every crate is in rows 0-1, one layer, next to a parcel the first truck takes now.
-                    foreach (var f in data.frost)
+                    // A crate the player could take right now but for its ice: free, about 3 moves to thaw,
+                    // with other moves to make meanwhile (the hand points at one of those).
+                    bool waiting = data.frost.Any(f =>
                     {
-                        Require(f.y <= 1 && f.layers == 1, "frost sits in rows 0-1 with one layer");
+                        var p = At(f.x, f.y);
+                        return session.Board.IsFree(p.Cell) && f.layers >= 2 && f.layers <= 4;
+                    });
+                    Require(waiting, "a frozen crate must have an open path and thaw in 2-4 moves");
+                    Require(moves.Any(FirstTruckTakes), "a move must load the first truck while the ice thaws");
+                    // Loading the first truck's free matches thaws that crate by the time its truck needs it.
+                    var next = session.Clone();
+                    for (int i = 0; i < LevelPlan.TruckCapacity; i++)
+                    {
+                        next.GetMoves(moves);
+                        var pick = moves.FirstOrDefault(m => next.CurrentTruck.Accepts(m));
+                        Require(pick != null, "the first truck's parcels must be free");
+                        next.Tap(pick.Cell);
                     }
-                    bool cracksFirst = data.frost.Any(f => Neighbours(f.x, f.y).Any(c => FirstTruckTakes(At(c.X, c.Y))));
-                    Require(cracksFirst, "a frozen crate must be next to a parcel the first truck takes");
+                    var crate = data.frost.First(f => session.Board.IsFree(new Cell(f.x, f.y)) && f.layers >= 2 && f.layers <= 4);
+                    Require(next.FrostLeft(next.Board.Get(new Cell(crate.x, crate.y))) == 0, "the front crate must thaw while the first truck loads");
                     break;
                 }
                 case CargoKind.Mystery:
@@ -633,7 +647,7 @@ namespace CargoJam.LevelGen
                     if (l.IsBollard(x, y)) bollards++;
                     if (l.ColorAt(x, y) != ParcelColors.None) colors.Add(l.ColorAt(x, y));
                 }
-                string frost = d.frost == null || d.frost.Length == 0 ? "" : $"{d.frost.Length} (max {d.frost.Max(f => f.layers)})";
+                string frost = d.frost == null || d.frost.Length == 0 ? "" : $"{d.frost.Length} (moves {string.Join(",", d.frost.Select(f => f.layers))})";
                 string express = d.express == null || d.express.Length == 0 ? "" : "taps " + string.Join(",", d.express.Select(e => e.taps));
                 string gates = d.gates == null || d.gates.Length == 0 ? "" : string.Join(",", d.gates.Select(g => g.color + g.count));
                 string nodes = r.HitNodeLimit ? $"{r.SolverNodes} LIMIT" : r.SolverNodes.ToString(CultureInfo.InvariantCulture);

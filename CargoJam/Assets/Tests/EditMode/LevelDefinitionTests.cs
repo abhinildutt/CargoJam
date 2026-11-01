@@ -218,20 +218,19 @@ namespace CargoJam.Core.Tests
         }
 
         [Test]
-        public void FrostLayersAreOneToThreeAndCrackable()
+        public void FrostThawsAfterOneToNineMovesAnywhere()
         {
             var data = Cargo();
             data.frost = new[] { TestLevels.Frost(1, 1, 0) };
             Assert.That(Errors(data), Has.Some.Contains("layers 0"));
-            data.frost = new[] { TestLevels.Frost(1, 1, 4) };
-            Assert.That(Errors(data), Has.Some.Contains("layers 4"));
-            data.frost = new[] { TestLevels.Frost(0, 0, 3) };
-            Assert.That(Errors(data), Has.Some.Contains("only 2 neighbouring parcels"));
+            data.frost = new[] { TestLevels.Frost(1, 1, 10) };
+            Assert.That(Errors(data), Has.Some.Contains("layers 10"));
 
-            data.frost = new[] { TestLevels.Frost(1, 1, 3), TestLevels.Frost(0, 0, 2) };
+            // The count is moves, not neighbours: a corner crate may wait out more moves than it has neighbours.
+            data.frost = new[] { TestLevels.Frost(1, 1, 3), TestLevels.Frost(0, 0, 9) };
             var level = LevelDefinition.Parse(data);
             Assert.That(level.FrostAt(1, 1), Is.EqualTo(3));
-            Assert.That(level.FrostAt(0, 0), Is.EqualTo(2));
+            Assert.That(level.FrostAt(0, 0), Is.EqualTo(9));
             Assert.That(level.FrostAt(1, 0), Is.Zero);
             Assert.That(level.CargoMask, Is.EqualTo(1 << (int)CargoKind.Frost));
         }

@@ -27,7 +27,9 @@ namespace CargoJam.LevelGen
         /// <summary>Free-standing bollards, mirrored left-right (gate walls come on top).</summary>
         public int Bollards;
         public int Frost;
-        public int FrostMaxLayers = 1;
+        /// <summary>The range a frozen crate's thaw count is drawn from (moves until it can leave).</summary>
+        public int FrostMinMoves = 2;
+        public int FrostMaxMoves = 4;
         public int Express;
         /// <summary>Spare moves an express parcel gets beyond its dig position.</summary>
         public int ExpressSlack = 5;
@@ -195,7 +197,14 @@ namespace CargoJam.LevelGen
             int frost = p.Hard ? 4 : relief ? 2 : 3;
             int straps = p.Hard ? 3 : relief ? 1 : 2;
             int bollards = id >= 30 ? 4 : 2;
-            p.FrostMaxLayers = id < 10 ? 1 : id < 30 ? 2 : p.Hard && id >= 50 ? 3 : 2;
+            // Thaw counts: short on relief levels, longer on the harder ones of each block.
+            (p.FrostMinMoves, p.FrostMaxMoves) = p.Kind switch
+            {
+                "relief" => (2, 3),
+                "easy" => (2, 4),
+                "medium" => (2, 5),
+                _ => (3, 6),
+            };
             p.GateMaxCount = 6;
             p.ExpressSlack = p.Hard ? (id >= 60 ? 2 : 3) : relief ? 8 : 5;
 
@@ -204,9 +213,9 @@ namespace CargoJam.LevelGen
                 case 2: case 3: case 4: return;
                 // 5 and 7 are debuts.
                 case 6: p.Bollards = 2; return;
-                case 8: p.Frost = 2; p.FrostMaxLayers = 1; return;
-                case 9: p.Frost = 2; p.FrostMaxLayers = 1; p.Bollards = 2; return;
-                case 10: p.Frost = 3; p.FrostMaxLayers = 2; p.Bollards = 2; return;
+                case 8: p.Frost = 2; p.FrostMinMoves = 2; p.FrostMaxMoves = 3; return;
+                case 9: p.Frost = 2; p.FrostMinMoves = 2; p.FrostMaxMoves = 4; p.Bollards = 2; return;
+                case 10: p.Frost = 3; p.FrostMinMoves = 3; p.FrostMaxMoves = 5; p.Bollards = 2; return;
                 case 11: p.Bollards = 2; return;
                 // 12 debut.
                 case 13: p.Mystery = 2; p.Frost = 2; return;

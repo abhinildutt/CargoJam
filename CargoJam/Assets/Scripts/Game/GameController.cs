@@ -108,9 +108,6 @@ namespace CargoJam.Game
         // Playback state for the batch of events from one move (reset by PlayAll).
         /// <summary>When the move's first parcel starts to slide (-1 until one does): express ticks land just after.</summary>
         float moveStartAt;
-        /// <summary>The parcel that most recently started to leave the yard, and when (ice cracks as it goes).</summary>
-        int lastLeaveId;
-        float lastLeaveAt;
         /// <summary>
         /// A strapped pair on its way out: its band slips off as the lead starts; the trail starts with it
         /// at the lead's pace (when, how long and over how many points the lead slid).
@@ -551,7 +548,7 @@ namespace CargoJam.Game
 
         /// <summary>
         /// The cargo hint (see <see cref="TryGetCargoHintCell"/>) should be pointed at from above: what it
-        /// teaches (the frozen crate, the hidden parcel, the strap partner) lies just below the cell, where
+        /// teaches (a frozen crate, the hidden parcel, the strap partner) lies just below the cell, where
         /// a hand reaching up from below would cover it.
         /// </summary>
         public bool CargoHintFromAbove => cargoHintFound && cargoHintFromAbove;
@@ -581,6 +578,9 @@ namespace CargoJam.Game
         {
             cell = default;
             if (session == null || session.Status != GameStatus.Playing || kind == CargoKind.Bollard) return false;
+            // Frost is taught by making some other move and watching the count drop: the usual hint
+            // (never a frozen crate, which GetMoves leaves out), while a crate is still frozen.
+            if (kind == CargoKind.Frost) return AnyFrozen() && FindHintCell(out cell);
             session.GetMoves(freeScratch);
             foreach (var p in freeScratch)
             {
@@ -597,9 +597,6 @@ namespace CargoJam.Game
             var partner = session.StrapPartner(p);
             switch (kind)
             {
-                case CargoKind.Frost:
-                    // A neighbour of the frozen crate (either member of a pair cracks its own neighbours).
-                    return NextToFrost(p) || (partner != null && NextToFrost(partner));
                 case CargoKind.Mystery:
                     // The parcel covering it.
                     return NextToHidden(p) || (partner != null && NextToHidden(partner));
@@ -633,13 +630,11 @@ namespace CargoJam.Game
             return false;
         }
 
-        bool NextToFrost(Parcel p)
+        /// <summary>Some crate in the yard is still frozen.</summary>
+        bool AnyFrozen()
         {
-            for (int d = 0; d < 4; d++)
-            {
-                var n = session.Board.Get(Neighbour(p.Cell, d));
-                if (n != null && session.FrostLeft(n) > 0) return true;
-            }
+            foreach (var p in session.Board.Parcels)
+                if (session.FrostLeft(p) > 0) return true;
             return false;
         }
 
@@ -863,14 +858,16 @@ namespace CargoJam.Game
                 case FrostCracked cracked:
                 {
                     var pv = parcels[cracked.Parcel.Id];
-                    // A neighbour cracks it as it starts to slide away; the Crane thaws its target at once.
+                    // The Crane thaws its target at once. A move's countdown lands with its express ticks
+                    // (just after the move starts), a beat behind them so the two read apart.
                     float at = now;
-                    if (cracked.By != null)
-                        at = (cracked.By.Id == lastLeaveId ? lastLeaveAt : now) + Timing.CrackDelay;
-                    pv.Crack(tweener, at, cracked.LayersLeft);
-                    fx?.FrostCracked(pv, cracked.LayersLeft, at);
-                    // Thawed by a neighbour: it lifts as the collar bursts, not before.
-                    if (cracked.LayersLeft == 0 && cracked.By != null) HoldDown(cracked.Parcel.Id, at);
+                    if (!cracked.Lifted)
+                        at = (moveStartAt >= 0f ? Mathf.Max(now, moveStartAt) : now) + Timing.SlideMin + Timing.CrackDelay;
+                    pv.Crack(tweener, at, cracked.Left);
+                    fx?.FrostCracked(pv, cracked.Left, at);
+                    // Thawed by the count: it lifts as the ice bursts, not before.
+                    if (cracked.Left == 0 && !cracked.Lifted) HoldDown(cracked.Parcel.Id, at);
+                    tensionAt = Mathf.Max(tensionAt, at);
                     break;
                 }
 
@@ -958,8 +955,6 @@ namespace CargoJam.Game
         void ResetBatch(float now)
         {
             moveStartAt = -1f;
-            lastLeaveId = -1;
-            lastLeaveAt = now;
             pairStrap = null;
             pairLeadId = pairTrailId = -1;
             pairTrailAt = now;
@@ -997,8 +992,6 @@ namespace CargoJam.Game
             fx?.ParcelPicked(pv, lifted);
 
             if (moveStartAt < 0f || start < moveStartAt) moveStartAt = start;
-            lastLeaveId = id;
-            lastLeaveAt = start;
             if (id == pairLeadId)
             {
                 pairStrap?.Release(start);

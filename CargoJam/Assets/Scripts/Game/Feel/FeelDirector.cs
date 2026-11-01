@@ -386,22 +386,23 @@ namespace CargoJam.Game.Feel
                 var collar = parcel.transform.position + Vector3.up * 0.2f;
                 if (left <= 0)
                 {
-                    // The last layer bursts off: a big spray of shards and a frosty glint.
+                    // Thawed: the ice bursts off in a big spray of shards and a frosty glint.
                     particles.Emit(collar, BurstSpec.IceShards(16), ice);
                     particles.Emit(collar + Vector3.up * 0.2f, BurstSpec.Sparkle(6), fxMaterials.White);
                     sfx.Play(Sfx.IceShatter, 1f, 0.9f);
+                    Haptics.Play(Haptic.Tick);
                 }
                 else
                 {
-                    particles.Emit(collar, BurstSpec.IceShards(6), ice);
-                    sfx.PlayVaried(Sfx.IceCrack, IcePitch(left), 0.8f, 0.03f);
+                    // Every move knocks a few chips off: soft, as it comes with most moves on a frost level.
+                    particles.Emit(collar, BurstSpec.IceShards(3), ice);
+                    sfx.PlayVaried(Sfx.IceCrack, IcePitch(left), 0.45f, 0.03f);
                 }
-                Haptics.Play(Haptic.Tick);
             });
         }
 
-        /// <summary>Thinner ice cracks higher: 2 layers left → +2 semitones, 1 left → +6.</summary>
-        static float IcePitch(int left) => Mathf.Pow(2f, (Mathf.Clamp(3 - left, 0, 3) * 4f - 2f) / 12f);
+        /// <summary>The ice cracks higher as the thaw nears: a semitone a move over the last six (+5 at 1 left).</summary>
+        static float IcePitch(int left) => Mathf.Pow(2f, (Mathf.Clamp(6 - left, 0, 5) - 1f) / 12f);
 
         public void ExpressTicked(ParcelView parcel, int left, float at)
         {

@@ -63,7 +63,7 @@ namespace CargoJam.Game.UI
             switch (kind)
             {
                 case CargoKind.Bollard: return "Bollards never move. Plan around them.";
-                case CargoKind.Frost: return "Move parcels next to a frozen crate to crack its ice.";
+                case CargoKind.Frost: return "Frozen crates thaw after their number of moves. Make other moves first.";
                 case CargoKind.Mystery: return "Covered parcels show their color once they're free.";
                 case CargoKind.Express: return "Ship express parcels before their number runs out. Every move counts.";
                 case CargoKind.Lock: return "Load the key parcel into a truck to open the padlock.";

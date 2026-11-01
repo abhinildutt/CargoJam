@@ -101,7 +101,7 @@ namespace CargoJam.Game.Presentation
         /// <param name="lastTruck">Where it leaves from.</param>
         void WinSequence(float at, Vector3 lastTruck);
 
-        /// <summary>A frozen crate lost a layer of ice; <paramref name="left"/> layers remain (0 = thawed).</summary>
+        /// <summary>A frozen crate's countdown dropped; <paramref name="left"/> moves remain until it thaws (0 = thawed).</summary>
         void FrostCracked(ParcelView parcel, int left, float at);
         /// <summary>An express parcel's count went down to <paramref name="left"/>.</summary>
         void ExpressTicked(ParcelView parcel, int left, float at);

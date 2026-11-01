@@ -39,6 +39,8 @@ namespace CargoJam.Game.Presentation
         /// <summary>Clear ice and its bright, snowy highlights (frozen crates).</summary>
         static readonly Color IceClear = new Color(0.62f, 0.87f, 1.00f);
         static readonly Color IceSnow = new Color(0.97f, 0.99f, 1.00f);
+        /// <summary>The frozen crate's countdown display: a deep ice blue behind white figures.</summary>
+        static readonly Color IceDeep = new Color(0.08f, 0.24f, 0.42f);
         /// <summary>The express card: a bright amber that no parcel color shares, and the ink printed on it.</summary>
         static readonly Color ExpressCard = new Color(1.00f, 0.80f, 0.12f);
         static readonly Color ExpressCardDim = new Color(0.92f, 0.74f, 0.16f);
@@ -51,9 +53,11 @@ namespace CargoJam.Game.Presentation
         /// <summary>
         /// Texel centers (u) of the 16×1 parcel skin texture: body, tape, stamp ink, label paper, then
         /// the cargo columns (alert ink, tag card, steel, webbing, clear ice, snow, express amber and
-        /// display ink, the body seen through frost, strap webbing), so express labels, ice, straps and
-        /// gates draw with the parcel skin's material. All but the frost tint are the same in every
-        /// color's skin (the tag card and express amber dim a little on a blocked parcel's skin).
+        /// display ink, the body seen through frost, strap webbing, the frost countdown's deep blue, figures
+        /// on the body color), so
+        /// express labels, ice, straps and gates draw with the parcel skin's material. All but the frost
+        /// tint are the same in every color's skin (the tag card and express amber dim a little on a
+        /// blocked parcel's skin).
         /// </summary>
         public const float SkinBodyU = 0.5f / SkinColumns;
         public const float SkinTapeU = 1.5f / SkinColumns;
@@ -70,6 +74,9 @@ namespace CargoJam.Game.Presentation
         /// <summary>This color's body under a layer of frost: pale, but still plainly its color.</summary>
         public const float SkinFrostU = 12.5f / SkinColumns;
         public const float SkinStrapU = 13.5f / SkinColumns;
+        public const float SkinIceDeepU = 14.5f / SkinColumns;
+        /// <summary>Figures printed on the body color: white on dark colors, display ink on light ones.</summary>
+        public const float SkinBodyInkU = 15.5f / SkinColumns;
 
         const string CarKitColormap = "Env/Cars/Textures/colormap";
 
@@ -322,10 +329,12 @@ namespace CargoJam.Game.Presentation
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp,
             };
+            // Figures on the body color: whichever of white and display ink stands out more.
+            var bodyInk = luma > 0.55f ? ExpressInk : IceSnow;
             tex.SetPixels(new[]
             {
                 body, tape, ink, paper, AlertInk, tag, SkinSteel, SkinWebbing,
-                IceClear, IceSnow, express, ExpressInk, frost, StrapWebbing, StrapWebbing, StrapWebbing,
+                IceClear, IceSnow, express, ExpressInk, frost, StrapWebbing, IceDeep, bodyInk,
             });
             tex.Apply(false, true);
             var m = Make(Color.white);

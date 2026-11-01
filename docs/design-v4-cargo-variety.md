@@ -62,13 +62,13 @@ Playtesting found the game "samey after 5–6 levels". The content agrees with t
 These follow the `LockData` pattern. A missing array means none: it reads as null under System.Text.Json and as empty under JsonUtility.
 
 ```json
-"frost":   [ { "x": 1, "y": 0, "layers": 2 } ],
+"frost":   [ { "x": 1, "y": 0, "layers": 3 } ],
 "express": [ { "x": 4, "y": 1, "taps": 9 } ],
 "straps":  [ { "x": 0, "y": 2, "x2": 1, "y2": 2 } ],
 "gates":   [ { "x": 3, "y": 1, "color": "R", "count": 3 } ]
 ```
 
-The backing classes are `FrostData{x,y,layers}`, `ExpressData{x,y,taps}`, `StrapData{x,y,x2,y2}` and `GateData{x,y,string color,count}`. `color` is a string so that JsonUtility can read it.
+The backing classes are `FrostData{x,y,layers}`, `ExpressData{x,y,taps}`, `StrapData{x,y,x2,y2}` and `GateData{x,y,string color,count}`. `color` is a string so that JsonUtility can read it. A frost entry's `layers` is the number of moves until the crate thaws; the field kept its name from the first frost rule (layers of ice cracked by neighbours) so older files still read.
 
 ### Validation (`LevelDefinition.Validate`)
 
@@ -82,8 +82,7 @@ The backing classes are `FrostData{x,y,layers}`, `ExpressData{x,y,taps}`, `Strap
 
 **Frost**
 - Only on a parcel cell, with one entry per cell.
-- 1 ≤ layers ≤ 3.
-- layers ≤ the number of orthogonal neighbour cells that start with a parcel.
+- 1 ≤ layers ≤ 9 (`MaxFrostMoves`: moves to thaw, one figure on the ice). Any cell qualifies, front row included.
 
 **Express**
 - Only on a parcel cell, with 1 ≤ taps ≤ 99.
@@ -120,7 +119,7 @@ The new Core enum is `CargoKind { Bollard, Frost, Mystery, Express, Lock, Strap,
 The solver, bot, controller and views all use the same API:
 
 - `IsRestrained(p)`: padlocked or frozen.
-- `FrostLeft(p)`, `ExpressLeft(p)`, `StrapPartner(p)` (null when not strapped now), `GateLeft(gateIndex)`, `IsGateOpen(gateIndex)`.
+- `FrostLeft(p)` (moves until it thaws, 0 when not frozen), `ExpressLeft(p)`, `StrapPartner(p)` (null when not strapped now), `GateLeft(gateIndex)`, `IsGateOpen(gateIndex)`.
 - `IsUnitFree(p)`: p, or its strap partner, has an exit path.
 - `GetMoves(List<Parcel>)`: one representative per unit that is free and not restrained. For a pair this is the free member, listed once.
 - `CanTake(p, extraSlots = 0)`:
@@ -147,26 +146,28 @@ Continue (Extra Slot) is only offered after OutOfSpace. `AddHoldingSlot` refuses
 ### Event order per move (Tap or Crane)
 
 ```
-[Crane only: ParcelRevealed, ParcelUnlocked, FrostCracked(left 0, by null), StrapCut]
+[Crane only: ParcelRevealed, ParcelUnlocked, FrostCracked(left 0, lifted), StrapCut]
 [pair only:  StrapMoved(lead, trail)]
 per departing parcel (lead, then trail):
   ParcelLoaded | ParcelHeld
-  FrostCracked*        (orthogonal neighbours still in the yard with frost > 0)
   ParcelUnlocked*      (if loaded and a key)
   GateProgress*, GateOpened*   (if loaded and the gate's color)
   TruckDeparted, TruckArrived, ParcelLoadedFromDock (+ its ParcelUnlocked*, GateProgress*/GateOpened*) ...
 ExpressTicked*         (once per MOVE, for express parcels still in the yard)
+FrostCracked*          (once per MOVE, for crates still frozen, in parcel id order; left 0 = thawed)
 ParcelRevealed*        (RevealFree; also sees cells opened by gates)
 LevelWon | ExpressMissed, LevelFailed(ExpressMissed) | LevelFailed(OutOfSpace|Stuck)
 ```
 
+A crate whose count reaches 0 in a move is free from the next move on: the end check that follows already counts it as a legal move.
+
 With two or more gates, a load's gate events interleave per gate: `GateProgress(0)`, `GateOpened(0)`, then `GateProgress(1)`, `GateOpened(1)`. The controller keeps per-gate timings to match.
 
-`FinishMove(events, tick)` runs TickExpress, then RevealFree, then CheckForEnd. Undo and AddHoldingSlot call it with `tick: false`.
+`FinishMove(events, tick)` runs TickExpress, then TickFrost, then RevealFree, then CheckForEnd. Undo and AddHoldingSlot call it with `tick: false`.
 
 ### New events
 
-- `FrostCracked(Parcel, int layersLeft, Parcel by)`
+- `FrostCracked(Parcel, int left, bool lifted)`: one move went by on a frozen crate (`left` moves to go, 0 = thawed), or with `lifted` the Crane thawed it outright.
 - `ExpressTicked(Parcel, int left)`, `ExpressMissed(Parcel)`
 - `StrapMoved(Parcel lead, Parcel trail)`, `StrapCut(Parcel lifted, Parcel partner)`, `StrapRestored(Parcel a, Parcel b)`
 - `GateProgress(int gate, int left, Parcel loaded)`, `GateOpened(int gate)`
@@ -186,10 +187,14 @@ A permanent obstacle. It cannot be tapped or targeted by the Crane.
 
 ### Frozen crate
 
-- **Taps and paths.** A frozen crate stays in place and blocks paths. A tap on it is `ParcelBlocked`: nothing changes and nothing ticks.
-- **Cracking.** Each parcel leaving the yard cracks one layer on each frozen orthogonal neighbour. This covers loads, holds, Crane lifts, and both members of a pair.
-- **Crane.** Thaws the crate fully first.
-- **Undo.** Never re-freezes it.
+The mirror of an express parcel: express must leave within N moves, a frozen crate can't leave until N moves have gone by.
+
+- **The count.** The crate shows N (1–9), the moves until it thaws.
+- **Taps and paths.** While N > 0 it stays in place, even with a free path (in the front row, say), and blocks paths for others. A tap on it is `ParcelBlocked`: nothing changes and nothing ticks.
+- **What counts down.** Exactly the moves that tick express parcels: each successful move that takes something out of the yard (a load, hold or Crane lift) counts every frozen crate down by one, once per move. A strapped pair's move counts once. Rejected or blocked taps, dock chains, gate openings, Undo and Extra Slot don't count.
+- **Thawing.** At 0 it emits `FrostCracked(left 0)` and is an ordinary parcel from the next move on.
+- **Crane.** Thaws the crate fully first (`FrostCracked(left 0, lifted)`).
+- **Undo.** Never re-freezes it and never refunds the count.
 - **Frozen mystery.** A frozen mystery parcel is still revealed once it has a path, so the player sees its color under the ice.
 
 ### Express parcel
@@ -198,7 +203,7 @@ A permanent obstacle. It cannot be tapped or targeted by the Crane.
 - **What doesn't tick.** Rejected or blocked taps, dock chains, gate openings, Undo and Extra Slot.
 - **Its own move.** It does not tick on the move that ships it. Once out of the yard its count freezes and it is safe.
 - **Missing.** The shown number is the moves left, counting the one that ships it. When a tick reaches 0 while it is still in the yard, the level fails with ExpressMissed. There is no Continue.
-- **Undo.** Undo never refunds ticks. Like cracks, reveals and gate progress, it is not a snapshot. An express parcel returned by Undo keeps its frozen count and resumes ticking.
+- **Undo.** Undo never refunds ticks. Like thaw counts, reveals and gate progress, it is not a snapshot. An express parcel returned by Undo keeps its frozen count and resumes ticking.
 
 ### Strapped pair
 
@@ -256,10 +261,10 @@ Each debut is on an easy, non-HARD level. None falls on an arrival level (11, 21
 
 | Levels | Content |
 |---|---|
-| 4–10 | L6 bollards; L8 frost ×2–3 (1 layer); L9 frost + bollards; L10 HARD frost (≤2 layers) + bollards |
+| 4–10 | L6 bollards; L8 frost ×2 (thaw 2–3); L9 frost (thaw 2–4) + bollards; L10 HARD frost ×3 (thaw 3–5) + bollards |
 | 11–20 | L13 mystery + frost; L15 HARD mystery + frost; L18 express (slack 6); L19 express + mystery; L20 express (slack 4) + frost |
 | 21–30 | L23 lock + bollards; L24 lock + express; L25 HARD lock + mystery + frost; L28–29 straps (L29 + lock); L30 straps + express |
-| 31–40 (twists) | L33 frost on a mystery; L35 HARD frost in row 0 + straps; L36 express ×2; L38 frost on a key; L40 express ×2 with tight slack + locks |
+| 31–40 (twists) | L33 frost on a mystery; L35 HARD frost in row 0 for sure + straps; L36 express ×2; L38 frost on a key; L40 express ×2 with tight slack + locks |
 | 42–50 | Gates; L44 gate + frost; L45 HARD gate (count 6) + mystery + straps; L46–50 gates in two colors; L50 gates + locks + express |
 | 51–60 | Two cargo types per level, three on HARD |
 | 61–100 | A deterministic rotation of 2–3-type combos; HARD gets 3–4, relief gets 1 |
@@ -285,9 +290,11 @@ Each debut is on an easy, non-HARD level. None falls on an arrival level (11, 21
 - The gate must wall something off.
 
 **Frost**
-- A cell becomes diggable only after `layers` of its initial neighbours are gone.
-- It never covers every cell in row 0.
-- At the debut, frost sits in rows 0–1 next to free parcels.
+- A crate only matters where it would otherwise be free soon, so three in four go in rows 0–1 (the front row, or right behind it); the rest go anywhere.
+- Thaw counts by level kind: relief 2–3, easy 2–4, medium 2–5, harder and HARD 3–6 (L8–L10 as in the ramp table).
+- At most a third of row 0 is frozen, so a level always opens with moves to make.
+- In the dig order a crate becomes diggable once its thaw count of parcels is gone (one parcel per move).
+- The debut (L7) is hand-made: a yellow crate in row 0 thaws in 3 moves, right beside the first truck's three free reds, and it is the second truck's color, so loading the reds thaws it just as its truck pulls in. A second crate in row 1 waits out 5.
 
 **Express**
 - Placed at dig position p, with 2 ≤ p ≤ min(12, n/3).
@@ -315,7 +322,7 @@ Content loops after L100 from `LoopStart = 60`.
   - "Got it" marks the cargo seen. The next card follows, or else the hand pointer starts.
 - **Card lines:**
   - Bollard: "Bollards never move. Plan around them."
-  - Frost: "Move parcels next to a frozen crate to crack its ice."
+  - Frost: "Frozen crates thaw after their number of moves. Make other moves first."
   - Mystery: "Covered parcels show their color once they're free."
   - Express: "Ship express parcels before their number runs out. Every move counts."
   - Lock: "Load the key parcel into a truck to open the padlock."
@@ -325,7 +332,7 @@ Content loops after L100 from `LoopStart = 60`.
 
   | Cargo | Hand points at |
   |---|---|
-  | Frost | a free neighbour of the frozen crate |
+  | Frost | another good move (the usual hint, never a frozen crate), so the player sees the count drop |
   | Express | the express parcel, if takeable |
   | Lock | the key |
   | Strap | the strap's free member |
@@ -341,10 +348,12 @@ Content loops after L100 from `LoopStart = 60`.
 All visuals are grayscale-safe and built from cached static meshes. Cargo parts (ice, express labels, straps, gates) draw with the parcel skin, a 16×1 texture whose extra columns hold the ice, snow, express, strap and frost-tint colors, so they batch with the parcels. None of them casts a shadow.
 
 - **ParcelView.Create** takes `in ParcelLook look`, with fields `Hidden, Locked, IsKey, Frost, Express`.
-- **Frost:** a raised collar of clear ice around the top of the box, readable from the 58° camera. It rings the lid in pale cyan while the lid keeps its color and label, and frost runs down the upper sides.
-  - Layers read apart in grayscale: each layer makes the collar markedly wider (a thin rim, a band, a thick slab) and taller, and adds one ice crystal on its corners (1, 2 or 3).
+- **Frost:** a raised collar of clear ice around the top of the box, readable from the 58° camera, with frost down the upper sides, two crystals on the back corners and icicles along the front.
+  - Inside the collar stands the thaw countdown, the size of an express label: a deep blue display on an ice rim with the moves left in white seven-segment figures, and the color's symbol on a paper chip in its corner. Dark and white read in grayscale, and the ice around it tells it from an express label.
+  - A crate still under its tarp gets neutral ice (clear frost, a "?" on the chip), so its color doesn't show through.
+  - Each color, count and variant is one cached mesh on the parcel skin (a deep-blue skin column), so it shares the parcel's draw call.
   - The parcel body uses the dim skin while frozen.
-  - `Crack(tweener, at, left)` swaps the collar mesh with a punch. At 0 the collar shrinks away.
+  - `Crack(tweener, at, left)` swaps to the new count with a light knock, as the move's express ticks land. At 0 the ice shrinks away with the shard burst.
 - **Express:** a dark countdown display with an amber rim replaces the shipping label, with the moves left in amber seven-segment figures over 40% of the lid tall. The color's symbol sits on a paper chip in its corner. Dark and amber stand out on every parcel color, so an express parcel reads at a glance at any count.
   - Each color, count and ink is one cached mesh, drawn on the parcel skin, so it shares the parcel's draw call.
   - At ≤2 the display turns red with white figures and the parcel pulses.
@@ -364,7 +373,7 @@ All visuals are grayscale-safe and built from cached static meshes. Cargo parts 
   - `TensionChanged(bool tense, float at)`
   - `Fail(float at, FailReason reason, IReadOnlyList<ParcelView> needed, TruckView waiting)`
 - **SFX:** IceCrack, IceShatter, ExpressTick (rising pitch), StrapSnap, GateTick and GateOpen.
-- **Haptics:** Tick on a crack, Warning when an express count hits 1.
+- **Haptics:** Tick when a crate thaws, Warning when an express count hits 1. (Each frost tick gets a soft IceCrack and a few chips; the thaw gets IceShatter.)
 
 ## 7. Music
 

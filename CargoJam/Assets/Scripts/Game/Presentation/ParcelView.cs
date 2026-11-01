@@ -19,24 +19,32 @@ namespace CargoJam.Game.Presentation
         /// <summary>A small hand-applied tilt per color, so labels don't read as a printed grid.</summary>
         static readonly float[] LabelYaw = { -7f, 5f, -4f, 6f, -5f, 3f };
 
-        /// <summary>The most ice a crate can carry.</summary>
-        public const int MaxIce = 3;
+        /// <summary>The longest thaw count a crate can show (one figure).</summary>
+        public const int MaxIce = LevelDefinition.MaxFrostMoves;
         /// <summary>
-        /// The ice shell, in world units on the parcel: how far the collar stands proud of the box and
-        /// how far it laps over the lid's edge (at three layers it reaches the label, never the symbol),
-        /// each plus a share per layer, and per layer how much taller the collar grows and how much
-        /// further down the sides the frost reaches.
+        /// The ice shell, in world units on the parcel: how far the collar stands proud of the box, how
+        /// far it laps over the lid's edge (short of the countdown display), how high it rises above the
+        /// lid, and how far down the sides the frost reaches.
         /// </summary>
-        const float IceProud = 0.035f;
-        const float IceProudPerLayer = 0.015f;
-        const float IceCollarLap = 0.045f;
-        const float IceCollarLapPerLayer = 0.042f;
-        const float IceFrameBase = 0.04f;
-        const float IceFramePerLayer = 0.04f;
-        const float IceSkirtBase = 0.07f;
-        const float IceSkirtPerLayer = 0.075f;
-        /// <summary>How long a crack punches the collar, and how long the last layer takes to shatter away.</summary>
-        const float CrackPunch = 0.2f;
+        const float IceProud = 0.05f;
+        const float IceCollarLap = 0.087f;
+        const float IceFrameHeight = 0.08f;
+        const float IceSkirt = 0.145f;
+        /// <summary>
+        /// The thaw countdown on the lid, in unit-box space: an ice-rimmed deep blue display the size of
+        /// an express label, standing on the ice a little above the lid; the count's digit height and
+        /// offset (as on an express label); and the paper chip in its top left corner that carries the
+        /// color's symbol (a "?" while the crate is still under its tarp).
+        /// </summary>
+        const float FrostDisplay = 0.7f;
+        const float FrostRim = 0.04f;
+        const float FrostDisplayBottom = 0.49f;
+        const float FrostDisplayTop = 0.585f;
+        const float FrostDigit = 0.44f;
+        const float FrostDigitZ = -0.075f;
+        /// <summary>How hard each tick punches the ice (a light knock), and how long the ice takes to shatter away.</summary>
+        const float CrackPunch = 0.18f;
+        static readonly Vector3 CrackPunchScale = new Vector3(0.06f, 0.22f, 0.06f);
         const float ShatterTime = 0.25f;
 
         /// <summary>Express tags at or below this count print in red ink and pulse.</summary>
@@ -62,8 +70,11 @@ namespace CargoJam.Game.Presentation
         const float PulseRate = 9f;
 
         static readonly Mesh[] boxMeshes = new Mesh[6];
-        /// <summary>Ice shells per layer count: tinted with the crate's color, and neutral for a crate still under its tarp.</summary>
-        static readonly Mesh[] iceMeshes = new Mesh[MaxIce + 1];
+        /// <summary>
+        /// Ice shells per thaw count: per color (its frost tint and symbol chip), and neutral for a crate
+        /// still under its tarp (clear frost and a "?" chip, so nothing gives its color away).
+        /// </summary>
+        static readonly Mesh[] iceMeshes = new Mesh[6 * (MaxIce + 1)];
         static readonly Mesh[] iceMeshesHidden = new Mesh[MaxIce + 1];
         static readonly Dictionary<int, Mesh> expressMeshes = new Dictionary<int, Mesh>();
         static Mesh plainMesh;
@@ -83,7 +94,7 @@ namespace CargoJam.Game.Presentation
         MeshFilter iceFilter;
         bool? free;
         bool hidden;
-        /// <summary>Ice layers by the rules (set when <see cref="Crack"/> is called) and as drawn (set at its time).</summary>
+        /// <summary>Moves until the ice thaws, by the rules (set when <see cref="Crack"/> is called) and as drawn (set at its time).</summary>
         int frost;
         int frostShown;
         bool express;
@@ -102,7 +113,7 @@ namespace CargoJam.Game.Presentation
         public bool IsLocked => padlock != null;
         public bool HasKeyBadge => keyBadge != null;
 
-        /// <summary>Ice layers left (0 when not frozen), as of the latest <see cref="Crack"/>.</summary>
+        /// <summary>Moves until the ice thaws (0 when not frozen), as of the latest <see cref="Crack"/>.</summary>
         public int FrostLeft => frost;
         public bool IsFrozen => frost > 0;
 
@@ -198,8 +209,8 @@ namespace CargoJam.Game.Presentation
         }
 
         /// <summary>
-        /// A layer of ice cracked: from <paramref name="at"/> the collar shows <paramref name="left"/>
-        /// bands, with a punch. At 0 it shatters away and the body gets its full color back (if free).
+        /// A move went by: from <paramref name="at"/> the ice's countdown shows <paramref name="left"/>,
+        /// with a light knock. At 0 it shatters away and the body gets its full color back (if free).
         /// </summary>
         public void Crack(Tweener tweener, float at, int left)
         {
@@ -211,15 +222,15 @@ namespace CargoJam.Game.Presentation
             {
                 var filter = iceFilter;
                 // Both variants now, so the swap never builds: a reveal may land in the same batch.
-                var tinted = IceMesh(left, false);
-                var neutral = IceMesh(left, true);
+                var tinted = IceMesh(Parcel.Color, left, false);
+                var neutral = IceMesh(Parcel.Color, left, true);
                 tweener.At(at, () =>
                 {
                     if (!this || !filter) return;
                     frostShown = left;
                     filter.sharedMesh = hidden ? neutral : tinted;
                 });
-                tweener.Punch(collar, Vector3.one, new Vector3(0.1f, 0.35f, 0.1f), at, CrackPunch);
+                tweener.Punch(collar, Vector3.one, CrackPunchScale, at, CrackPunch);
                 return;
             }
             iceCollar = null;
@@ -234,7 +245,7 @@ namespace CargoJam.Game.Presentation
                 if (!this) return;
                 frostShown = 0;
                 ApplyMaterial(forceBright: !InYard);
-                if (keyOnIce && keyBadge != null) keyBadge.localPosition -= Vector3.up * KeyIceLift;
+                if (keyOnIce && keyBadge != null) keyBadge.localPosition -= KeyOnIce;
                 keyOnIce = false;
             }, () => { if (collar) Destroy(collar.gameObject); });
         }
@@ -266,9 +277,9 @@ namespace CargoJam.Game.Presentation
             if (!hidden) return;
             var flip = body.transform;
             // Its ice takes on the crate's color with the tarp off. Build the tinted shells now (any
-            // layer count a crack could show by then), so the flip itself never builds a mesh.
+            // count a tick could show by then), so the flip itself never builds a mesh.
             if (iceFilter != null)
-                for (int n = 1; n <= frostShown; n++) IceMesh(n, false);
+                for (int n = 1; n <= frostShown; n++) IceMesh(Parcel.Color, n, false);
             tweener.Run(at, 0.3f, t =>
             {
                 if (!this) return;
@@ -278,7 +289,7 @@ namespace CargoJam.Game.Presentation
                     hidden = false;
                     if (tarpMark) Destroy(tarpMark.gameObject);
                     bodyFilter.sharedMesh = BodyMesh();
-                    if (iceFilter != null && frostShown > 0) iceFilter.sharedMesh = IceMesh(frostShown, false);
+                    if (iceFilter != null && frostShown > 0) iceFilter.sharedMesh = IceMesh(Parcel.Color, frostShown, false);
                     ApplyMaterial();
                     angle -= 180f;
                 }
@@ -338,18 +349,19 @@ namespace CargoJam.Game.Presentation
             keyBadge.localPosition = new Vector3(0.3f, 0.54f, 0.3f);
         }
 
-        void AddIce(int layers)
+        void AddIce(int moves)
         {
-            frost = frostShown = Mathf.Clamp(layers, 1, MaxIce);
+            frost = frostShown = Mathf.Clamp(moves, 1, MaxIce);
             // The parcel skin's ice and frost columns: batches with the parcels, and casts no shadow.
             // A crate still under its tarp gets the neutral shell: the tinted one would give its color away.
-            var r = MeshKit.Show("Ice", transform, IceMesh(frostShown, hidden), materials.ParcelSkin(Parcel.Color, true), castShadows: false);
+            var r = MeshKit.Show("Ice", transform, IceMesh(Parcel.Color, frostShown, hidden), materials.ParcelSkin(Parcel.Color, true), castShadows: false);
             iceCollar = r.transform;
             iceFilter = r.GetComponent<MeshFilter>();
-            // A key on a frozen crate sits on top of the ice rather than inside it.
+            // A key on a frozen crate sits on top of the ice rather than inside it, out in the corner
+            // so it stays clear of the countdown.
             if (keyBadge != null)
             {
-                keyBadge.localPosition += Vector3.up * KeyIceLift;
+                keyBadge.localPosition += KeyOnIce;
                 keyOnIce = true;
             }
             ApplyMaterial();
@@ -477,27 +489,28 @@ namespace CargoJam.Game.Presentation
                 Quaternion.identity, Vector3.one * (pair ? ExpressDigitPair : ExpressDigit)), figures);
         }
 
-        /// <summary>How high the ice frame on the lid stands at a number of layers (world units).</summary>
-        static float IceFrameHeight(int layers) => IceFrameBase + IceFramePerLayer * Mathf.Clamp(layers, 1, MaxIce);
-
-        /// <summary>How far a key badge is raised to sit on the ice, in the parcel's unit-box space.</summary>
-        static float KeyIceLift => IceFrameHeight(MaxIce) / Layout.ParcelSize.y;
+        /// <summary>How far a key badge moves to sit on the ice (up, and out to the corner), in the parcel's unit-box space.</summary>
+        static Vector3 KeyOnIce => new Vector3(0.06f, IceFrameHeight / Layout.ParcelSize.y, 0.06f);
 
         /// <summary>
-        /// The ice shell, readable from the game camera: a thick collar of clear ice hugging the top of
-        /// the box and rising above the lid, so from above it rings the lid in pale cyan while the lid
-        /// keeps its color and label; frost down the upper sides; and one ice crystal per layer on the
-        /// collar's corners. Each layer makes the collar markedly wider (thin rim, band, thick slab) and
-        /// taller, the frost reach further down, and adds a crystal, so 1, 2 and 3 read apart even in
-        /// grayscale. Laid out in world units, then mapped into the unit box. <paramref name="neutral"/>
-        /// draws the frost in clear ice instead of this color's frost tint, for a crate still under its
-        /// tarp (the tint would give its hidden color away).
+        /// The ice shell, readable from the game camera: a collar of clear ice hugging the top of the box
+        /// and rising above the lid, with a cap of snow; frost down the upper sides; two ice crystals on
+        /// the collar's back corners and icicles along the front. Inside the collar stands the thaw
+        /// countdown: a display in the crate's own color with an ice rim, the moves left in big
+        /// seven-segment figures (white on dark colors, ink on light ones), and the color's symbol on a
+        /// paper chip in its corner, so the crate reads by color, and by symbol in grayscale. The ice
+        /// around it tells it from an express label. One cached mesh per color and count, on the parcel skin, so
+        /// it shares the parcel's draw call. <paramref name="neutral"/> draws the frost in clear ice
+        /// instead of this color's frost tint and a "?" on the chip, for a crate still under its tarp
+        /// (the tint or symbol would give its hidden color away).
         /// </summary>
-        static Mesh IceMesh(int layers, bool neutral)
+        static Mesh IceMesh(int color, int left, bool neutral)
         {
-            int n = Mathf.Clamp(layers, 1, MaxIce);
+            int n = Mathf.Clamp(left, 1, MaxIce);
+            int c = Mathf.Clamp(color, 0, boxMeshes.Length - 1);
             var cache = neutral ? iceMeshesHidden : iceMeshes;
-            if (cache[n] != null) return cache[n];
+            int key = neutral ? n : c * (MaxIce + 1) + n;
+            if (cache[key] != null) return cache[key];
             var size = Layout.ParcelSize;
             var toUnit = Matrix4x4.Scale(new Vector3(1f / size.x, 1f / size.y, 1f / size.z));
             var frost = new Vector2(neutral ? MaterialBank.SkinIceU : MaterialBank.SkinFrostU, 0.5f);
@@ -516,10 +529,10 @@ namespace CargoJam.Game.Presentation
 
             float box = size.x * 0.5f;
             float lid = size.y * 0.5f;
-            float outer = box + IceProud + IceProudPerLayer * n;
-            float inner = box - IceCollarLap - IceCollarLapPerLayer * n;
-            float top = lid + IceFrameHeight(n);
-            float skirt = lid - (IceSkirtBase + IceSkirtPerLayer * n);
+            float outer = box + IceProud;
+            float inner = box - IceCollarLap;
+            float top = lid + IceFrameHeight;
+            float skirt = lid - IceSkirt;
 
             // Frost down the sides: the box seen through a skin of ice.
             Ring(box + 0.02f, box - 0.01f, skirt, lid - 0.02f, 0.2f, frost);
@@ -527,27 +540,64 @@ namespace CargoJam.Game.Presentation
             Ring(outer, inner, lid - 0.08f, top, 0.12f, clear);
             Ring(outer - 0.025f, inner + 0.025f, top - 0.01f, top + 0.016f, 0.2f, snow);
 
-            // One crystal per layer, on the collar's corners: back left, back right, then front left.
+            // Two crystals on the collar's back corners, clear of the display's chip.
             float corner = (outer + inner) * 0.5f;
-            for (int k = 0; k < n; k++)
-            {
-                float x = (k == 1 ? 1f : -1f) * corner;
-                float z = (k == 2 ? -1f : 1f) * corner;
-                AddCrystal(b, toUnit, new Vector3(x, top, z), Mathf.Sign(x), clear, snow);
-            }
+            AddCrystal(b, toUnit, new Vector3(-corner, top, corner), -1f, clear, snow);
+            AddCrystal(b, toUnit, new Vector3(corner, top, corner), 1f, clear, snow);
 
-            // Icicles hang from the frost's front edge, one more per layer.
-            for (int k = 0; k <= n; k++)
+            // Icicles hang from the frost's front edge.
+            for (int k = 0; k < 3; k++)
             {
-                float x = -box + (k + 0.5f) * (2f * box / (n + 1));
-                float length = 0.11f + 0.04f * ((k + n) % 2);
+                float x = -box + (k + 0.5f) * (2f * box / 3f);
+                float length = 0.11f + 0.04f * (k % 2);
                 var tip = toUnit * Matrix4x4.TRS(new Vector3(x, skirt - length * 0.3f, -box - 0.01f),
                     Quaternion.Euler(0f, 0f, 45f), new Vector3(0.075f, 0.075f, 0.045f) * (length / 0.11f));
                 MeshKit.AddBox(b, 0, tip, 0f, clear);
             }
 
-            cache[n] = b.ToMesh($"Ice Shell {n}{(neutral ? " neutral" : "")}");
-            return cache[n];
+            AppendFrostDisplay(b, c, n, neutral, clear);
+
+            cache[key] = b.ToMesh($"Ice Shell {n}{(neutral ? " neutral" : $" {c}")}");
+            return cache[key];
+        }
+
+        /// <summary>
+        /// The thaw countdown, in unit-box space: an ice block rising from the lid with a face in the
+        /// crate's own color (deep blue on a hidden crate), the count in figures that stand out on it,
+        /// and the chip. It sits square on the lid (the shipping label's
+        /// per-color tilt would hint at a hidden crate's color).
+        /// </summary>
+        static void AppendFrostDisplay(MeshBuilder b, int color, int value, bool neutral, Vector2 clear)
+        {
+            float rimmed = FrostDisplay + FrostRim * 2f;
+            float height = FrostDisplayTop - FrostDisplayBottom;
+            MeshKit.AddBox(b, 0, Matrix4x4.TRS(new Vector3(0f, FrostDisplayBottom + height * 0.5f, 0f), Quaternion.identity,
+                new Vector3(rimmed, height, rimmed)), 0f, clear);
+            const float faceThickness = 0.012f;
+            MeshKit.AddBox(b, 0, Matrix4x4.TRS(new Vector3(0f, FrostDisplayTop + faceThickness * 0.5f - 0.003f, 0f), Quaternion.identity,
+                new Vector3(FrostDisplay, faceThickness, FrostDisplay)), 0f,
+                new Vector2(neutral ? MaterialBank.SkinIceDeepU : MaterialBank.SkinBodyU, 0.5f));
+            float face = FrostDisplayTop + faceThickness - 0.003f + 0.004f;
+
+            var chip = Matrix4x4.Translate(new Vector3(ChipAt.x, face, ChipAt.y));
+            MeshKit.AddBox(b, 0, chip * Matrix4x4.Scale(new Vector3(ChipSize, 0.01f, ChipSize)), 0f, new Vector2(MaterialBank.SkinLabelU, 0.5f));
+            var stamp = chip * Matrix4x4.Translate(new Vector3(0f, 0.005f, 0f)) * Matrix4x4.Scale(Vector3.one * ChipStamp);
+            if (neutral) AppendQuestionMark(b, stamp, new Vector2(MaterialBank.SkinExpressInkU, 0.5f));
+            else Symbols.Append(b, 0, color, stamp, new Vector2(MaterialBank.SkinSymbolU, 0.5f));
+
+            Digits.Append(b, 0, value, Matrix4x4.TRS(new Vector3(0.045f, face, FrostDigitZ), Quaternion.identity, Vector3.one * FrostDigit),
+                new Vector2(neutral ? MaterialBank.SkinSnowU : MaterialBank.SkinBodyInkU, 0.5f));
+        }
+
+        /// <summary>The tarp's blocky "?" (as in <see cref="MysteryMesh"/>), for the chip on a hidden crate's ice.</summary>
+        static void AppendQuestionMark(MeshBuilder b, Matrix4x4 at, Vector2 uv)
+        {
+            void Bar(Vector3 p, Vector3 s) => MeshKit.AddBox(b, 0, at * Matrix4x4.TRS(p, Quaternion.identity, s), 0f, uv);
+            Bar(new Vector3(0f, 0f, 0.22f), new Vector3(0.36f, 0.04f, 0.1f));
+            Bar(new Vector3(0.15f, 0f, 0.12f), new Vector3(0.1f, 0.04f, 0.26f));
+            Bar(new Vector3(0.05f, 0f, 0.02f), new Vector3(0.24f, 0.04f, 0.1f));
+            Bar(new Vector3(-0.02f, 0f, -0.08f), new Vector3(0.1f, 0.04f, 0.14f));
+            Bar(new Vector3(-0.02f, 0f, -0.26f), new Vector3(0.1f, 0.04f, 0.1f));
         }
 
         /// <summary>A pointed ice crystal (a tall shard and a short one) standing on <paramref name="foot"/>.</summary>

@@ -44,7 +44,10 @@ namespace CargoJam.Core
         public int keyY;
     }
 
-    /// <summary>A frozen crate: the parcel at (x, y) is held by <c>layers</c> (1..3) of ice.</summary>
+    /// <summary>
+    /// A frozen crate: the parcel at (x, y) is held by ice that thaws after <c>layers</c> (1..9) moves.
+    /// The field keeps its old name so level files stay readable; it is a move count now.
+    /// </summary>
     [Serializable]
     public class FrostData
     {

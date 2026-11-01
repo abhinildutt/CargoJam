@@ -16,11 +16,19 @@ namespace CargoJam.Core.Tests
 
         // ---- Frost ------------------------------------------------------------------------------
 
-        /// <summary>Three reds in row 0; the middle one is frozen.</summary>
-        static GameSession FrozenMiddle(int layers)
+        /// <summary>Three reds in row 0; the middle one is frozen for <paramref name="moves"/> moves.</summary>
+        static GameSession FrozenMiddle(int moves)
         {
             var data = TestLevels.Data("R", 5, 3, "RRR");
-            data.frost = new[] { TestLevels.Frost(1, 0, layers) };
+            data.frost = new[] { TestLevels.Frost(1, 0, moves) };
+            return TestLevels.Session(data);
+        }
+
+        /// <summary>Reds over blues, trucks of 3; the front-row red in the middle is frozen.</summary>
+        static GameSession FrozenFront(string trucks, int moves)
+        {
+            var data = TestLevels.Data(trucks, 5, 3, "RRR", "BBB");
+            data.frost = new[] { TestLevels.Frost(1, 0, moves) };
             return TestLevels.Session(data);
         }
 
@@ -41,52 +49,76 @@ namespace CargoJam.Core.Tests
             string before = s.StateKey();
             var events = s.Tap(crate.Cell);
             Assert.That(((ParcelBlocked)events.Single()).Parcel, Is.SameAs(crate));
-            Assert.That(s.StateKey(), Is.EqualTo(before));
+            Assert.That(s.StateKey(), Is.EqualTo(before), "a blocked tap doesn't count the thaw down");
         }
 
         [Test]
-        public void LoadingANeighbourCracksTheIce()
+        public void EveryLoadCountsTheThawDownAndAtZeroItIsFreeNextMove()
         {
-            var s = FrozenMiddle(1);
+            var s = FrozenFront("RB", 2);
             var crate = At(s, 1, 0);
-            var by = At(s, 0, 0);
 
-            var events = s.Tap(by.Cell);
-            Assert.That(Types(events), Is.EqualTo(Seq(typeof(ParcelLoaded), typeof(FrostCracked))));
-            var crack = (FrostCracked)events[1];
-            Assert.That(crack.Parcel, Is.SameAs(crate));
-            Assert.That(crack.LayersLeft, Is.Zero);
-            Assert.That(crack.By, Is.SameAs(by));
+            var first = s.Tap(new Cell(0, 0));
+            Assert.That(Types(first), Is.EqualTo(Seq(typeof(ParcelLoaded), typeof(FrostCracked))));
+            var tick = (FrostCracked)first[1];
+            Assert.That(tick.Parcel, Is.SameAs(crate));
+            Assert.That(tick.Left, Is.EqualTo(1));
+            Assert.That(tick.Lifted, Is.False);
+            Assert.That(s.IsRestrained(crate), Is.True, "in the front row with a path, but still frozen");
+            Assert.That(Types(s.Tap(crate.Cell)), Is.EqualTo(Seq(typeof(ParcelBlocked))));
+
+            var second = s.Tap(new Cell(2, 0));
+            Assert.That(Types(second), Is.EqualTo(Seq(typeof(ParcelLoaded), typeof(FrostCracked))));
+            Assert.That(((FrostCracked)second[1]).Left, Is.Zero);
+            Assert.That(s.FrostLeft(crate), Is.Zero);
             Assert.That(s.IsRestrained(crate), Is.False);
-            Assert.That(s.Tap(crate.Cell).OfType<ParcelLoaded>(), Is.Not.Empty);
+            var moves = new List<Parcel>();
+            s.GetMoves(moves);
+            Assert.That(moves, Has.Member(crate), "thawed: free for the next move");
+
+            Assert.That(Types(s.Tap(crate.Cell)), Is.EqualTo(Seq(typeof(ParcelLoaded), typeof(TruckDeparted), typeof(TruckArrived))));
         }
 
         [Test]
-        public void HoldingANeighbourCracksTheIce()
+        public void HoldsAndCraneLiftsCountTheThawDownToo()
         {
-            var data = TestLevels.Data("BR", 5, 3, "RRR", "BBB");
-            data.frost = new[] { TestLevels.Frost(1, 0, 1) };
-            var s = TestLevels.Session(data);
-            var events = s.Tap(new Cell(0, 0));
-            Assert.That(Types(events), Is.EqualTo(Seq(typeof(ParcelHeld), typeof(FrostCracked))));
-            Assert.That(s.FrostLeft(At(s, 1, 0)), Is.Zero);
-        }
-
-        [Test]
-        public void TwoLayersNeedTwoNeighboursToLeave()
-        {
-            var s = FrozenMiddle(2);
+            var s = FrozenFront("BR", 3);
             var crate = At(s, 1, 0);
 
-            Assert.That(((FrostCracked)s.Tap(new Cell(0, 0))[1]).LayersLeft, Is.EqualTo(1));
-            Assert.That(s.Tap(crate.Cell).Single(), Is.InstanceOf<ParcelBlocked>());
+            Assert.That(Types(s.Tap(new Cell(0, 0))), Is.EqualTo(Seq(typeof(ParcelHeld), typeof(FrostCracked))));
+            Assert.That(s.FrostLeft(crate), Is.EqualTo(2));
+            Assert.That(Types(s.CraneLift(new Cell(1, 1))), Is.EqualTo(Seq(typeof(ParcelLoaded), typeof(FrostCracked))));
+            Assert.That(s.FrostLeft(crate), Is.EqualTo(1));
+        }
 
-            var events = s.Tap(new Cell(2, 0));
-            Assert.That(Types(events), Is.EqualTo(Seq(typeof(ParcelLoaded), typeof(FrostCracked))));
-            Assert.That(((FrostCracked)events[1]).LayersLeft, Is.Zero);
+        [Test]
+        public void RejectedTapsUndoExtraSlotAndDockChainsDontCountTheThawDown()
+        {
+            // Red then blue trucks of 3, one slot; the blue behind the first red is frozen for 9 moves.
+            var data = TestLevels.Data("RB", 1, 3, "BRRR", "BB..");
+            data.frost = new[] { TestLevels.Frost(1, 1, 9) };
+            var s = TestLevels.Session(data);
+            var crate = At(s, 1, 1);
 
-            Assert.That(Types(s.Tap(crate.Cell)),
-                Is.EqualTo(Seq(typeof(ParcelLoaded), typeof(TruckDeparted), typeof(LevelWon))));
+            s.Tap(new Cell(0, 0));
+            Assert.That(s.FrostLeft(crate), Is.EqualTo(8));
+            string before = s.StateKey();
+            Assert.That(Types(s.Tap(new Cell(0, 1))), Is.EqualTo(Seq(typeof(DockFullRejected))));
+            Assert.That(s.StateKey(), Is.EqualTo(before));
+            Assert.That(Types(s.Undo()), Is.EqualTo(Seq(typeof(ParcelReturned))));
+            Assert.That(s.FrostLeft(crate), Is.EqualTo(8), "Undo neither ticks nor refunds");
+            Assert.That(Types(s.AddHoldingSlot()), Is.EqualTo(Seq(typeof(DockExpanded))));
+            Assert.That(s.FrostLeft(crate), Is.EqualTo(8));
+
+            s.Tap(new Cell(0, 0));
+            s.Tap(new Cell(1, 0));
+            s.Tap(new Cell(2, 0));
+            Assert.That(s.FrostLeft(crate), Is.EqualTo(5));
+            // The red truck fills and leaves; the blue one chain-loads the held blue. One move, one tick.
+            var events = s.Tap(new Cell(3, 0));
+            Assert.That(Types(events), Is.EqualTo(Seq(typeof(ParcelLoaded), typeof(TruckDeparted), typeof(TruckArrived),
+                typeof(ParcelLoadedFromDock), typeof(FrostCracked))));
+            Assert.That(((FrostCracked)events[4]).Left, Is.EqualTo(4));
         }
 
         [Test]
@@ -99,17 +131,15 @@ namespace CargoJam.Core.Tests
             var events = s.CraneLift(crate.Cell);
             Assert.That(Types(events), Is.EqualTo(Seq(typeof(FrostCracked), typeof(ParcelLoaded))));
             var thaw = (FrostCracked)events[0];
-            Assert.That(thaw.LayersLeft, Is.Zero);
-            Assert.That(thaw.By, Is.Null);
+            Assert.That(thaw.Left, Is.Zero);
+            Assert.That(thaw.Lifted, Is.True);
             Assert.That(((ParcelLoaded)events[1]).Lifted, Is.True);
         }
 
         [Test]
         public void UndoNeverRefreezes()
         {
-            var data = TestLevels.Data("BR", 5, 3, "RRR", "BBB");
-            data.frost = new[] { TestLevels.Frost(1, 0, 2) };
-            var s = TestLevels.Session(data);
+            var s = FrozenFront("BR", 3);
             var crate = At(s, 1, 0);
 
             Assert.That(Types(s.CraneLift(crate.Cell)), Is.EqualTo(Seq(typeof(FrostCracked), typeof(ParcelHeld))));
@@ -117,13 +147,14 @@ namespace CargoJam.Core.Tests
             Assert.That(s.Board.Get(crate.Cell), Is.SameAs(crate));
             Assert.That(s.FrostLeft(crate), Is.Zero);
             Assert.That(s.IsRestrained(crate), Is.False);
+            Assert.That(Types(s.Tap(new Cell(0, 0))), Is.EqualTo(Seq(typeof(ParcelHeld))), "nothing left to thaw");
         }
 
         [Test]
         public void OnlyFrozenFreeParcelsIsStuck()
         {
-            // Holding the blue fills the only slot and cracks one of two layers; the frozen red is all
-            // that is free, and more room wouldn't thaw it.
+            // Holding the blue fills the only slot and counts the red crate down to 1; it is all that is
+            // free (it blocks the reds behind the bollards' row), and more room wouldn't thaw it.
             var data = TestLevels.Data("RB", 1, 2,
                 "#B#",
                 "RRB");
@@ -168,6 +199,37 @@ namespace CargoJam.Core.Tests
             Assert.That(s.FrostLeft(crate), Is.EqualTo(1));
             Assert.That(copy.StateKey(), Does.EndWith("|F2"));
             Assert.That(s.StateKey(), Does.EndWith("|F1"));
+            Assert.That(FrozenMiddle(9).StateKey(), Does.EndWith("|F9"));
+        }
+
+        [Test]
+        public void SolverWaitsOutTheThaw()
+        {
+            // The blue crate in front can only go once two other moves have gone by.
+            var data = TestLevels.Data("RB", 5, 3,
+                "BRB",
+                "RRB");
+            data.frost = new[] { TestLevels.Frost(0, 0, 2) };
+            var level = LevelDefinition.Parse(data);
+            var result = Solver.Solve(level);
+            Assert.That(result.Solvable, Is.True);
+            var s = new GameSession(level);
+            foreach (var move in result.Moves)
+                Assert.That(s.Tap(move).OfType<ParcelBlocked>(), Is.Empty, $"the solver tapped a frozen crate at {move}");
+            Assert.That(s.Status, Is.EqualTo(GameStatus.Won));
+
+            // Three reds in a row with the middle one frozen for 3: only two other moves ever happen.
+            var stuck = Solver.Solve(LevelDefinition.Parse(FrozenMiddleData(3)));
+            Assert.That(stuck.Solvable, Is.False);
+            Assert.That(stuck.HitNodeLimit, Is.False);
+            Assert.That(Solver.Solve(LevelDefinition.Parse(FrozenMiddleData(2))).Solvable, Is.True);
+        }
+
+        static LevelData FrozenMiddleData(int moves)
+        {
+            var data = TestLevels.Data("R", 5, 3, "RRR");
+            data.frost = new[] { TestLevels.Frost(1, 0, moves) };
+            return data;
         }
 
         // ---- Express ----------------------------------------------------------------------------
@@ -533,24 +595,21 @@ namespace CargoJam.Core.Tests
         }
 
         [Test]
-        public void EachPairMemberCracksItsOwnNeighbours()
+        public void AStrappedPairCountsTheThawDownOnce()
         {
-            var data = TestLevels.Data("RB", 5, 2,
-                "RR",
-                "BB");
+            var data = TestLevels.Data("RBB", 5, 2,
+                "RRB",
+                "BBB");
             data.straps = new[] { TestLevels.Strap(0, 0, 1, 0) };
-            data.frost = new[] { TestLevels.Frost(0, 1, 1), TestLevels.Frost(1, 1, 1) };
+            data.frost = new[] { TestLevels.Frost(0, 1, 3), TestLevels.Frost(1, 1, 3) };
             var s = TestLevels.Session(data);
-            var lead = At(s, 0, 0);
-            var trail = At(s, 1, 0);
 
-            var events = s.Tap(lead.Cell);
-            Assert.That(Types(events), Is.EqualTo(Seq(typeof(StrapMoved), typeof(ParcelLoaded), typeof(FrostCracked),
-                typeof(ParcelLoaded), typeof(FrostCracked), typeof(TruckDeparted), typeof(TruckArrived))));
-            Assert.That(((FrostCracked)events[2]).By, Is.SameAs(lead));
-            Assert.That(((FrostCracked)events[2]).Parcel.Cell, Is.EqualTo(new Cell(0, 1)));
-            Assert.That(((FrostCracked)events[4]).By, Is.SameAs(trail));
-            Assert.That(((FrostCracked)events[4]).Parcel.Cell, Is.EqualTo(new Cell(1, 1)));
+            var events = s.Tap(new Cell(0, 0));
+            Assert.That(Types(events), Is.EqualTo(Seq(typeof(StrapMoved), typeof(ParcelLoaded), typeof(ParcelLoaded),
+                typeof(TruckDeparted), typeof(TruckArrived), typeof(FrostCracked), typeof(FrostCracked))));
+            Assert.That(((FrostCracked)events[5]).Parcel.Cell, Is.EqualTo(new Cell(0, 1)));
+            Assert.That(((FrostCracked)events[6]).Parcel.Cell, Is.EqualTo(new Cell(1, 1)));
+            Assert.That(events.OfType<FrostCracked>().Select(e => e.Left), Is.EqualTo(new[] { 2, 2 }));
         }
 
         [Test]
@@ -652,18 +711,19 @@ namespace CargoJam.Core.Tests
         [Test]
         public void EventsComeInTheDesignOrder()
         {
-            // One load cracks a neighbour's ice, opens a padlock, opens a gate, then ticks an express.
+            // One load opens a padlock and a gate, ticks an express, counts a frozen mystery down, and
+            // only then reveals it (it now has a path).
             var data = TestLevels.Data("RB", 5, 3,
                 "RRR+",
-                "BBB#");
+                "bBB#");
             data.locks = new[] { TestLevels.Lock(2, 0, 0, 0) };
-            data.frost = new[] { TestLevels.Frost(0, 1, 1) };
+            data.frost = new[] { TestLevels.Frost(0, 1, 2) };
             data.express = new[] { TestLevels.Express(2, 1, 9) };
             data.gates = new[] { TestLevels.Gate(3, 0, 'R', 1) };
             var s = TestLevels.Session(data);
 
-            Assert.That(Types(s.Tap(new Cell(0, 0))), Is.EqualTo(Seq(typeof(ParcelLoaded), typeof(FrostCracked),
-                typeof(ParcelUnlocked), typeof(GateProgress), typeof(GateOpened), typeof(ExpressTicked))));
+            Assert.That(Types(s.Tap(new Cell(0, 0))), Is.EqualTo(Seq(typeof(ParcelLoaded), typeof(ParcelUnlocked),
+                typeof(GateProgress), typeof(GateOpened), typeof(ExpressTicked), typeof(FrostCracked), typeof(ParcelRevealed))));
         }
 
         [Test]

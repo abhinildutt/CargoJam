@@ -20,9 +20,6 @@ namespace CargoJam.Core
         /// <summary>The most holding slots Extra Slot can grow the dock to.</summary>
         public const int MaxHoldingSlots = 7;
 
-        static readonly int[] DX = { 0, -1, 1, 0 };
-        static readonly int[] DY = { -1, 0, 0, 1 };
-
         readonly List<Truck> trucks;
         readonly List<Parcel> freeScratch = new List<Parcel>();
         // Express parcels that ran out during the move being finished; CheckForEnd fails on them.
@@ -36,8 +33,9 @@ namespace CargoJam.Core
         readonly int[] strapOf;     // per parcel id: its index in Level.Straps, or -1
         readonly int[] strapIds;    // per strap s: the member ids at 2s and 2s + 1
 
-        // Per parcel id: still under a tarp; the key parcel's id while padlocked, else -1; layers of ice
-        // left; moves left while express (0 = not express); held as part of a strapped pair (for Undo).
+        // Per parcel id: still under a tarp; the key parcel's id while padlocked, else -1; moves left until
+        // the ice thaws (0 = not frozen); moves left while express (0 = not express); held as part of a
+        // strapped pair (for Undo).
         readonly bool[] hidden;
         readonly int[] lockKey;
         readonly int[] frost;
@@ -206,7 +204,11 @@ namespace CargoJam.Core
         /// <summary>True while something holds the parcel in place even when it has a path: a padlock or ice.</summary>
         public bool IsRestrained(Parcel parcel) => lockKey[parcel.Id] >= 0 || frost[parcel.Id] > 0;
 
-        /// <summary>Layers of ice left on the parcel, or 0 when it isn't frozen.</summary>
+        /// <summary>
+        /// Moves left until a frozen crate thaws, or 0 when it isn't (or is no longer) frozen. Every move
+        /// that takes something out of the yard counts it down, the same moves that tick express parcels;
+        /// at 0 it is an ordinary parcel from the next move on. Undo never refreezes it or refunds a move.
+        /// </summary>
         public int FrostLeft(Parcel parcel) => frost[parcel.Id];
 
         /// <summary>
@@ -364,7 +366,7 @@ namespace CargoJam.Core
         /// (<see cref="ParcelReturned"/>). Cells only ever empty, so the cell is always free to take it.
         /// If that parcel was held together with its strap partner, which was held just before it and is
         /// still in the dock, both return and the strap is restored (<see cref="StrapRestored"/>).
-        /// Nothing else is undone: ice stays cracked, express counts stay spent, gates stay open.
+        /// Nothing else is undone: thaw and express counts stay spent, gates stay open.
         /// </summary>
         public IReadOnlyList<GameEvent> Undo()
         {
@@ -403,7 +405,8 @@ namespace CargoJam.Core
 
         /// <summary>
         /// Adds a holding slot (<see cref="DockExpanded"/>). Also the fail "Continue": called after an
-        /// <see cref="Core.FailReason.OutOfSpace"/> fail, it resumes play. Never ticks express parcels.
+        /// <see cref="Core.FailReason.OutOfSpace"/> fail, it resumes play. Never ticks express parcels or
+        /// frozen crates.
         /// </summary>
         public IReadOnlyList<GameEvent> AddHoldingSlot()
         {
@@ -433,7 +436,7 @@ namespace CargoJam.Core
         /// Like <see cref="Tap"/> but ignores blocking and restraints; resulting events have Lifted = true
         /// and a one-cell path. First a hidden parcel is revealed, a locked one unlocked (its lock is used
         /// up), a frozen one thawed outright, and a strap cut (only the lifted parcel leaves). It counts
-        /// as a move, so express parcels tick.
+        /// as a move, so express parcels and other frozen crates tick.
         /// </summary>
         public IReadOnlyList<GameEvent> CraneLift(Cell cell)
         {
@@ -455,7 +458,7 @@ namespace CargoJam.Core
             if (frost[parcel.Id] > 0)
             {
                 frost[parcel.Id] = 0;
-                events.Add(new FrostCracked(parcel, 0, null));
+                events.Add(new FrostCracked(parcel, 0, true));
             }
             var partner = StrapPartner(parcel);
             if (partner != null)
@@ -502,6 +505,7 @@ namespace CargoJam.Core
             }
             if (frozenIds.Length > 0)
             {
+                // One digit per crate: thaw counts run 0..9.
                 sb.Append("|F");
                 foreach (int id in frozenIds) sb.Append((char)('0' + frost[id]));
             }
@@ -563,7 +567,6 @@ namespace CargoJam.Core
             if (truck != null && truck.Accepts(parcel))
             {
                 events.Add(new ParcelLoaded(parcel, path, truck, truck.Load(), lifted));
-                CrackAround(parcel, events);
                 OnLoaded(parcel, events);
                 if (truck.IsFull) DepartAndRefill(events);
             }
@@ -572,7 +575,6 @@ namespace CargoJam.Core
                 events.Add(new ParcelHeld(parcel, path, Dock.Add(parcel), lifted));
                 holdOrder.Add(parcel);
                 heldAsPair[parcel.Id] = pair;
-                CrackAround(parcel, events);
             }
         }
 
@@ -586,28 +588,20 @@ namespace CargoJam.Core
         }
 
         /// <summary>
-        /// Ends a move: ticks express parcels (only for moves that took something out of the yard), reveals
-        /// what the move uncovered, then checks for a win or a fail.
+        /// Ends a move: ticks express parcels, then frozen crates (only for moves that took something out
+        /// of the yard), reveals what the move uncovered, then checks for a win or a fail. A crate that
+        /// thaws here is free for the next move, so the end check already counts it as a legal move.
         /// </summary>
         void FinishMove(List<GameEvent> events, bool tick)
         {
             missed.Clear();
-            if (tick) TickExpress(events);
+            if (tick)
+            {
+                TickExpress(events);
+                TickFrost(events);
+            }
             RevealFree(events);
             CheckForEnd(events);
-        }
-
-        /// <summary>A parcel that just left the yard cracks one layer of ice on each frozen neighbour.</summary>
-        void CrackAround(Parcel by, List<GameEvent> events)
-        {
-            if (frozenIds.Length == 0) return;
-            for (int d = 0; d < 4; d++)
-            {
-                var n = Board.Get(new Cell(by.Cell.X + DX[d], by.Cell.Y + DY[d]));
-                if (n == null || frost[n.Id] == 0) continue;
-                frost[n.Id]--;
-                events.Add(new FrostCracked(n, frost[n.Id], by));
-            }
         }
 
         /// <summary>A parcel went into a truck (from the yard or the dock): it may be a key, and it counts for gates.</summary>
@@ -645,6 +639,17 @@ namespace CargoJam.Core
                 expressLeft[id]--;
                 events.Add(new ExpressTicked(p, expressLeft[id]));
                 if (expressLeft[id] == 0) missed.Add(p);
+            }
+        }
+
+        /// <summary>One move went by: every frozen crate (all still in the yard) is a move closer to thawing; at 0 it thaws.</summary>
+        void TickFrost(List<GameEvent> events)
+        {
+            foreach (int id in frozenIds)
+            {
+                if (frost[id] == 0) continue;
+                frost[id]--;
+                events.Add(new FrostCracked(parcelsById[id], frost[id], false));
             }
         }
 

@@ -7,8 +7,8 @@ namespace CargoJam.LevelGen
     /// <summary>
     /// Makes one candidate board for a plan. It lays out gate walls, bollards and holes, picks the
     /// blockers (padlocks, mystery parcels, frozen crates), then picks a legal "dig order": each parcel is
-    /// free once the ones before it are gone, padlocked parcels come after their key, frozen crates after
-    /// <c>layers</c> of their neighbours, and each gate is a virtual cell "dug" when it opens. Then it
+    /// free once the ones before it are gone, padlocked parcels come after their key, frozen crates once
+    /// their thaw count of parcels has gone (one parcel a move), and each gate is a virtual cell "dug" when it opens. Then it
     /// colors the parcels in truck-sized groups along that order and places the cargo that depends on
     /// color or order (gate colors, express parcels, straps). With no noise the truck order follows the
     /// dig order exactly and the level needs no dock at all; noise shuffles parcels away from their truck,
@@ -362,9 +362,12 @@ namespace CargoJam.LevelGen
         }
 
         /// <summary>
-        /// Frozen crates: 1..FrostMaxLayers layers, never more than the parcels next to them. They stay off
-        /// padlocks, keys and mystery parcels unless a twist asks for one, and out of the front row before
-        /// the row-0 twist (L35); the front row is never all frost. Returns layers per cell, or null.
+        /// Frozen crates, each thawing after FrostMinMoves..FrostMaxMoves moves. The ice only matters on a
+        /// crate that would otherwise be free soon, so three in four go in the front two rows (front row
+        /// or right behind it), the rest anywhere. They stay off padlocks, keys and mystery parcels unless
+        /// a twist asks for one; the row-0 twist (L35) puts one in the front row for sure. At most a third
+        /// of the front row is frozen, so a level always opens with moves to make. Returns the thaw count
+        /// per cell, or null.
         /// </summary>
         static int[] PickFrost(LevelPlan plan, Random rng, byte[] kind, bool[] mystery, int[] keyOf, bool[] isKey)
         {
@@ -372,22 +375,19 @@ namespace CargoJam.LevelGen
             var frost = new int[n];
             if (plan.Frost == 0) return frost;
 
-            var neighbours = new int[n];
-            for (int i = 0; i < n; i++) neighbours[i] = ParcelNeighbours(w, h, kind, i);
-
             bool Plain(int i) => kind[i] == Parcel && !mystery[i] && keyOf[i] < 0 && !isKey[i];
             bool TryFreeze(int i)
             {
-                if (frost[i] > 0 || neighbours[i] == 0) return false;
-                frost[i] = Math.Min(neighbours[i], 1 + rng.Next(plan.FrostMaxLayers));
+                if (frost[i] > 0) return false;
+                frost[i] = plan.FrostMinMoves + rng.Next(plan.FrostMaxMoves - plan.FrostMinMoves + 1);
                 return true;
             }
 
             var twistCells = new List<int>();
             for (int i = 0; i < n; i++)
             {
-                if (plan.FrostOnMystery && kind[i] == Parcel && mystery[i] && neighbours[i] > 0) twistCells.Add(i);
-                if (plan.FrostOnKey && isKey[i] && neighbours[i] > 0) twistCells.Add(i);
+                if (plan.FrostOnMystery && kind[i] == Parcel && mystery[i]) twistCells.Add(i);
+                if (plan.FrostOnKey && isKey[i]) twistCells.Add(i);
             }
             int placed = 0;
             if (plan.FrostOnMystery || plan.FrostOnKey)
@@ -407,11 +407,10 @@ namespace CargoJam.LevelGen
                 placed++;
             }
 
-            bool row0 = plan.FrostInRow0 || plan.Id > 35;
+            int front = Math.Min(2, h) * w;
             for (int attempt = 0; attempt < 500 && placed < plan.Frost; attempt++)
             {
-                int i = rng.Next(n);
-                if (!row0 && i < w) continue;
+                int i = rng.NextDouble() < 0.75 ? rng.Next(front) : rng.Next(n);
                 if (!Plain(i)) continue;
                 if (TryFreeze(i)) placed++;
             }
@@ -424,26 +423,16 @@ namespace CargoJam.LevelGen
                 frontParcels++;
                 if (frost[x] > 0) frontFrozen++;
             }
-            return frontFrozen < frontParcels ? frost : null;
-        }
-
-        static int ParcelNeighbours(int w, int h, byte[] kind, int i)
-        {
-            int count = 0;
-            for (int d = 0; d < 4; d++)
-            {
-                int nx = i % w + DX[d], ny = i / w + DY[d];
-                if (nx >= 0 && nx < w && ny >= 0 && ny < h && kind[ny * w + nx] == Parcel) count++;
-            }
-            return count;
+            return frontFrozen * 3 <= frontParcels ? frost : null;
         }
 
         // ---- dig order --------------------------------------------------------------------------
 
         /// <summary>
         /// A random legal removal order, or null when nothing can move. A frozen crate becomes diggable
-        /// once <c>layers</c> of its starting neighbours are gone; a padlocked parcel after its key; gate g
-        /// is a virtual cell "dug" (opened) once <paramref name="gateMin"/>[g] parcels are gone.
+        /// once its thaw count of parcels is gone (each a move; a strapped pair placed later only makes
+        /// moves fewer, and the solver checks the result); a padlocked parcel after its key; gate g is a
+        /// virtual cell "dug" (opened) once <paramref name="gateMin"/>[g] parcels are gone.
         /// </summary>
         static List<int> DigOrder(int w, int h, byte[] kind, int[] keyOf, int[] frost, List<int> gateCells, int[] gateMin, Random rng)
         {
@@ -461,7 +450,7 @@ namespace CargoJam.LevelGen
                 {
                     int c = free[i];
                     int key = keyOf[c];
-                    if ((key >= 0 && !gone[key]) || (frost[c] > 0 && GoneNeighbours(w, h, kind, gone, c) < frost[c]))
+                    if ((key >= 0 && !gone[key]) || frost[c] > dug)
                         free.RemoveAt(i);
                 }
                 for (int g = 0; g < gateCells.Count; g++)
@@ -474,19 +463,6 @@ namespace CargoJam.LevelGen
                 remaining--;
             }
             return order;
-        }
-
-        static int GoneNeighbours(int w, int h, byte[] kind, bool[] gone, int i)
-        {
-            int count = 0;
-            for (int d = 0; d < 4; d++)
-            {
-                int nx = i % w + DX[d], ny = i / w + DY[d];
-                if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-                int ni = ny * w + nx;
-                if (kind[ni] == Parcel && gone[ni]) count++;
-            }
-            return count;
         }
 
         /// <summary>

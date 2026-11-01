@@ -225,8 +225,8 @@ namespace CargoJam.Core.Tests
                 typeof(ParcelRevealed), typeof(ParcelUnlocked), typeof(FrostCracked), typeof(ParcelHeld),
             }));
             var thaw = (FrostCracked)events[2];
-            Assert.That(thaw.LayersLeft, Is.Zero);
-            Assert.That(thaw.By, Is.Null, "a Crane thaw has no parcel to blame");
+            Assert.That(thaw.Left, Is.Zero);
+            Assert.That(thaw.Lifted, Is.True, "the Crane thawed it outright");
         }
 
         [Test]

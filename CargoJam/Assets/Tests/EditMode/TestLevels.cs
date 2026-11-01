@@ -44,10 +44,10 @@ namespace CargoJam.Core.Tests
             return new LockData { x = x, y = y, keyX = keyX, keyY = keyY };
         }
 
-        /// <summary>The parcel at (x, y) is frozen under <paramref name="layers"/> layers of ice.</summary>
-        public static FrostData Frost(int x, int y, int layers)
+        /// <summary>The parcel at (x, y) is frozen until <paramref name="moves"/> moves have gone by.</summary>
+        public static FrostData Frost(int x, int y, int moves)
         {
-            return new FrostData { x = x, y = y, layers = layers };
+            return new FrostData { x = x, y = y, layers = moves };
         }
 
         /// <summary>The parcel at (x, y) is express with <paramref name="taps"/> moves to leave the yard.</summary>

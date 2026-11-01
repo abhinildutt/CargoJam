@@ -20,8 +20,8 @@ namespace CargoJam.Core
         /// <summary>The most customs gates a level may have.</summary>
         public const int MaxGates = 3;
 
-        /// <summary>The most layers of ice a frozen crate may start with.</summary>
-        public const int MaxFrostLayers = 3;
+        /// <summary>The most moves a frozen crate may take to thaw (one figure on its ice).</summary>
+        public const int MaxFrostMoves = 9;
 
         /// <summary>The most moves an express parcel may start with.</summary>
         public const int MaxExpressTaps = 99;
@@ -98,7 +98,7 @@ namespace CargoJam.Core
         /// <summary>True when the cell is a customs gate ('+' in the file); see <see cref="Gates"/>.</summary>
         public bool IsGateCell(int x, int y) => gateCells[y * Width + x];
 
-        /// <summary>Starting layers of ice on the parcel at a cell, or 0 when it isn't frozen.</summary>
+        /// <summary>Moves the parcel at a cell starts frozen for, or 0 when it isn't frozen.</summary>
         public int FrostAt(int x, int y) => frost[y * Width + x];
 
         /// <summary>Starting moves for the express parcel at a cell, or 0 when it isn't express.</summary>
@@ -335,21 +335,9 @@ namespace CargoJam.Core
                     errors.Add($"frost {i}: parcel at ({f.x},{f.y}) is already frozen");
                     continue;
                 }
-                if (f.layers < 1 || f.layers > MaxFrostLayers)
+                if (f.layers < 1 || f.layers > MaxFrostMoves)
                 {
-                    errors.Add($"frost {i}: layers {f.layers} must be 1..{MaxFrostLayers}");
-                    continue;
-                }
-
-                // Only parcels leaving next to it crack the ice, so that many must start beside it.
-                int neighbours = 0;
-                if (cells.HasParcel(f.x - 1, f.y)) neighbours++;
-                if (cells.HasParcel(f.x + 1, f.y)) neighbours++;
-                if (cells.HasParcel(f.x, f.y - 1)) neighbours++;
-                if (cells.HasParcel(f.x, f.y + 1)) neighbours++;
-                if (f.layers > neighbours)
-                {
-                    errors.Add($"frost {i}: {f.layers} layers at ({f.x},{f.y}) but only {neighbours} neighbouring parcels");
+                    errors.Add($"frost {i}: layers {f.layers} must be 1..{MaxFrostMoves} moves");
                     continue;
                 }
                 cells.Frost[cell] = f.layers;

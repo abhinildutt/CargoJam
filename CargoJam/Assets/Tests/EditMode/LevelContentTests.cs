@@ -94,6 +94,42 @@ namespace CargoJam.Core.Tests
         }
 
         [Test]
+        public void TheFrostDebutHasAFrozenCrateRightThere()
+        {
+            var level = LevelDefinition.Parse(Read(Files()[DebutLevel[(int)CargoKind.Frost] - 1]));
+            var s = new GameSession(level);
+            Assert.That(s.HasLegalMove(), Is.True, "the first move must be legal");
+            bool waiting = s.Board.Parcels.Any(p => s.FrostLeft(p) >= 2 && s.FrostLeft(p) <= 4 && s.Board.IsFree(p.Cell));
+            Assert.That(waiting, Is.True, "a frozen crate must have an open path and thaw in about 3 moves");
+        }
+
+        /// <summary>
+        /// Ice only means something on a crate that would otherwise go soon, so most frozen crates start
+        /// free or right next to a free parcel.
+        /// </summary>
+        [Test]
+        public void MostFrozenCratesAreWithinReach()
+        {
+            int crates = 0, inReach = 0;
+            var free = new List<Parcel>();
+            foreach (var file in Files())
+            {
+                var s = new GameSession(LevelDefinition.Parse(Read(file)));
+                s.Board.GetFreeParcels(free);
+                foreach (var p in s.Board.Parcels)
+                {
+                    if (s.FrostLeft(p) == 0) continue;
+                    crates++;
+                    bool near = free.Contains(p) || free.Any(q =>
+                        System.Math.Abs(q.Cell.X - p.Cell.X) + System.Math.Abs(q.Cell.Y - p.Cell.Y) == 1);
+                    if (near) inReach++;
+                }
+            }
+            Assert.That(crates, Is.GreaterThan(0));
+            Assert.That(inReach * 3, Is.GreaterThanOrEqualTo(crates * 2), $"only {inReach} of {crates} frozen crates are within reach");
+        }
+
+        [Test]
         public void DebutLevelsAreGentle()
         {
             var files = Files();
