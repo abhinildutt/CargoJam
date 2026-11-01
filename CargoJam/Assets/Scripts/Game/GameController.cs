@@ -99,6 +99,16 @@ namespace CargoJam.Game
         /// <summary>Bumped per glide, so an older glide's tween stops steering once a new one starts.</summary>
         int menuGlideToken;
 
+        /// <summary>The camera's drift around its menu framing: sideways and in-out amplitudes (world units) and periods (seconds).</summary>
+        const float DriftSide = 0.32f;
+        const float DriftSidePeriod = 15f;
+        const float DriftDolly = 0.45f;
+        const float DriftDollyPeriod = 11f;
+        /// <summary>Where the last menu fit put the camera; the drift moves around it.</summary>
+        Vector3 menuRest;
+        float driftClock;
+        bool menuDrift;
+
         /// <summary>Where the home screen's 3D backdrop sits on screen (0..1 viewport) when no <see cref="IMenuLayout"/> says.</summary>
         static readonly Rect DefaultMenuViewport = new Rect(0.02f, 0.31f, 0.96f, 0.27f);
         bool craneArmed;
@@ -217,6 +227,20 @@ namespace CargoJam.Game
         }
 
         /// <summary>
+        /// Set by the UI: the camera drifts slowly around the menu framing (the title's living shot).
+        /// Turning it off leaves the camera where the drift has it, so a glide can start from there.
+        /// </summary>
+        public bool MenuDrift
+        {
+            get => menuDrift;
+            set
+            {
+                if (value && !menuDrift) driftClock = 0f;
+                menuDrift = value;
+            }
+        }
+
+        /// <summary>
         /// Set by the UI: whether the destination arrival reveal should play for a level index (it plays
         /// once per destination reached, not on every retry). Unset means it always plays on arrivals.
         /// </summary>
@@ -270,6 +294,17 @@ namespace CargoJam.Game
             var screen = pointer.position.ReadValue();
             if (hudLayout != null && hudLayout.Captures(screen)) return;
             if (TryPickCell(screen, craneArmed, out var cell)) Tap(cell);
+        }
+
+        void LateUpdate()
+        {
+            if (!menuDrift || menu == null || menuGliding) return;
+            driftClock += Time.unscaledDeltaTime;
+            float side = DriftSide * Mathf.Sin(driftClock * Mathf.PI * 2f / DriftSidePeriod);
+            // In-out starts at rest and eases in over the first seconds, so the shot never jumps.
+            float dolly = DriftDolly * (0.5f - 0.5f * Mathf.Cos(driftClock * Mathf.PI * 2f / DriftDollyPeriod));
+            var t = cam.transform;
+            t.position = menuRest + t.right * side + t.forward * dolly;
         }
 
         // ---- Level lifecycle --------------------------------------------------------------------
@@ -1365,6 +1400,7 @@ namespace CargoJam.Game
                 if (!menuGliding)
                 {
                     CameraRig.Fit(cam, MenuDiorama.Bounds, menuViewport);
+                    menuRest = cam.transform.position;
                     return;
                 }
                 // Mid-glide: aim the glide at the new framing and leave the camera where the glide has it.

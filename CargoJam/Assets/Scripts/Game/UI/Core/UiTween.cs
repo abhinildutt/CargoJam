@@ -37,6 +37,16 @@ namespace CargoJam.Game.UI
         /// <summary>A gentle overshoot (1.2) for reward moments only: coins, chest, stamp, tier-up.</summary>
         public static float OutBack(float t) => Back(t, 1.2f);
 
+        /// <summary>OutBack with a chosen overshoot (the title's bouncier entrances).</summary>
+        public static float OutBack(float t, float overshoot) => Back(t, overshoot);
+
+        /// <summary>A short wind-up before moving off: dips back, then accelerates away.</summary>
+        public static float InBack(float t)
+        {
+            const float c1 = 1.4f;
+            return (c1 + 1f) * t * t * t - c1 * t * t;
+        }
+
         static float Back(float t, float c1)
         {
             float c3 = c1 + 1f, u = t - 1f;

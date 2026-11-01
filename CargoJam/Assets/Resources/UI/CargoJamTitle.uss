@@ -1,0 +1,124 @@
+/* Cargo Jam: the launch title (TitleScreen.cs). Loaded after CargoJamScreens.uss. */
+
+/* Deep fades behind the wordmark and the Play button, over the full-bleed harbor shot. */
+.cj-title__shade {
+    position: absolute;
+    left: 0;
+    right: 0;
+}
+
+.cj-title__shade--top {
+    top: 0;
+    height: 44%;
+}
+
+.cj-title__shade--bottom {
+    bottom: 0;
+    height: 34%;
+}
+
+.cj-title__top {
+    flex-direction: row;
+    align-items: center;
+    padding: 0 44px;
+}
+
+.cj-title__header {
+    align-items: center;
+    margin-top: 56px;
+}
+
+/* The wordmark and its sparkles; the halo behind it is centered on the same box. */
+.cj-title__logo {
+    align-items: center;
+}
+
+.cj-title__sparkle {
+    position: absolute;
+}
+
+/* A zero-size anchor at the wordmark's center: the glow and sunburst hang off it, so scaling it
+   grows them about that point. */
+.cj-title__halo {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0;
+    height: 0;
+    overflow: visible;
+}
+
+.cj-title__glow {
+    position: absolute;
+    left: -480px;
+    top: -340px;
+    width: 960px;
+    height: 680px;
+}
+
+.cj-title__rays {
+    position: absolute;
+    left: -450px;
+    top: -450px;
+    width: 900px;
+    height: 900px;
+}
+
+.cj-title__footer {
+    padding: 0 110px 150px 110px;
+}
+
+.cj-title__play-button {
+    height: 184px;
+}
+
+.cj-title__play-button > .cj-btn__face,
+.cj-title__play-button > .cj-btn__shadow {
+    border-radius: 64px;
+}
+
+.cj-title__play-button > .cj-btn__face {
+    border-top-width: 4px;
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.cj-title__play-button > .cj-btn__shadow {
+    top: 18px;
+    bottom: -18px;
+    background-color: #1C6E41;
+}
+
+.cj-title__play-button .cj-btn__label {
+    font-size: 92px;
+    text-shadow: 0 5px 0 rgba(20, 80, 45, 0.55);
+}
+
+/* Over the button's face, under its label: a lighter top half and the sweeping shine, clipped to the face. */
+.cj-title__gloss {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 64px;
+    overflow: hidden;
+}
+
+.cj-title__gloss-top {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: 8px;
+    height: 44%;
+    border-radius: 56px;
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.cj-title__shine {
+    position: absolute;
+    left: 0;
+    top: -60px;
+    bottom: -60px;
+    background-color: rgba(255, 255, 255, 0.38);
+    rotate: 18deg;
+}

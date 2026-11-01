@@ -23,14 +23,20 @@ namespace CargoJam.Game.UI
     /// </summary>
     public sealed class GameFlow : MonoBehaviour, IHudLayout, IMenuLayout
     {
-        static readonly string[] StyleSheets = { "UI/CargoJamBase", "UI/CargoJamScreens" };
+        static readonly string[] StyleSheets = { "UI/CargoJamBase", "UI/CargoJamScreens", "UI/CargoJamTitle" };
         static readonly Rect FallbackMenuViewport = new Rect(0.02f, 0.34f, 0.96f, 0.56f);
-        static readonly Rect FallbackTitleViewport = new Rect(0.16f, 0.22f, 0.68f, 0.48f);
+        static readonly Rect FallbackTitleViewport = new Rect(-0.08f, 0.1f, 1.16f, 0.62f);
         /// <summary>
-        /// Side margin of the title's establishing shot (0..1 of the width). Narrower than Home's, so
-        /// the camera stands further back and takes in more of the destination around the depot.
+        /// How far the title's hero shot may run past each side of the screen (0..1 of the width): the
+        /// depot fills the width edge to edge, cropping the outer stacks a little.
         /// </summary>
-        const float TitleSideMargin = 0.16f;
+        const float TitleBleed = 0.08f;
+        /// <summary>
+        /// Panel units the hero shot tucks under the wordmark's bottom and the Play block's top (negative
+        /// leaves air instead: the depot starts just below the wordmark, under the clear sky).
+        /// </summary>
+        const float TitleTuckTop = -40f;
+        const float TitleTuckBottom = 170f;
         /// <summary>Play on the title: the camera's glide from the establishing shot to the home framing.</summary>
         const float TitleGlide = 1.05f;
         /// <summary>Play on the title: when the home screen starts its own show, once the title has lifted away.</summary>
@@ -241,8 +247,9 @@ namespace CargoJam.Game.UI
         }
 
         /// <summary>
-        /// The title's establishing shot: the diorama sits between the wordmark and the Play button,
-        /// inset from the sides (<see cref="TitleSideMargin"/>) so the camera stands well back.
+        /// The title's hero shot: the diorama fills the screen's width (<see cref="TitleBleed"/>) and the
+        /// height between the wordmark and the Play button, tucking under both so the scene runs behind
+        /// them rather than floating in a frame.
         /// </summary>
         Rect TitleViewport
         {
@@ -251,11 +258,10 @@ namespace CargoJam.Game.UI
                 if (space == null) return FallbackTitleViewport;
                 var size = space.PanelSize;
                 if (size.y <= 1f || float.IsNaN(size.y)) return FallbackTitleViewport;
-                // A little air under the wordmark and above the button.
-                float yMax = 1f - (title.StageTop + 40f) / size.y;
-                float yMin = 1f - (title.StageBottom - 40f) / size.y;
+                float yMax = 1f - (title.StageTop - TitleTuckTop) / size.y;
+                float yMin = 1f - (title.StageBottom + TitleTuckBottom) / size.y;
                 if (yMax - yMin < 0.25f) return FallbackTitleViewport;
-                return Rect.MinMaxRect(TitleSideMargin, Mathf.Clamp01(yMin), 1f - TitleSideMargin, Mathf.Clamp01(yMax));
+                return Rect.MinMaxRect(-TitleBleed, Mathf.Clamp01(yMin), 1f + TitleBleed, Mathf.Clamp01(yMax));
             }
         }
 
@@ -436,6 +442,7 @@ namespace CargoJam.Game.UI
             coinsShown = false;
             Ui.Show(ctx.Coins, false);
             controller.ShowMenuScene(progression.LevelIndex);
+            controller.MenuDrift = true;
         }
 
         /// <summary>
@@ -448,6 +455,8 @@ namespace CargoJam.Game.UI
             if (state != State.Title || !title.Framing || ctx.AnyModalOpen) return;
             // From here MenuViewport reads the home framing, which is what the glide aims at.
             title.Leave();
+            // The glide starts from wherever the drift has the camera, so there is no jump.
+            controller.MenuDrift = false;
             controller.GlideMenuCamera(TitleGlide);
             UiTween.Delay(TitleHomeAt, () =>
             {
@@ -461,6 +470,7 @@ namespace CargoJam.Game.UI
             if (state != State.Title) return;
             title.HideNow();
             // The title's framing is gone: fit the home one now rather than gliding.
+            controller.MenuDrift = false;
             controller.MenuLayout = this;
             ShowHome(false);
         }
