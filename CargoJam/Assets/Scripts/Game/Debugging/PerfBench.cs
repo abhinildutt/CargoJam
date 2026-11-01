@@ -14,16 +14,18 @@ namespace CargoJam.Game.Debugging
 {
     /// <summary>
     /// Performance benchmark for development builds, started with <c>-perfbench &lt;report path&gt;</c>
-    /// (optionally <c>-perfbench-level &lt;1-based level&gt;</c>). It renders at iPhone resolution through
-    /// <see cref="PortraitPreview"/>, samples the home screen, then plays the level by itself (a legal
-    /// move every <see cref="MoveInterval"/>s) and writes frame, GPU, draw-call and memory figures,
-    /// then quits. Frame timings need Frame Timing Stats on in Player settings.
+    /// (optionally <c>-perfbench-level &lt;1-based level&gt;</c>, and <c>-perfbench-no-saver</c> to turn the
+    /// <see cref="Presentation.FramePacer"/> off for comparison). It renders at iPhone resolution through
+    /// <see cref="PortraitPreview"/>, samples the home screen, plays the level by itself (a legal move
+    /// every <see cref="MoveInterval"/>s), then sits idle on it, and writes frame, GPU, draw-call,
+    /// memory and busy-time (energy) figures, then quits. Frame timings need Frame Timing Stats on in Player settings.
     /// </summary>
     public sealed class PerfBench : MonoBehaviour
     {
         const float Warmup = 3f;
         const float HomeSeconds = 10f;
         const float LevelSeconds = 25f;
+        const float IdleSeconds = 15f;
         const float MoveInterval = 0.7f;
 
         string reportPath;
@@ -41,15 +43,20 @@ namespace CargoJam.Game.Debugging
             bench.reportPath = args[at + 1];
             int level = Array.IndexOf(args, "-perfbench-level");
             if (level >= 0 && level + 1 < args.Length && int.TryParse(args[level + 1], out int n)) bench.levelNumber = n;
+            bench.saverOff = Array.IndexOf(args, "-perfbench-no-saver") >= 0;
             DontDestroyOnLoad(bench.gameObject);
         }
+
+        bool saverOff;
 
         IEnumerator Start()
         {
             var report = new StringBuilder();
             report.AppendLine($"device: {SystemInfo.deviceModel} | gpu: {SystemInfo.graphicsDeviceName} ({SystemInfo.graphicsDeviceType})");
             report.AppendLine($"quality: {QualitySettings.names[QualitySettings.GetQualityLevel()]} | pipeline: {(QualitySettings.renderPipeline != null ? QualitySettings.renderPipeline.name : "default")}");
-            report.AppendLine($"render size: {PortraitPreview.Width}x{PortraitPreview.Height} | target fps: {Application.targetFrameRate}");
+            report.AppendLine($"render size: {PortraitPreview.Width}x{PortraitPreview.Height} | target fps: {Application.targetFrameRate} | battery saver: {(saverOff ? "off" : "on")}");
+            if (saverOff)
+                foreach (var pacer in FindObjectsByType<Presentation.FramePacer>(FindObjectsSortMode.None)) pacer.enabled = false;
 
             yield return new WaitForSeconds(Warmup);
             PortraitPreview.Begin();
@@ -70,6 +77,7 @@ namespace CargoJam.Game.Debugging
                 var move = moves.FirstOrDefault(p => controller.Session.CanTake(p));
                 if (move != null) controller.Tap(move.Cell);
             }, report);
+            yield return Sample($"level {levelNumber} idle (no moves)", IdleSeconds, null, report);
 
             report.AppendLine();
             report.AppendLine("== largest textures (MB, size, format, mips, msaa)");
@@ -110,12 +118,15 @@ namespace CargoJam.Game.Debugging
             var gpu = new List<double>();
             var timings = new FrameTiming[1];
             float end = Time.unscaledTime + seconds;
-            int frames = 0;
+            int frames = 0, rendered = 0;
+            var process = System.Diagnostics.Process.GetCurrentProcess();
+            var cpuBefore = process.TotalProcessorTime;
             while (Time.unscaledTime < end)
             {
                 eachFrame?.Invoke();
                 yield return null;
                 frames++;
+                if (UnityEngine.Rendering.OnDemandRendering.willCurrentFrameRender) rendered++;
                 FrameTimingManager.CaptureFrameTimings();
                 if (FrameTimingManager.GetLatestTimings(1, timings) > 0)
                 {
@@ -129,7 +140,11 @@ namespace CargoJam.Game.Debugging
             }
 
             report.AppendLine();
-            report.AppendLine($"== {phase}: {frames} frames in {seconds:0}s ({frames / seconds:0.0} fps)");
+            process.Refresh();
+            double cpuBusy = (process.TotalProcessorTime - cpuBefore).TotalMilliseconds / seconds;
+            double gpuBusy = gpu.Count > 0 ? gpu.Average() * rendered / seconds : 0;
+            report.AppendLine($"== {phase}: {frames} updates, {rendered} rendered in {seconds:0}s ({frames / seconds:0.0} updates/s, {rendered / seconds:0.0} fps drawn)");
+            report.AppendLine($"busy per second (energy): cpu {cpuBusy:0} ms (all threads), gpu {gpuBusy:0} ms");
             report.AppendLine(Line("cpu frame (ms)", cpu));
             report.AppendLine(Line("cpu main thread (ms)", main));
             report.AppendLine(Line("cpu render thread (ms)", render));

@@ -230,6 +230,7 @@ namespace CargoJam.Game
             RenderSettings.ambientLight = new Color(0.62f, 0.62f, 0.66f);
 
             tweener = gameObject.AddComponent<Tweener>();
+            gameObject.AddComponent<FramePacer>();
             fx = gameObject.AddComponent<FeelDirector>();
             materials = new MaterialBank(Resources.Load<Material>("Materials/Base"));
             levels = LevelLibrary.Load();

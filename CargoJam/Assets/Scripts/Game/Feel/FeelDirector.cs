@@ -583,6 +583,7 @@ namespace CargoJam.Game.Feel
                 slowRealStart = Time.unscaledTime;
             }
             if (slowRealStart < 0f) return;
+            FramePacer.KeepAwake();
 
             float u = Time.unscaledTime - slowRealStart;
             float scale;

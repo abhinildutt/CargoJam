@@ -100,6 +100,7 @@ namespace CargoJam.Game.Feel
                 return;
             }
 
+            Presentation.FramePacer.KeepAwake();
             if (!clockStarted)
             {
                 clockStarted = true;

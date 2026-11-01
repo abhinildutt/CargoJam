@@ -183,6 +183,7 @@ namespace CargoJam.Game.Presentation.Fx
         void Update()
         {
             if (aliveCount == 0) return;
+            FramePacer.KeepAwake();
             float now = Time.time;
             float dt = Time.deltaTime;
             for (int i = 0; i < particles.Length; i++)

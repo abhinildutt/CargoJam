@@ -121,6 +121,8 @@ namespace CargoJam.Game.UI
                 loopTick(elapsed);
                 return;
             }
+            // Plain delays (no step) move nothing, so only animating tweens keep the frame rate up.
+            if (step != null) Presentation.FramePacer.KeepAwake();
             float t = elapsed / duration;
             if (t >= 1f)
             {

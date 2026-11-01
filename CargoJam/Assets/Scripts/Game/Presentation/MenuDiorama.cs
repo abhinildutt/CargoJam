@@ -161,6 +161,8 @@ namespace CargoJam.Game.Presentation
         void Update()
         {
             clock += Time.deltaTime;
+            // The convoy rolls nonstop and would judder at the idle rate, so the home screen stays at full rate.
+            if (trucks.Count > 0) FramePacer.KeepAwake();
             float span = LoopHalfWidth * 2f;
             for (int i = 0; i < trucks.Count; i++)
             {

@@ -53,6 +53,7 @@ namespace CargoJam.Game.Presentation
 
         void Update()
         {
+            if (active.Count > 0) FramePacer.KeepAwake();
             float now = Time.time;
             // Callbacks may queue more tweens; those are picked up in this same pass.
             for (int i = 0; i < active.Count; i++)

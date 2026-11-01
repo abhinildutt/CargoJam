@@ -33,9 +33,9 @@ Later builds: in Unity choose *Build* → *Append* to the same folder, then Run 
 
 ## Benchmark on the Mac (no phone needed)
 
-A development build started with `-perfbench <report.txt> [-perfbench-level N]` renders at
-1170×2532 (iPhone 13–15) with the iPhone render settings, samples the home screen for 10 s, plays
-level N by itself for 25 s and writes a report (see `PerfBench.cs`). The build must use the Mobile
+A development build started with `-perfbench <report.txt> [-perfbench-level N] [-perfbench-no-saver]`
+renders at 1170×2532 (iPhone 13–15) with the iPhone render settings, samples the home screen for
+10 s, plays level N by itself for 25 s, sits idle on it for 15 s and writes a report (see `PerfBench.cs`). The build must use the Mobile
 quality level and have Frame Timing Stats on.
 
 Results on an M4 Mac (2026-11-01, level 38):
@@ -52,3 +52,17 @@ Results on an M4 Mac (2026-11-01, level 38):
 
 On a phone, graphics memory is about 57 MB for the 4× MSAA color target, 7 MB of bloom buffers,
 2 MB of shadow map and about 8 MB of fonts and textures (the benchmark's own capture targets are left out).
+
+## Battery saver
+
+`FramePacer` draws every other frame (30 fps) once nothing has moved for 2.5 s, and full rate
+again on the next frame after a touch or any animation (input is still read 60 times a second).
+The home screen's convoy keeps it at 60 there, so the saving is on the board between moves.
+
+Idle on level 38 for 15 s, M4 (2026-11-01), including the 2.5 s at full rate after the last move:
+
+| | Saver off | Saver on |
+|---|---|---|
+| Frames drawn | 59.7 fps | 37.0 fps (30 once settled) |
+| GPU busy | 169 ms/s | 107 ms/s (−37%) |
+| CPU busy, all threads | 271 ms/s | 192 ms/s (−29%) |
