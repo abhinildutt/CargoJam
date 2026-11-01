@@ -1,5 +1,7 @@
 # Testing Cargo Jam on an iPhone
 
+No phone at hand? See [ios-simulator.md](ios-simulator.md) to run it in the iOS Simulator.
+
 ## One-time setup
 
 1. **Unity iOS module.** Unity Hub → Installs → 6000.6.7f1 → ⚙ → Add modules → **iOS Build Support**.
