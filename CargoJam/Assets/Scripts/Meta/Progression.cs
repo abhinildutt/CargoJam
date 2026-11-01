@@ -70,7 +70,8 @@ namespace CargoJam.Meta
         /// <summary>Coins a normal chest gives instead of a booster when no booster is unlocked yet.</summary>
         public const int NoBoosterChestCoins = 50;
 
-        const string DateFormat = "yyyy-MM-dd";
+        /// <summary>How <see cref="ProfileData"/> stores dates (see <see cref="DateKey"/>).</summary>
+        public const string DateFormat = "yyyy-MM-dd";
         const int DailyDays = 7;
 
         readonly IClock clock;
@@ -81,6 +82,12 @@ namespace CargoJam.Meta
 
         /// <summary>Raised after every mutation, once per call.</summary>
         public event Action Changed;
+
+        /// <summary>
+        /// Raised for every change to the coin balance, after <see cref="Changed"/>: the signed amount
+        /// (positive when granted, negative when spent) and a <see cref="CoinReason"/>.
+        /// </summary>
+        public event Action<int, string> CoinsMoved;
 
         /// <summary>
         /// Wraps (and repairs) a profile. Null or short arrays are resized, negative or out-of-range
@@ -381,6 +388,7 @@ namespace CargoJam.Meta
             freeUndoUsed = false;
 
             RaiseChanged();
+            RaiseCoins(result.CoinsEarned, CoinReason.Win);
             if (result.TierUp) StreakTierChanged?.Invoke(result.TierBefore, result.TierAfter);
             if (result.ArrivedAt >= 0) DestinationReached?.Invoke(result.ArrivedAt, Journey.LegFor(Data.levelIndex));
             return result;
@@ -407,21 +415,25 @@ namespace CargoJam.Meta
         public bool CanAfford(int coins) => Data.coins >= coins;
 
         /// <summary>Spends coins. False (and nothing changes) when unaffordable or negative.</summary>
-        public bool TrySpend(int coins)
+        /// <param name="reason">What the coins paid for (<see cref="CoinReason"/>), for analytics.</param>
+        public bool TrySpend(int coins, string reason = CoinReason.Spend)
         {
             if (coins < 0 || !CanAfford(coins)) return false;
             if (coins == 0) return true;
             Data.coins -= coins;
             RaiseChanged();
+            RaiseCoins(-coins, reason);
             return true;
         }
 
         /// <summary>Grants coins (counted in lifetime <see cref="ProfileData.coinsEarned"/>). Non-positive amounts are ignored.</summary>
-        public void AddCoins(int coins)
+        /// <param name="reason">Where the coins came from (<see cref="CoinReason"/>), for analytics.</param>
+        public void AddCoins(int coins, string reason = CoinReason.Grant)
         {
             if (coins <= 0) return;
             Grant(coins);
             RaiseChanged();
+            RaiseCoins(coins, reason);
         }
 
         /// <summary>
@@ -454,6 +466,7 @@ namespace CargoJam.Meta
             Data.coins -= price;
             Data.boosters[(int)booster]++;
             RaiseChanged();
+            RaiseCoins(-price, CoinReason.Booster(booster));
             return true;
         }
 
@@ -489,6 +502,7 @@ namespace CargoJam.Meta
             Data.chestProgress = 0;
             Data.chestsOpened++;
             RaiseChanged();
+            RaiseCoins(reward.Coins, reward.Big ? CoinReason.BigChest : CoinReason.Chest);
             return reward;
         }
 
@@ -522,6 +536,7 @@ namespace CargoJam.Meta
             Data.dailyIndex = (Data.dailyIndex + 1) % DailyDays;
             info.Available = false;
             RaiseChanged();
+            RaiseCoins(reward.Coins, CoinReason.Daily);
             return info;
         }
 
@@ -590,5 +605,32 @@ namespace CargoJam.Meta
         }
 
         void RaiseChanged() => Changed?.Invoke();
+
+        void RaiseCoins(int amount, string reason)
+        {
+            if (amount != 0) CoinsMoved?.Invoke(amount, reason ?? CoinReason.Grant);
+        }
+    }
+
+    /// <summary>The reasons <see cref="Progression.CoinsMoved"/> reports, as analytics words.</summary>
+    public static class CoinReason
+    {
+        public const string Win = "win";
+        public const string Chest = "chest";
+        public const string BigChest = "big_chest";
+        public const string Daily = "daily";
+        public const string Grant = "grant";
+        /// <summary>Coins handed back because what they paid for couldn't happen.</summary>
+        public const string Refund = "refund";
+        public const string Spend = "spend";
+        public const string Continue = "continue";
+
+        /// <summary>Buying a booster: <c>booster_undo</c>, <c>booster_crane</c> or <c>booster_extra_slot</c>.</summary>
+        public static string Booster(BoosterType booster) => booster switch
+        {
+            BoosterType.Undo => "booster_undo",
+            BoosterType.Crane => "booster_crane",
+            _ => "booster_extra_slot",
+        };
     }
 }

@@ -1,0 +1,26 @@
+{
+    "name": "CargoJam.GameAnalytics",
+    "rootNamespace": "CargoJam.Analytics",
+    "references": [
+        "CargoJam.Meta",
+        "CargoJam.Game",
+        "GameAnalyticsSDK"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "CARGOJAM_GAMEANALYTICS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.gameanalytics.sdk",
+            "expression": "8.0.0",
+            "define": "CARGOJAM_GAMEANALYTICS"
+        }
+    ],
+    "noEngineReferences": false
+}

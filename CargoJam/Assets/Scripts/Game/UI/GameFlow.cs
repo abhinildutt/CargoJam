@@ -108,6 +108,9 @@ namespace CargoJam.Game.UI
             controller = gameController;
             try
             {
+                // Remote values first: the starting coins of a fresh profile are tunable.
+                TuningStore.ApplyCached();
+                LocalNotifications.CancelAll();
                 progression = new Progression(ProfileStore.Load(), new SystemClock(), Environment.TickCount);
                 progression.RegisterOpen();
                 BuildDocument();
@@ -169,12 +172,23 @@ namespace CargoJam.Game.UI
 
         void OnApplicationPause(bool paused)
         {
-            if (paused && progression != null) ProfileStore.Save(progression.Data);
+            if (progression == null) return;
+            if (paused)
+            {
+                ProfileStore.Save(progression.Data);
+                LocalNotifications.Reschedule(progression);
+            }
+            else
+            {
+                LocalNotifications.CancelAll();
+            }
         }
 
         void OnApplicationQuit()
         {
-            if (progression != null) ProfileStore.Save(progression.Data);
+            if (progression == null) return;
+            ProfileStore.Save(progression.Data);
+            LocalNotifications.Reschedule(progression);
         }
 
         void Update()
@@ -702,8 +716,15 @@ namespace CargoJam.Game.UI
         void AfterChest(WinResult result)
         {
             var unlocked = result?.Unlocked;
-            if (unlocked.HasValue) unlock.Show(unlocked.Value, () => StartNextLevel(unlocked));
-            else StartNextLevel(null);
+            if (unlocked.HasValue)
+            {
+                unlock.Show(unlocked.Value, () => StartNextLevel(unlocked));
+                return;
+            }
+            // At most one system prompt per win, and only once the win's own popups are done.
+            if (result != null && !LocalNotifications.AskPermissionIfDue(progression))
+                StoreReview.MaybeAsk(result, result.NewLevelIndex, controller.IsHard);
+            StartNextLevel(null);
         }
 
         void OnLevelFailed(int parcelsLeft, float showAt)
@@ -732,7 +753,7 @@ namespace CargoJam.Game.UI
         {
             if (state != State.Failed) return;
             int cost = progression.ContinueCost(continuesUsed);
-            if (!controller.CanContinue || !progression.TrySpend(cost))
+            if (!controller.CanContinue || !progression.TrySpend(cost, CoinReason.Continue))
             {
                 fail.RejectContinue();
                 return;
@@ -740,7 +761,7 @@ namespace CargoJam.Game.UI
             if (!controller.ContinueWithExtraSlot())
             {
                 // Refund: the slot couldn't be added after all.
-                progression.AddCoins(cost);
+                progression.AddCoins(cost, CoinReason.Refund);
                 fail.RejectContinue();
                 return;
             }

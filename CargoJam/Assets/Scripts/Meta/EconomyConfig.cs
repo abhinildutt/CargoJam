@@ -11,20 +11,48 @@ namespace CargoJam.Meta
     /// Every economy number in one place (docs/design-v2-polish-and-retention.md, section 3; the
     /// streak tiers follow docs/design-v3-premium-journey.md, section 6).
     /// Level numbers here are 1-based, as players see them; level indexes elsewhere are 0-based.
+    /// Coin amounts, prices and streak multipliers can be overridden remotely through <see cref="Tuning"/>
+    /// (keys in <see cref="Keys"/>); the constants below are the shipped defaults. Structural numbers
+    /// (booster kinds, chest cadence, tier thresholds, unlock levels) stay constant because saves and
+    /// the level content depend on them.
     /// </summary>
     public static class EconomyConfig
     {
         public const int BoosterKinds = 3;
 
-        public const int StartingCoins = 300;
-        public const int WinCoins = 40;
-        public const int HardWinCoins = 80;
+        /// <summary>Remote-config keys for the tunable numbers.</summary>
+        public static class Keys
+        {
+            public const string StartingCoins = "economy_starting_coins";
+            public const string WinCoins = "economy_win_coins";
+            public const string HardWinCoins = "economy_hard_win_coins";
+            public const string ChestCoins = "economy_chest_coins";
+            public const string BigChestCoins = "economy_big_chest_coins";
+            public const string UndoPrice = "economy_price_undo";
+            public const string CranePrice = "economy_price_crane";
+            public const string ExtraSlotPrice = "economy_price_extra_slot";
+            public const string ContinueCost = "economy_continue_cost";
+            public const string SecondContinueCost = "economy_continue_cost_2";
+            public const string StreakTier1Multiplier = "economy_streak_x_tier1";
+            public const string StreakTier2Multiplier = "economy_streak_x_tier2";
+            public const string StreakTier3Multiplier = "economy_streak_x_tier3";
+        }
+
+        public const int DefaultStartingCoins = 300;
+        public const int DefaultWinCoins = 40;
+        public const int DefaultHardWinCoins = 80;
+
+        public static int StartingCoins => Tuning.Int(Keys.StartingCoins, DefaultStartingCoins, 0, 100000);
+        public static int WinCoins => Tuning.Int(Keys.WinCoins, DefaultWinCoins, 0, 10000);
+        public static int HardWinCoins => Tuning.Int(Keys.HardWinCoins, DefaultHardWinCoins, 0, 10000);
 
         public const int ChestEvery = 5;
         /// <summary>Every Nth chest is a big one.</summary>
         public const int BigChestEvery = 4;
-        public const int ChestCoins = 100;
-        public const int BigChestCoins = 300;
+        public const int DefaultChestCoins = 100;
+        public const int DefaultBigChestCoins = 300;
+        public static int ChestCoins => Tuning.Int(Keys.ChestCoins, DefaultChestCoins, 0, 100000);
+        public static int BigChestCoins => Tuning.Int(Keys.BigChestCoins, DefaultBigChestCoins, 0, 100000);
 
         public const int UnlockGift = 2;
 
@@ -40,9 +68,12 @@ namespace CargoJam.Meta
         public const int StreakTier3At = 10;
 
         public const float StreakTier0Multiplier = 1f;
-        public const float StreakTier1Multiplier = 1.5f;
-        public const float StreakTier2Multiplier = 2f;
-        public const float StreakTier3Multiplier = 2.5f;
+        public const float DefaultStreakTier1Multiplier = 1.5f;
+        public const float DefaultStreakTier2Multiplier = 2f;
+        public const float DefaultStreakTier3Multiplier = 2.5f;
+        public static float StreakTier1Multiplier => Tuning.Float(Keys.StreakTier1Multiplier, DefaultStreakTier1Multiplier, 1f, 10f);
+        public static float StreakTier2Multiplier => Tuning.Float(Keys.StreakTier2Multiplier, DefaultStreakTier2Multiplier, 1f, 10f);
+        public static float StreakTier3Multiplier => Tuning.Float(Keys.StreakTier3Multiplier, DefaultStreakTier3Multiplier, 1f, 10f);
 
         /// <summary>The tier whose perk is one free Undo charge per level (not banked).</summary>
         public const int FreeUndoTier = MaxStreakTier;
@@ -84,14 +115,16 @@ namespace CargoJam.Meta
         {
             switch (booster)
             {
-                case BoosterType.Undo: return 120;
-                case BoosterType.Crane: return 200;
-                default: return 240;
+                case BoosterType.Undo: return Tuning.Int(Keys.UndoPrice, 120, 0, 100000);
+                case BoosterType.Crane: return Tuning.Int(Keys.CranePrice, 200, 0, 100000);
+                default: return Tuning.Int(Keys.ExtraSlotPrice, 240, 0, 100000);
             }
         }
 
         /// <summary>Cost of the fail "Continue (+1 slot)", given how many continues this level already used.</summary>
-        public static int ContinueCost(int continuesUsed) => continuesUsed <= 0 ? 300 : 600;
+        public static int ContinueCost(int continuesUsed) => continuesUsed <= 0
+            ? Tuning.Int(Keys.ContinueCost, 300, 0, 100000)
+            : Tuning.Int(Keys.SecondContinueCost, 600, 0, 100000);
 
         /// <summary>The 1-based level number at which a booster unlocks (with <see cref="UnlockGift"/> free).</summary>
         public static int UnlockLevel(BoosterType booster)
