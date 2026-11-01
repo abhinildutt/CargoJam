@@ -128,6 +128,19 @@ namespace CargoJam.Game
         /// <summary>A beat between the losing move's last visible change (a tick, a landing) and the fail explanation.</summary>
         const float FailAfterLastBeat = 0.25f;
 
+        /// <summary>
+        /// Bumped whenever the board may have changed (a level starts or ends, every <see cref="RefreshBoard"/>),
+        /// so the tutorial's per-frame hint queries reuse one answer per move instead of searching the board.
+        /// </summary>
+        int boardStamp;
+        int hintStamp = -1;
+        bool hintFound;
+        Cell hintCell;
+        int cargoHintStamp = -1;
+        CargoKind cargoHintKind;
+        bool cargoHintFound;
+        Cell cargoHintCell;
+
         // ---- Events for the UI ------------------------------------------------------------------
 
         public event Action<LevelStartInfo> LevelStarted;
@@ -269,6 +282,7 @@ namespace CargoJam.Game
             levelRoot = new GameObject("Level").transform;
 
             session = new GameSession(levels.Get(ContentIndex(levelIndex)));
+            boardStamp++;
             layout = new Layout(session.Board.Width, session.Board.Height, session.Dock.Capacity);
             if (debugHud != null) debugHud.LevelLabel = $"Level {levelIndex + 1}{(session.Level.Hard ? "  HARD" : "")}";
 
@@ -384,6 +398,7 @@ namespace CargoJam.Game
             craneArmed = false;
             movedThisLevel = false;
             session = null;
+            boardStamp++;
             layout = null;
             views = null;
             if (levelRoot != null) Destroy(levelRoot.gameObject);
@@ -485,6 +500,17 @@ namespace CargoJam.Game
         /// </summary>
         public bool TryGetHintCell(out Cell cell)
         {
+            if (hintStamp != boardStamp)
+            {
+                hintStamp = boardStamp;
+                hintFound = FindHintCell(out hintCell);
+            }
+            cell = hintCell;
+            return hintFound;
+        }
+
+        bool FindHintCell(out Cell cell)
+        {
             cell = default;
             if (session == null) return false;
             session.GetMoves(freeScratch);
@@ -510,6 +536,18 @@ namespace CargoJam.Game
         /// (always for bollards).
         /// </summary>
         public bool TryGetCargoHintCell(CargoKind kind, out Cell cell)
+        {
+            if (cargoHintStamp != boardStamp || cargoHintKind != kind)
+            {
+                cargoHintStamp = boardStamp;
+                cargoHintKind = kind;
+                cargoHintFound = FindCargoHintCell(kind, out cargoHintCell);
+            }
+            cell = cargoHintCell;
+            return cargoHintFound;
+        }
+
+        bool FindCargoHintCell(CargoKind kind, out Cell cell)
         {
             cell = default;
             if (session == null || session.Status != GameStatus.Playing || kind == CargoKind.Bollard) return false;
@@ -1139,6 +1177,7 @@ namespace CargoJam.Game
         /// </summary>
         void RefreshBoard()
         {
+            boardStamp++;
             if (session == null) return;
             float now = tweener.Now;
             session.Board.GetFreeParcels(freeScratch);
