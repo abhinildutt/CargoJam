@@ -41,8 +41,13 @@ let it finish, then quit Xcode.
 
 1. **File → Build Profiles**.
 2. In the **Platforms** list on the left, click **iOS**.
-3. Click **Switch Platform** (bottom right). Unity reimports every asset for iOS. Don't touch the
-   editor until the progress bar is gone.
+   - If it is already marked **Active**, the project is on iOS: skip to B2.
+   - Otherwise click **Switch Platform** (bottom right). Unity reimports every asset for iOS. Don't
+     touch the editor until the progress bar is gone.
+
+Don't use **Add Build Profile**. That button (in the separate *Platform Browser* window, opened by
+*+ Add Build Profile*) saves an extra, named build configuration as an asset, which this project
+doesn't need. If the Platform Browser is open, just close it.
 
 The editor now previews with the iPhone quality settings (Mobile), which is what the phone uses.
 
