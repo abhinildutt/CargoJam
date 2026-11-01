@@ -4,9 +4,9 @@ using UnityEngine;
 namespace CargoJam.Game.Presentation
 {
     /// <summary>
-    /// The woven band and buckle over a strapped pair's lids, one mesh, parented to the member in the
-    /// later row so it rides along with it. It draws with the pair's parcel skin (webbing and steel
-    /// columns), so it adds one draw call that batches with the parcels.
+    /// The flat woven band and buckle over a strapped pair's lids, one mesh, parented to the member in
+    /// the later row so it rides along with it. It draws with the pair's parcel skin (strap, stitching
+    /// and steel columns) and casts no shadow, so it adds one draw call that batches with the parcels.
     /// </summary>
     /// <remarks>
     /// The band spans both lids at the same height, so the controller should lift both members
@@ -16,11 +16,13 @@ namespace CargoJam.Game.Presentation
     public sealed class StrapView : MonoBehaviour
     {
         /// <summary>The band runs this far to the side of the lids' centers, clear of the label's symbol (world units).</summary>
-        const float SideOffset = 0.31f;
-        const float BandWidth = 0.11f;
-        const float BandThickness = 0.022f;
-        /// <summary>Short ribs along the band's top, beveled so the light picks out a weave.</summary>
-        const float RibLength = 0.085f;
+        const float SideOffset = 0.28f;
+        const float BandWidth = 0.2f;
+        const float BandThickness = 0.02f;
+        /// <summary>The pale stitched edges that make the band read as flat webbing on any parcel color.</summary>
+        const float StitchWidth = 0.024f;
+        /// <summary>How much of each outer lid chamfer the band's folded end covers, so it never hangs past the parcels.</summary>
+        const float FoldShare = 0.75f;
         const float SnapTime = 0.25f;
         const float ReleaseTime = 0.15f;
         const float RestoreTime = 0.25f;
@@ -63,7 +65,7 @@ namespace CargoJam.Game.Presentation
             view.B = b;
             int dx = Mathf.Clamp(partner.Parcel.Cell.X - owner.Parcel.Cell.X, -1, 1);
             int dy = Mathf.Clamp(partner.Parcel.Cell.Y - owner.Parcel.Cell.Y, -1, 1);
-            var r = MeshKit.Show("Band", go.transform, BandMesh(dx, dy), materials.ParcelSkin(owner.Parcel.Color, true));
+            var r = MeshKit.Show("Band", go.transform, BandMesh(dx, dy), materials.ParcelSkin(owner.Parcel.Color, true), castShadows: false);
             view.band = r.transform;
             return view;
         }
@@ -139,9 +141,10 @@ namespace CargoJam.Game.Presentation
         }
 
         /// <summary>
-        /// The band in the owner's unit-box space: across both lids to the side of center, down both
-        /// outer faces, ribbed for a woven look, with a steel buckle over the gap between the boxes.
-        /// Laid out in world units around the owner's center, then scaled into the unit box.
+        /// The band in the owner's unit-box space: one flat strip of webbing across both lids to the side
+        /// of center, with pale stitched edges, tucked down over the lid chamfers at its ends (inside the
+        /// parcels' outline), and a steel buckle over the gap between the boxes. Laid out in world units
+        /// around the owner's center, then scaled into the unit box.
         /// </summary>
         static Mesh BandMesh(int dx, int dy)
         {
@@ -158,36 +161,45 @@ namespace CargoJam.Game.Presentation
             var frame = toUnit * Matrix4x4.TRS(mid, Quaternion.LookRotation(axis, Vector3.up), Vector3.one);
 
             // In the frame: z runs along the pair, x across the band, y up from the parcels' centers.
-            var webbing = new Vector2(MaterialBank.SkinWebbingU, 0.5f);
+            var webbing = new Vector2(MaterialBank.SkinStrapU, 0.5f);
+            var stitch = new Vector2(MaterialBank.SkinTagU, 0.5f);
             var steel = new Vector2(MaterialBank.SkinSteelU, 0.5f);
-            float lid = size.y * 0.5f + 0.006f;
-            float reach = Layout.CellSize * 0.5f + size.z * 0.5f + 0.012f;
-            float bottom = -size.y * 0.5f + 0.06f;
+            float lid = size.y * 0.5f + 0.004f;
+            // The flat top of each lid ends where its chamfer starts (the box bevel, in world units).
+            float chamferRun = 0.08f * size.z, chamferDrop = 0.08f * size.y;
+            float flatEnd = Layout.CellSize * 0.5f + size.z * 0.5f - chamferRun;
             var b = new MeshBuilder();
-            int ribs = Mathf.CeilToInt(reach * 2f / RibLength);
-            float rib = reach * 2f / ribs;
-            for (int i = 0; i < ribs; i++)
+            float y = lid + BandThickness * 0.5f;
+            Box(b, frame, new Vector3(0f, y, 0f), new Vector3(BandWidth, BandThickness, flatEnd * 2f), 0.1f, webbing);
+            for (int e = -1; e <= 1; e += 2)
             {
-                float z = -reach + (i + 0.5f) * rib;
-                float lift = (i & 1) == 0 ? 0f : 0.003f;
-                Box(b, frame, new Vector3(0f, lid + BandThickness * 0.5f + lift, z),
-                    new Vector3(BandWidth, BandThickness, rib), 0.25f, webbing);
+                float x = e * (BandWidth - StitchWidth) * 0.5f;
+                Box(b, frame, new Vector3(x, y + BandThickness * 0.5f + 0.002f, 0f),
+                    new Vector3(StitchWidth, 0.004f, flatEnd * 2f - 0.04f), 0f, stitch);
             }
+            // The ends fold down over the outer lid chamfers, following their slope, and stop on them. The
+            // far end of a pair in one column stays flat: a fold there would poke up past the far lid's
+            // back edge as seen from the camera.
+            float angle = Mathf.Atan2(chamferDrop, chamferRun) * Mathf.Rad2Deg;
+            float fold = Mathf.Sqrt(chamferRun * chamferRun + chamferDrop * chamferDrop) * FoldShare;
+            bool column = Mathf.Abs(axis.z) > 0.5f;
             for (int s = -1; s <= 1; s += 2)
             {
-                float height = lid + BandThickness - bottom;
-                Box(b, frame, new Vector3(0f, bottom + height * 0.5f, s * (reach + BandThickness * 0.5f)),
-                    new Vector3(BandWidth, height, BandThickness), 0f, webbing);
+                if (column && s * axis.z > 0f) continue;
+                var start = new Vector3(0f, y, s * flatEnd);
+                var dir = new Vector3(0f, -Mathf.Sin(angle * Mathf.Deg2Rad), s * Mathf.Cos(angle * Mathf.Deg2Rad));
+                MeshKit.AddBox(b, 0, frame * Matrix4x4.TRS(start + dir * (fold * 0.5f), Quaternion.Euler(s * angle, 0f, 0f),
+                    new Vector3(BandWidth, BandThickness, fold)), 0f, webbing);
             }
 
-            // The buckle: a steel frame with a center bar, sitting on the band over the gap.
-            float top = lid + BandThickness + 0.012f;
-            const float w = 0.17f, l = 0.15f, bar = 0.03f;
-            Box(b, frame, new Vector3(-w * 0.5f + bar * 0.5f, top, 0f), new Vector3(bar, 0.024f, l), 0.2f, steel);
-            Box(b, frame, new Vector3(w * 0.5f - bar * 0.5f, top, 0f), new Vector3(bar, 0.024f, l), 0.2f, steel);
-            Box(b, frame, new Vector3(0f, top, -l * 0.5f + bar * 0.5f), new Vector3(w, 0.024f, bar), 0.2f, steel);
-            Box(b, frame, new Vector3(0f, top, l * 0.5f - bar * 0.5f), new Vector3(w, 0.024f, bar), 0.2f, steel);
-            Box(b, frame, new Vector3(0f, top, 0f), new Vector3(w, 0.02f, bar * 0.8f), 0.2f, steel);
+            // The buckle: a chunky steel frame with a center bar, sitting on the band over the gap.
+            float top = lid + BandThickness + 0.014f;
+            const float w = 0.27f, l = 0.22f, bar = 0.045f, h = 0.03f;
+            Box(b, frame, new Vector3(-w * 0.5f + bar * 0.5f, top, 0f), new Vector3(bar, h, l), 0.25f, steel);
+            Box(b, frame, new Vector3(w * 0.5f - bar * 0.5f, top, 0f), new Vector3(bar, h, l), 0.25f, steel);
+            Box(b, frame, new Vector3(0f, top, -l * 0.5f + bar * 0.5f), new Vector3(w, h, bar), 0.25f, steel);
+            Box(b, frame, new Vector3(0f, top, l * 0.5f - bar * 0.5f), new Vector3(w, h, bar), 0.25f, steel);
+            Box(b, frame, new Vector3(0f, top + 0.004f, 0f), new Vector3(w, h, bar * 0.9f), 0.25f, steel);
 
             meshes[key] = b.ToMesh($"Strap Band {dx},{dy}");
             return meshes[key];
