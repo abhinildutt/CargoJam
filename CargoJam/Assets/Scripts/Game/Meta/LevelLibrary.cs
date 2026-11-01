@@ -8,12 +8,15 @@ namespace CargoJam.Game.Meta
     public sealed class LevelLibrary
     {
         readonly TextAsset[] files;
+        /// <summary>Each file's HARD flag, read the first time it is asked for.</summary>
+        readonly bool?[] hard;
 
         public int Count => files.Length;
 
         LevelLibrary(TextAsset[] files)
         {
             this.files = files;
+            hard = new bool?[files.Length];
         }
 
         public static LevelLibrary Load()
@@ -27,6 +30,13 @@ namespace CargoJam.Game.Meta
         {
             var data = JsonUtility.FromJson<LevelData>(files[index].text);
             return LevelDefinition.Parse(data);
+        }
+
+        /// <summary>Whether a level file is a HARD one, parsed once per file and then cached.</summary>
+        public bool IsHard(int index)
+        {
+            if (!hard[index].HasValue) hard[index] = Get(index).Hard;
+            return hard[index].Value;
         }
 
         public string NameOf(int index) => files[index].name;

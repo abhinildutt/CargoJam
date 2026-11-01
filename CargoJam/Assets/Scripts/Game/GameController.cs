@@ -402,7 +402,7 @@ namespace CargoJam.Game
         }
 
         /// <summary>Whether the level at a progress index is a HARD one (for the home screen badge).</summary>
-        public bool IsHardLevel(int index) => levels.Get(ContentIndex(index)).Hard;
+        public bool IsHardLevel(int index) => levels.IsHard(ContentIndex(index));
 
         // ---- Boosters ---------------------------------------------------------------------------
 
