@@ -62,7 +62,9 @@ namespace CargoJam.Game.Presentation
         const float PulseRate = 9f;
 
         static readonly Mesh[] boxMeshes = new Mesh[6];
+        /// <summary>Ice shells per layer count: tinted with the crate's color, and neutral for a crate still under its tarp.</summary>
         static readonly Mesh[] iceMeshes = new Mesh[MaxIce + 1];
+        static readonly Mesh[] iceMeshesHidden = new Mesh[MaxIce + 1];
         static readonly Dictionary<int, Mesh> expressMeshes = new Dictionary<int, Mesh>();
         static Mesh plainMesh;
         static Mesh mysteryMesh;
@@ -75,6 +77,8 @@ namespace CargoJam.Game.Presentation
         Transform tarpMark;
         Transform padlock;
         Transform keyBadge;
+        /// <summary>The key badge was raised to sit on the ice; it comes back down when the ice shatters.</summary>
+        bool keyOnIce;
         Transform iceCollar;
         MeshFilter iceFilter;
         bool? free;
@@ -206,12 +210,14 @@ namespace CargoJam.Game.Presentation
             if (left > 0)
             {
                 var filter = iceFilter;
-                var mesh = IceMesh(left);
+                // Both variants now, so the swap never builds: a reveal may land in the same batch.
+                var tinted = IceMesh(left, false);
+                var neutral = IceMesh(left, true);
                 tweener.At(at, () =>
                 {
                     if (!this || !filter) return;
                     frostShown = left;
-                    filter.sharedMesh = mesh;
+                    filter.sharedMesh = hidden ? neutral : tinted;
                 });
                 tweener.Punch(collar, Vector3.one, new Vector3(0.1f, 0.35f, 0.1f), at, CrackPunch);
                 return;
@@ -228,6 +234,8 @@ namespace CargoJam.Game.Presentation
                 if (!this) return;
                 frostShown = 0;
                 ApplyMaterial(forceBright: !InYard);
+                if (keyOnIce && keyBadge != null) keyBadge.localPosition -= Vector3.up * KeyIceLift;
+                keyOnIce = false;
             }, () => { if (collar) Destroy(collar.gameObject); });
         }
 
@@ -257,6 +265,10 @@ namespace CargoJam.Game.Presentation
         {
             if (!hidden) return;
             var flip = body.transform;
+            // Its ice takes on the crate's color with the tarp off. Build the tinted shells now (any
+            // layer count a crack could show by then), so the flip itself never builds a mesh.
+            if (iceFilter != null)
+                for (int n = 1; n <= frostShown; n++) IceMesh(n, false);
             tweener.Run(at, 0.3f, t =>
             {
                 if (!this) return;
@@ -266,6 +278,7 @@ namespace CargoJam.Game.Presentation
                     hidden = false;
                     if (tarpMark) Destroy(tarpMark.gameObject);
                     bodyFilter.sharedMesh = BodyMesh();
+                    if (iceFilter != null && frostShown > 0) iceFilter.sharedMesh = IceMesh(frostShown, false);
                     ApplyMaterial();
                     angle -= 180f;
                 }
@@ -329,11 +342,16 @@ namespace CargoJam.Game.Presentation
         {
             frost = frostShown = Mathf.Clamp(layers, 1, MaxIce);
             // The parcel skin's ice and frost columns: batches with the parcels, and casts no shadow.
-            var r = MeshKit.Show("Ice", transform, IceMesh(frostShown), materials.ParcelSkin(Parcel.Color, true), castShadows: false);
+            // A crate still under its tarp gets the neutral shell: the tinted one would give its color away.
+            var r = MeshKit.Show("Ice", transform, IceMesh(frostShown, hidden), materials.ParcelSkin(Parcel.Color, true), castShadows: false);
             iceCollar = r.transform;
             iceFilter = r.GetComponent<MeshFilter>();
             // A key on a frozen crate sits on top of the ice rather than inside it.
-            if (keyBadge != null) keyBadge.localPosition += Vector3.up * (IceFrameHeight(MaxIce) / Layout.ParcelSize.y);
+            if (keyBadge != null)
+            {
+                keyBadge.localPosition += Vector3.up * KeyIceLift;
+                keyOnIce = true;
+            }
             ApplyMaterial();
         }
 
@@ -462,22 +480,27 @@ namespace CargoJam.Game.Presentation
         /// <summary>How high the ice frame on the lid stands at a number of layers (world units).</summary>
         static float IceFrameHeight(int layers) => IceFrameBase + IceFramePerLayer * Mathf.Clamp(layers, 1, MaxIce);
 
+        /// <summary>How far a key badge is raised to sit on the ice, in the parcel's unit-box space.</summary>
+        static float KeyIceLift => IceFrameHeight(MaxIce) / Layout.ParcelSize.y;
+
         /// <summary>
         /// The ice shell, readable from the game camera: a thick collar of clear ice hugging the top of
         /// the box and rising above the lid, so from above it rings the lid in pale cyan while the lid
         /// keeps its color and label; frost down the upper sides; and one ice crystal per layer on the
         /// collar's corners. Each layer makes the collar markedly wider (thin rim, band, thick slab) and
         /// taller, the frost reach further down, and adds a crystal, so 1, 2 and 3 read apart even in
-        /// grayscale. Laid out in world units, then mapped
-        /// into the unit box.
+        /// grayscale. Laid out in world units, then mapped into the unit box. <paramref name="neutral"/>
+        /// draws the frost in clear ice instead of this color's frost tint, for a crate still under its
+        /// tarp (the tint would give its hidden color away).
         /// </summary>
-        static Mesh IceMesh(int layers)
+        static Mesh IceMesh(int layers, bool neutral)
         {
             int n = Mathf.Clamp(layers, 1, MaxIce);
-            if (iceMeshes[n] != null) return iceMeshes[n];
+            var cache = neutral ? iceMeshesHidden : iceMeshes;
+            if (cache[n] != null) return cache[n];
             var size = Layout.ParcelSize;
             var toUnit = Matrix4x4.Scale(new Vector3(1f / size.x, 1f / size.y, 1f / size.z));
-            var frost = new Vector2(MaterialBank.SkinFrostU, 0.5f);
+            var frost = new Vector2(neutral ? MaterialBank.SkinIceU : MaterialBank.SkinFrostU, 0.5f);
             var clear = new Vector2(MaterialBank.SkinIceU, 0.5f);
             var snow = new Vector2(MaterialBank.SkinSnowU, 0.5f);
             var b = new MeshBuilder();
@@ -523,8 +546,8 @@ namespace CargoJam.Game.Presentation
                 MeshKit.AddBox(b, 0, tip, 0f, clear);
             }
 
-            iceMeshes[n] = b.ToMesh($"Ice Shell {n}");
-            return iceMeshes[n];
+            cache[n] = b.ToMesh($"Ice Shell {n}{(neutral ? " neutral" : "")}");
+            return cache[n];
         }
 
         /// <summary>A pointed ice crystal (a tall shard and a short one) standing on <paramref name="foot"/>.</summary>
