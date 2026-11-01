@@ -61,6 +61,9 @@ that every level from about 8 has a real opening puzzle, and that 2-slot HARD le
 1. **Hidden truck order.** The most repeated fairness note: a choice is punished by a truck that
    wasn't shown yet, 5-10 moves later (levels 20, 40, 43, 80, 83). Showing three upcoming trucks,
    or a remaining-trucks count per color, would turn those losses into planning.
+   *Decided 2026-11-01: keep two.* The road keeps showing two trucks after the loading one, and
+   `SmartBot` and `levelgen play` keep grading with that view. Not knowing further ahead stays part
+   of the challenge.
 2. **The back half still turns into cleanup** on many levels once the front is dug. Options: shorter
    levels, a second choke point late (gate or lock), or rules that keep pressure on, such as fewer
    slots late in a level.
