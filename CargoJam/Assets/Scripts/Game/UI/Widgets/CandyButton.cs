@@ -5,13 +5,17 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// The chunky candy button: a rounded pill with a darker bottom edge and a glossy shine. It
-    /// presses down to 0.94 and bounces back on release. Variants and sizes are USS classes
-    /// (cj-btn--primary/secondary/danger/coin/white, cj-btn--big/medium/small/round).
+    /// The game's button (the name predates design v3 and is kept for tools that find buttons by
+    /// type). A flat fill with a faint top hairline: it presses to 0.97 in the variant's -press color
+    /// over 120 ms and settles back on OutQuint over 180 ms, with no overshoot. Variants and sizes are
+    /// USS classes: cj-btn--primary / secondary / quiet / glass, cj-btn--l / m / s / icon / tile /
+    /// close, plus cj-btn--wide (stretch) and cj-btn--raised (elevation underlay).
     /// </summary>
     public sealed class CandyButton : VisualElement
     {
-        const float PressedScale = 0.94f;
+        const float PressedScale = 0.97f;
+        const float PressTime = 0.12f;
+        const float ReleaseTime = 0.18f;
 
         readonly VisualElement content;
         Label label;
@@ -37,10 +41,11 @@ namespace CargoJam.Game.UI
             Ui.AddClasses(this, classes);
             pickingMode = PickingMode.Position;
 
-            Ui.El(this, "cj-btn__shine");
+            Ui.El(this, "cj-btn__shadow");
+            Ui.El(this, "cj-btn__face");
             content = Ui.El(this, "cj-btn__content");
             if (iconKind.HasValue) icon = Ui.Icon(content, iconKind.Value, "cj-btn__icon");
-            if (text != null) label = Ui.Text(content, text, "cj-btn__label cj-txt");
+            if (text != null) label = Ui.Text(content, text, "cj-btn__label");
 
             RegisterCallback<PointerDownEvent>(OnDown);
             RegisterCallback<PointerUpEvent>(OnUp);
@@ -57,7 +62,7 @@ namespace CargoJam.Game.UI
             get => label?.text;
             set
             {
-                if (label == null) label = Ui.Text(content, value, "cj-btn__label cj-txt");
+                if (label == null) label = Ui.Text(content, value, "cj-btn__label");
                 else label.text = value;
             }
         }
@@ -86,7 +91,7 @@ namespace CargoJam.Game.UI
             pointerId = e.pointerId;
             this.CapturePointer(pointerId);
             UiFeedback.Press();
-            ScaleTo(PressedScale, 0.07f, Easing.OutCubic);
+            ScaleTo(PressedScale, PressTime);
             EnableInClassList("cj-btn--pressed", true);
             e.StopPropagation();
         }
@@ -105,21 +110,21 @@ namespace CargoJam.Game.UI
             pressed = false;
             if (this.HasPointerCapture(pointerId)) this.ReleasePointer(pointerId);
             EnableInClassList("cj-btn--pressed", false);
-            ScaleTo(1f, 0.32f, Easing.OutBackStrong);
+            ScaleTo(1f, ReleaseTime);
             if (!click) return;
             if (!Silent && !greyed) UiFeedback.Click();
             Clicked?.Invoke();
         }
 
-        void ScaleTo(float target, float duration, Func<float, float> ease)
+        void ScaleTo(float target, float duration)
         {
             scaleTween?.Cancel();
             float from = currentScale;
             scaleTween = UiTween.Run(duration, t =>
             {
-                currentScale = Mathf.LerpUnclamped(from, target, t);
+                currentScale = Mathf.Lerp(from, target, t);
                 Anim.SetScale(this, currentScale);
-            }, ease);
+            }, Easing.OutQuint);
         }
     }
 }

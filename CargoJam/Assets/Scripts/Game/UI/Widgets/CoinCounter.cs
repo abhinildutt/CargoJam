@@ -3,8 +3,9 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// The coin pill shown over every screen. The number rolls to new values; while frozen it holds
-    /// still so a fly-in can tick it up coin by coin, then it catches up to the real balance.
+    /// The quiet glass coin pill shown over every screen. The number rolls to new values; while
+    /// frozen it holds still so a fly-in can tick it up coin by coin (squashing on each landing),
+    /// then it catches up to the real balance.
     /// </summary>
     public sealed class CoinCounter : VisualElement
     {
@@ -13,14 +14,15 @@ namespace CargoJam.Game.UI
         int shown;
         int target;
         int freezes;
-        UiTween roll;
+        UiTween roll, squash;
 
         public CoinCounter()
         {
             AddToClassList("cj-coins");
+            AddToClassList("cj-glass");
             pickingMode = PickingMode.Position;
             icon = Ui.Icon(this, IconKind.Coin, "cj-coins__icon");
-            label = Ui.Text(this, "0", "cj-coins__label cj-txt");
+            label = Ui.Text(this, "0", "cj-coins__label cj-on-glass");
         }
 
         /// <summary>Where flying coins land.</summary>
@@ -58,6 +60,14 @@ namespace CargoJam.Game.UI
             label.text = Anim.Format(shown);
         }
 
+        /// <summary>A flying coin hit the pill: squash it and bump the number by the coin's worth.</summary>
+        public void Land(int worth)
+        {
+            AddShown(worth);
+            squash?.Cancel();
+            squash = Anim.Squash(this, 0.07f, 0.15f);
+        }
+
         void RollTo(int value, bool animate)
         {
             roll?.Cancel();
@@ -69,7 +79,7 @@ namespace CargoJam.Game.UI
             }
             int from = shown;
             if (value < from) Anim.Shake(this, 8f, 0.3f);
-            else Anim.Punch(icon, 0.25f);
+            else Anim.Punch(icon, 0.12f);
             roll = Anim.CountUp(label, from, value, 0.6f, 0f, "", v => shown = v);
         }
     }

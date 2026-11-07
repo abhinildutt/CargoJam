@@ -5,21 +5,22 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// The in-level HUD: pause, "Level N" (+ HARD) on top, and the booster bar at the bottom. The
-    /// coin counter is global (top layer) and sits at the top bar's right end.
+    /// The in-level HUD (design v3), a glass treatment so the scenery shows through: a pause circle,
+    /// the "Level N" chip (+ HARD tag) on top, and three glass booster discs at the bottom. The coin
+    /// pill is global (top layer) and sits at the top row's right end.
     /// </summary>
     public sealed class LevelHud
     {
-        /// <summary>Top bar height in panel units (the board's viewport starts below it).</summary>
-        public const float TopBarHeight = 170f;
-        /// <summary>Booster bar height in panel units (the board's viewport ends above it).</summary>
-        public const float BottomBarHeight = 290f;
+        /// <summary>Top row height in panel units (the board's viewport starts below it).</summary>
+        public const float TopBarHeight = 150f;
+        /// <summary>Booster row height in panel units (the board's viewport ends above it).</summary>
+        public const float BottomBarHeight = 250f;
 
         readonly UiContext ctx;
         readonly VisualElement topBar;
         readonly VisualElement bottomBar;
         readonly Label levelLabel;
-        readonly VisualElement hardBadge;
+        readonly VisualElement hardTag;
         readonly BoosterButton[] boosters = new BoosterButton[EconomyConfig.BoosterKinds];
         bool visible;
 
@@ -31,21 +32,21 @@ namespace CargoJam.Game.UI
             this.ctx = ctx;
             var safe = Ui.El(ctx.HudLayer, "cj-fill cj-safe cj-hud");
 
-            topBar = Ui.El(safe, "cj-hud__top", true);
+            topBar = Ui.El(safe, "cj-hud__top");
             topBar.style.height = TopBarHeight;
-            var pause = new CandyButton(null, "cj-btn--secondary cj-btn--round-m", IconKind.Pause);
+            var pause = new CandyButton(null, "cj-btn--glass cj-btn--icon cj-hud__pause", IconKind.Pause);
             pause.Clicked += () => PauseClicked?.Invoke();
             topBar.Add(pause);
 
-            var levelPill = Ui.El(topBar, "cj-hud__level");
-            levelLabel = Ui.Text(levelPill, "Level 1", "cj-hud__level-label cj-txt");
-            hardBadge = Ui.El(levelPill, "cj-hard-badge");
-            Ui.Text(hardBadge, "HARD", "cj-hard-badge__label cj-txt");
+            var levelChip = Ui.El(topBar, "cj-chip cj-glass cj-hud__level", true);
+            levelLabel = Ui.Text(levelChip, "Level 1", "cj-chip__label cj-on-glass");
+            hardTag = Ui.El(levelChip, "cj-tag cj-hud__hard");
+            Ui.Text(hardTag, "HARD", "cj-tag__label");
             Ui.El(topBar, "cj-hud__coin-space");
 
             Ui.El(safe, "cj-grow");
 
-            bottomBar = Ui.El(safe, "cj-hud__bottom", true);
+            bottomBar = Ui.El(safe, "cj-hud__bottom");
             bottomBar.style.height = BottomBarHeight;
             foreach (BoosterType b in Enum.GetValues(typeof(BoosterType)))
             {
@@ -63,7 +64,7 @@ namespace CargoJam.Game.UI
         public void SetLevel(int number, bool hard)
         {
             levelLabel.text = $"Level {number}";
-            Ui.Show(hardBadge, hard);
+            Ui.Show(hardTag, hard);
         }
 
         public void Show()
@@ -71,22 +72,22 @@ namespace CargoJam.Game.UI
             if (visible) return;
             visible = true;
             Ui.Show(ctx.HudLayer, true);
-            Anim.SlideIn(topBar, 0f, -TopBarHeight, 0.4f);
-            Anim.SlideIn(bottomBar, 0f, BottomBarHeight, 0.45f, 0.05f);
+            Anim.SlideIn(topBar, 0f, -60f, Anim.Panel);
+            Anim.SlideIn(bottomBar, 0f, 80f, Anim.Panel, 0.04f);
         }
 
         public void Hide()
         {
             if (!visible) return;
             visible = false;
-            Anim.SlideOut(topBar, 0f, -TopBarHeight, 0.22f);
-            Anim.SlideOut(bottomBar, 0f, BottomBarHeight, 0.22f, () =>
+            Anim.SlideOut(topBar, 0f, -60f, Anim.Small);
+            Anim.SlideOut(bottomBar, 0f, 80f, Anim.Small, () =>
             {
                 if (!visible) Ui.Show(ctx.HudLayer, false);
             });
         }
 
-        /// <summary>Re-reads counts, unlocks and usability for every booster.</summary>
+        /// <summary>Re-reads counts (free Undo charges included), unlocks and usability for every booster.</summary>
         public void RefreshBoosters()
         {
             var p = ctx.Progression;
@@ -95,7 +96,8 @@ namespace CargoJam.Game.UI
             {
                 var b = button.Booster;
                 bool armed = b == BoosterType.Crane && c.CraneArmed;
-                button.Refresh(p.IsUnlocked(b), p.BoosterCount(b), c.CanUseBooster(b), armed);
+                bool free = b == BoosterType.Undo && p.FreeUndoCharges > 0;
+                button.Refresh(p.IsUnlocked(b), p.UsableBoosterCount(b), c.CanUseBooster(b), armed, free);
             }
         }
     }

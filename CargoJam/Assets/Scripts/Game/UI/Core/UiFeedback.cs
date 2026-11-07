@@ -22,11 +22,18 @@ namespace CargoJam.Game.UI
             Haptics.Play(Haptic.Nope);
         }
 
-        /// <summary>One coin landing in the counter; the pitch climbs with each coin of a fly-in.</summary>
+        /// <summary>One coin landing in the counter: a tick haptic and a pitch that climbs with each coin.</summary>
         public static void CoinTick(int index)
         {
-            Audio?.Play(Sfx.Click, Mathf.Min(1f + index * 0.06f, 2f), 0.7f);
-            if (index % 3 == 0) Haptics.Play(Haptic.Tick);
+            Audio?.Play(Sfx.Tick, Mathf.Min(1.1f + index * 0.05f, 2f), 0.65f);
+            Haptics.Play(Haptic.Tick);
+        }
+
+        /// <summary>A streak tier went up, or a postcard stamp landed.</summary>
+        public static void Sparkle()
+        {
+            Audio?.Play(Sfx.Sparkle, 1f, 0.7f);
+            Haptics.Play(Haptic.Tick);
         }
 
         public static void Reward()
@@ -35,7 +42,7 @@ namespace CargoJam.Game.UI
             Haptics.Play(Haptic.Win);
         }
 
-        public static void Whoosh() => Audio?.Play(Sfx.Arrive, 1.3f, 0.6f);
+        public static void Whoosh() => Audio?.Play(Sfx.Arrive, 1.3f, 0.4f);
 
         public static void Warning() => Haptics.Play(Haptic.Warning);
     }

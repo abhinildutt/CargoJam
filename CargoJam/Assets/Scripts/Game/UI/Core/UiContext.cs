@@ -14,11 +14,13 @@ namespace CargoJam.Game.UI
         /// <summary>In-level HUD (top bar and booster bar).</summary>
         public VisualElement HudLayer;
         public VisualElement HomeLayer;
+        /// <summary>Full-screen screens over Home (the Journey map).</summary>
+        public VisualElement ScreenLayer;
         /// <summary>Non-blocking overlays: HARD banner, tutorial hand, tips, toasts.</summary>
         public VisualElement OverlayLayer;
         /// <summary>Panels and popups, each with its own scrim.</summary>
         public VisualElement ModalLayer;
-        /// <summary>Above the modals: the coin counter, so rewards can fly into it.</summary>
+        /// <summary>Above the modals: the coin pill, so rewards can fly into it.</summary>
         public VisualElement TopLayer;
         public VisualElement FlyElement;
 

@@ -77,7 +77,9 @@ def make_project(assembly, player=False):
     text = re.sub(r'\s*<Compile Include="[^"]*" />', "", text)
     src = os.path.join(PROJECT, "Assets", "Scripts", assembly)
     glob = f'  <ItemGroup>\n    <Compile Include="{src}/**/*.cs" />\n{extra_script_assemblies(text)}  </ItemGroup>\n'
-    text = text.replace("</Project>", glob + "</Project>")
+    # Insert before the closing tag only: some generators also emit <Project>{guid}</Project> in references.
+    end = text.rindex("</Project>")
+    text = text[:end] + glob + text[end:]
     suffix = ".Player" if player else ""
     if player:
         def strip(m):

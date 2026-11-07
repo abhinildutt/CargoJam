@@ -34,6 +34,10 @@ namespace CargoJam.Game.Feel
         Unlock,
         /// <summary>Combo callout sting (pitched up per tier).</summary>
         Callout,
+        /// <summary>Postcard stamp landing on the arrival card: a soft papery thump.</summary>
+        Stamp,
+        /// <summary>Distant rumble after a storm's lightning flash.</summary>
+        Thunder,
     }
 
     /// <summary>Plays one-shot effects from a small pool of sources so overlapping sounds don't cut each other off.</summary>

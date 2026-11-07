@@ -7,6 +7,7 @@ using CargoJam.Game.Presentation;
 using CargoJam.Meta;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering.Universal;
 
 namespace CargoJam.Game
 {
@@ -27,8 +28,9 @@ namespace CargoJam.Game
         /// <summary>The number players see.</summary>
         public int Number => Index + 1;
 
-        /// <summary>Route theme: a new one every 20 levels.</summary>
-        public int Route => Index / 20;
+        /// <summary>Journey destination (see <see cref="Journey"/>).</summary>
+        public int Stop => Journey.StopFor(Index);
+        public Mood Mood => Journey.MoodFor(Index);
     }
 
     /// <summary>
@@ -46,6 +48,9 @@ namespace CargoJam.Game
         const int LoopStart = 20;
 
         Camera cam;
+        Light sun;
+        WorldEnvironment environment;
+        IMenuLayout menuLayout;
         Tweener tweener;
         Hud debugHud;
         IHudLayout hudLayout;
@@ -66,8 +71,8 @@ namespace CargoJam.Game
         LevelViews views;
         MenuDiorama menu;
 
-        /// <summary>Where the home screen's 3D backdrop sits on screen (0..1 viewport), between its logo and buttons.</summary>
-        static readonly Rect MenuViewport = new Rect(0.02f, 0.31f, 0.96f, 0.27f);
+        /// <summary>Where the home screen's 3D backdrop sits on screen (0..1 viewport) when no <see cref="IMenuLayout"/> says.</summary>
+        static readonly Rect DefaultMenuViewport = new Rect(0.02f, 0.31f, 0.96f, 0.27f);
         bool craneArmed;
         bool movedThisLevel;
 
@@ -126,12 +131,34 @@ namespace CargoJam.Game
 
         public Camera Camera => cam;
         public MaterialBank Materials => materials;
+        public WorldEnvironment Environment => environment;
+
+        /// <summary>Set by the UI: where the home screen wants the menu diorama framed.</summary>
+        public IMenuLayout MenuLayout
+        {
+            get => menuLayout;
+            set
+            {
+                menuLayout = value;
+                lastScreenWidth = -1;
+            }
+        }
+
+        /// <summary>
+        /// Set by the UI: whether the destination arrival reveal should play for a level index (it plays
+        /// once per destination reached, not on every retry). Unset means it always plays on arrivals.
+        /// </summary>
+        public Predicate<int> ShouldRevealArrival { get; set; }
+
+        /// <summary>What the environment showed for the current level or menu.</summary>
+        public EnvironmentInfo EnvironmentShown { get; private set; }
 
         void Awake()
         {
             Application.targetFrameRate = 60;
             cam = Camera.main != null ? Camera.main : CreateCamera();
-            if (FindAnyObjectByType<Light>() == null) CreateLight();
+            sun = FindAnyObjectByType<Light>();
+            if (sun == null) sun = CreateLight();
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
             RenderSettings.ambientLight = new Color(0.62f, 0.62f, 0.66f);
 
@@ -139,6 +166,9 @@ namespace CargoJam.Game
             fx = gameObject.AddComponent<FeelDirector>();
             materials = new MaterialBank(Resources.Load<Material>("Materials/Base"));
             levels = LevelLibrary.Load();
+
+            environment = new GameObject("Environment").AddComponent<WorldEnvironment>();
+            environment.Init(sun, cam, materials);
         }
 
         void Start()
@@ -187,6 +217,9 @@ namespace CargoJam.Game
             if (debugHud != null) debugHud.LevelLabel = $"Level {levelIndex + 1}{(session.Level.Hard ? "  HARD" : "")}";
 
             Scenery.Build(levelRoot, layout, materials);
+            var env = environment.ShowLevel(levelIndex, layout);
+            if (env.Arrival && ShouldRevealArrival != null) env.Arrival = ShouldRevealArrival(levelIndex);
+            EnvironmentShown = env;
             dock = DockView.Create(levelRoot, layout, materials);
             foreach (var p in session.Board.Parcels)
             {
@@ -215,8 +248,10 @@ namespace CargoJam.Game
                 Dock = dock,
                 Parcels = new List<ParcelView>(parcels.Values),
                 Trucks = trucks,
+                Environment = environment,
             };
             float introSeconds = fx?.LevelBuilt(views) ?? 0f;
+            introSeconds += fx?.EnvironmentChanged(env) ?? 0f;
             inputBlockedUntil = Time.time + introSeconds;
 
             ComboChanged?.Invoke(0);
@@ -235,7 +270,10 @@ namespace CargoJam.Game
             ClearLevel();
             levelIndex = Mathf.Max(0, progressIndex);
             menu = MenuDiorama.Create(materials);
-            Theme.Apply(levelIndex, materials, cam);
+            var env = environment.ShowMenu(levelIndex);
+            env.Arrival = false;
+            EnvironmentShown = env;
+            fx?.EnvironmentChanged(env);
             FitCamera();
         }
 
@@ -624,7 +662,12 @@ namespace CargoJam.Game
             float at = lastDeparture + Timing.WinCelebrateDelay;
             var center = layout.ContentBounds.center;
 
+            var lastTruck = trucks.Count > 0 ? trucks[trucks.Count - 1].transform.position : center;
+            fx?.WinSequence(lastDeparture, lastTruck);
             fx?.Win(at, center);
+
+            // The next level opens a new destination: load its models now, while the win plays.
+            if (Journey.IsArrival(levelIndex + 1)) environment.Preload(levelIndex + 1);
             PushCamera(center, 0.07f, at, 0.9f);
             LevelWon?.Invoke(at + Timing.WinOverlayDelay);
         }
@@ -765,7 +808,7 @@ namespace CargoJam.Game
             lastScreenHeight = ScreenInfo.Height;
             if (menu != null)
             {
-                CameraRig.Fit(cam, MenuDiorama.Bounds, MenuViewport);
+                CameraRig.Fit(cam, MenuDiorama.Bounds, menuLayout != null ? menuLayout.MenuViewport : DefaultMenuViewport);
                 return;
             }
             if (layout == null) return;
@@ -782,10 +825,12 @@ namespace CargoJam.Game
             c.backgroundColor = new Color(0.86f, 0.83f, 0.78f);
             c.nearClipPlane = 0.3f;
             c.farClipPlane = 200f;
+            // Bloom, tonemapping and vignette come from the environment's volume (design v3).
+            c.GetUniversalAdditionalCameraData().renderPostProcessing = true;
             return c;
         }
 
-        static void CreateLight()
+        static Light CreateLight()
         {
             var go = new GameObject("Sun");
             go.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
@@ -794,6 +839,7 @@ namespace CargoJam.Game
             light.intensity = 1.15f;
             light.shadows = LightShadows.Soft;
             light.shadowStrength = 0.55f;
+            return light;
         }
     }
 }

@@ -4,83 +4,41 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// The "CARGO JAM" title: chunky outlined letters in the six crate colours, each slightly tilted
-    /// like a stacked crate, riding a gentle wave. Drops in letter by letter when shown.
+    /// The "Cargo Jam" wordmark for the launch splash: the name in display type over a row of six
+    /// parcel-colored tiles (the game's only saturated colors). Rises in once; no idle motion.
     /// </summary>
     public sealed class Logo : VisualElement
     {
-        // Crate colours in ParcelColors order (R B G Y P O), matching the 3D parcels.
-        static readonly Color[] Palette =
-        {
-            new Color(0.93f, 0.27f, 0.27f),
-            new Color(0.24f, 0.52f, 0.96f),
-            new Color(0.30f, 0.78f, 0.36f),
-            new Color(0.98f, 0.80f, 0.20f),
-            new Color(0.64f, 0.38f, 0.92f),
-            new Color(1.00f, 0.56f, 0.16f),
-        };
-
-        static readonly float[] Tilts = { -6f, 4f, -3f, 5f, -4f, 3f, -5f, 4f };
-
-        readonly Label[] letters;
-        UiTween wave;
+        readonly Label word;
+        readonly VisualElement[] tiles = new VisualElement[6];
 
         public Logo()
         {
             AddToClassList("cj-logo");
             pickingMode = PickingMode.Ignore;
-            var top = Ui.El(this, "cj-logo__row");
-            var bottom = Ui.El(this, "cj-logo__row");
-            letters = new Label[8];
-            int n = 0;
-            foreach (char c in "CARGO") letters[n] = MakeLetter(top, c, n++, "cj-logo__letter");
-            foreach (char c in "JAM") letters[n] = MakeLetter(bottom, c, n++, "cj-logo__letter cj-logo__letter--big");
+            word = Ui.Text(this, "Cargo Jam", "cj-logo__word cj-on-glass");
+            var row = Ui.El(this, "cj-logo__tiles");
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                tiles[i] = Ui.El(row, "cj-logo__tile");
+                tiles[i].style.backgroundColor = UiPalette.Parcels[i % UiPalette.Parcels.Length];
+            }
         }
 
-        Label MakeLetter(VisualElement row, char c, int index, string classes)
-        {
-            var label = Ui.Text(row, c.ToString(), classes);
-            label.style.color = Palette[(index * 5 + 1) % Palette.Length];
-            Anim.SetRotate(label, Tilts[index % Tilts.Length]);
-            return label;
-        }
-
-        /// <summary>Letters drop in one by one with a bounce, then the idle wave starts.</summary>
+        /// <summary>The word rises in, then the tiles drop into place one by one.</summary>
         public void PlayIntro()
         {
-            Stop();
-            for (int i = 0; i < letters.Length; i++)
+            Anim.SlideIn(word, 0f, 40f, Anim.Panel);
+            for (int i = 0; i < tiles.Length; i++)
             {
-                var letter = letters[i];
-                float tilt = Tilts[i % Tilts.Length];
-                Anim.SetOpacity(letter, 0f);
-                Anim.SetTranslate(letter, 0f, -160f);
-                UiTween.Run(0.5f, t =>
+                var tile = tiles[i];
+                Anim.SetOpacity(tile, 0f);
+                UiTween.Run(Anim.Small, t =>
                 {
-                    Anim.SetOpacity(letter, Mathf.Clamp01(t * 3f));
-                    Anim.SetTranslate(letter, 0f, -160f * (1f - t));
-                }, Easing.OutBack, 0.05f + i * 0.06f, () => Anim.SetRotate(letter, tilt));
+                    Anim.SetOpacity(tile, t);
+                    Anim.SetTranslate(tile, 0f, Mathf.Lerp(-28f, 0f, t));
+                }, Easing.OutQuint, 0.18f + i * 0.05f);
             }
-            UiTween.Delay(0.6f + letters.Length * 0.06f, StartWave);
-        }
-
-        void StartWave()
-        {
-            wave?.Cancel();
-            wave = UiTween.Loop(time =>
-            {
-                for (int i = 0; i < letters.Length; i++)
-                {
-                    float y = Mathf.Sin(time * 2.4f - i * 0.55f) * 7f;
-                    Anim.SetTranslate(letters[i], 0f, y);
-                }
-            });
-        }
-
-        public void Stop()
-        {
-            wave?.Cancel();
-            wave = null;
         }
     }
 }

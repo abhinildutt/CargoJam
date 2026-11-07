@@ -3,11 +3,10 @@ using UnityEngine.UIElements;
 
 namespace CargoJam.Game.UI
 {
-    /// <summary>A rounded fill bar with a centred "x/y" label; the fill glides between values.</summary>
+    /// <summary>A slim rounded track whose fill glides between values (cj-bar--gold for rewards).</summary>
     public sealed class ProgressBar : VisualElement
     {
         readonly VisualElement fill;
-        readonly Label label;
         float fraction;
         UiTween tween;
 
@@ -17,18 +16,18 @@ namespace CargoJam.Game.UI
             Ui.AddClasses(this, classes);
             pickingMode = PickingMode.Ignore;
             fill = Ui.El(this, "cj-bar__fill");
-            Ui.El(fill, "cj-bar__gloss");
-            label = Ui.Text(this, "", "cj-bar__label cj-txt");
             Apply(0f);
         }
 
-        public Label Label => label;
+        public float Fraction => fraction;
 
-        /// <summary>Sets progress as value/max and the label text "value/max".</summary>
-        public void Set(int value, int max, bool animate, float delay = 0f, float duration = 0.6f)
+        /// <summary>Sets progress as value/max.</summary>
+        public void Set(int value, int max, bool animate, float delay = 0f, float duration = 0.6f) =>
+            SetFraction(max > 0 ? value / (float)max : 0f, animate, delay, duration);
+
+        public void SetFraction(float to, bool animate, float delay = 0f, float duration = 0.6f)
         {
-            float to = max > 0 ? Mathf.Clamp01(value / (float)max) : 0f;
-            label.text = $"{value}/{max}";
+            to = Mathf.Clamp01(to);
             tween?.Cancel();
             if (!animate)
             {
@@ -36,9 +35,11 @@ namespace CargoJam.Game.UI
                 return;
             }
             float from = fraction;
-            tween = UiTween.Run(duration, t => Apply(Mathf.Lerp(from, to, t)), Easing.OutCubic, delay,
-                () => { if (to > from) Anim.Punch(this, 0.06f); });
+            tween = UiTween.Run(duration, t => Apply(Mathf.Lerp(from, to, t)), Easing.OutQuint, delay);
         }
+
+        /// <summary>Jumps an in-flight fill to its end.</summary>
+        public void Finish() => tween?.Skip();
 
         void Apply(float f)
         {

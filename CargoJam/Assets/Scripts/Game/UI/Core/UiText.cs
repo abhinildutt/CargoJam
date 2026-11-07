@@ -2,33 +2,20 @@ using CargoJam.Meta;
 
 namespace CargoJam.Game.UI
 {
-    /// <summary>Player-facing names and copy for boosters and routes.</summary>
+    /// <summary>
+    /// Player-facing copy. Design v3 copy rules: sentence case, no exclamation marks on routine
+    /// labels (one is fine on a genuine celebration), neutral wording, no guilt.
+    /// Destination facts come from <see cref="Journey"/>; this only words them.
+    /// </summary>
     public static class UiText
     {
-        static readonly string[] Themes = { "Harbor", "Desert", "Snow", "Night" };
-
-        public const int LevelsPerRoute = 20;
-
-        /// <summary>Theme name of a 0-based route (cycles every four routes).</summary>
-        public static string Theme(int route) => Themes[((route % Themes.Length) + Themes.Length) % Themes.Length];
-
-        /// <summary>"Route 1 · Harbor" for a 0-based level index.</summary>
-        public static string RouteName(int levelIndex)
-        {
-            int route = levelIndex / LevelsPerRoute;
-            return $"Route {route + 1} · {Theme(route)}";
-        }
-
-        /// <summary>1-based position inside the route, e.g. 7 for "7/20".</summary>
-        public static int RouteStep(int levelIndex) => levelIndex % LevelsPerRoute + 1;
-
         public static string BoosterName(BoosterType booster)
         {
             switch (booster)
             {
                 case BoosterType.Undo: return "Undo";
                 case BoosterType.Crane: return "Crane";
-                default: return "Extra Slot";
+                default: return "Extra slot";
             }
         }
 
@@ -52,8 +39,40 @@ namespace CargoJam.Game.UI
             }
         }
 
-        public static string StreakLoss(int streak) => $"You'll lose your {streak}-win streak!";
+        /// <summary>"×1.5", "×2", "×2.5".</summary>
+        public static string Multiplier(float m)
+        {
+            float r = (float)System.Math.Round(m * 10f) / 10f;
+            return "×" + r.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+        }
 
-        public static string Multiplier(float m) => m >= 1.99f ? "x2" : m >= 1.49f ? "x1.5" : "x1";
+        /// <summary>"Destination 2 of 6 · Golden hour".</summary>
+        public static string StopCaption(int levelIndex) =>
+            $"Destination {Journey.StopFor(levelIndex) + 1} of {Journey.StopCount} · {Journey.MoodName(Journey.MoodFor(levelIndex))}";
+
+        /// <summary>"3 deliveries to Metro City" for the level about to be played.</summary>
+        public static string DeliveriesTo(int levelIndex) =>
+            Deliveries(Journey.LevelsToNextStop(levelIndex), Journey.NextStop(levelIndex));
+
+        /// <summary>"3 deliveries to Metro City", "1 delivery to Metro City".</summary>
+        public static string Deliveries(int count, int stop) =>
+            $"{count} {(count == 1 ? "delivery" : "deliveries")} to {Journey.NameOf(stop)}";
+
+        public static string ParcelsToGo(int n) => n == 1 ? "1 parcel to go" : $"{n} parcels to go";
+
+        public static string WinsInARow(int n) => n == 1 ? "1 win in a row" : $"{n} wins in a row";
+
+        /// <summary>The neutral line shown when giving up now would drop a streak tier, or null.</summary>
+        public static string StreakDropWarning(Progression progression) =>
+            progression != null && progression.GiveUpDropsTier
+                ? "Streak will drop to " + Multiplier(progression.MultiplierAfterGiveUp)
+                : null;
+
+        /// <summary>The first 1-based level number of a stop in the lap that contains <paramref name="levelIndex"/>.</summary>
+        public static int FirstLevelOf(int stop, int levelIndex)
+        {
+            int lap = Journey.LegFor(levelIndex) / Journey.StopCount;
+            return (lap * Journey.StopCount + stop) * Journey.LevelsPerStop + 1;
+        }
     }
 }

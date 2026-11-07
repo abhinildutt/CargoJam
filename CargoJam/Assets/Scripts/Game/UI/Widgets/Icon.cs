@@ -30,16 +30,21 @@ namespace CargoJam.Game.UI
         Star,
         Rays,
         Play,
+        Back,
+        ChevronRight,
+        Truck,
+        Map,
     }
 
     /// <summary>
     /// A crisp vector icon drawn with Painter2D (no textures). Single-colour icons use
-    /// <see cref="Tint"/>; coin, flame, chest, gift, star and hand carry their own palette.
+    /// <see cref="Tint"/> (white by default; set ink on light surfaces); coin, flame, chest, gift,
+    /// star, truck and hand carry their own palette.
     /// </summary>
     public sealed class Icon : VisualElement
     {
         IconKind kind;
-        Color tint = Color.white;
+        Color tint = UiPalette.OnGlass;
 
         public Icon(IconKind kind)
         {

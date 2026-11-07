@@ -7,7 +7,7 @@ namespace CargoJam.Game.UI
     /// <summary>An on/off pill switch with a sliding knob.</summary>
     public sealed class ToggleSwitch : VisualElement
     {
-        const float Travel = 70f;
+        const float Travel = 64f;
 
         readonly VisualElement knob;
         bool value;
@@ -47,11 +47,11 @@ namespace CargoJam.Game.UI
                 Anim.SetTranslate(knob, to, 0f);
                 return;
             }
-            tween = UiTween.Run(0.25f, t =>
+            tween = UiTween.Run(Anim.Small, t =>
             {
                 knobX = Mathf.LerpUnclamped(from, to, t);
                 Anim.SetTranslate(knob, knobX, 0f);
-            }, Easing.OutBack);
+            }, Easing.OutQuint);
         }
     }
 }
