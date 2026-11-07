@@ -38,12 +38,6 @@ namespace CargoJam.Game.UI
         public static readonly Color GiftWrap = Danger;
         public static readonly Color GiftWrapDark = Hex(0xB4403C);
 
-        /// <summary>The parcel colors in ParcelColors order (R B G Y P O), for the wordmark.</summary>
-        public static readonly Color[] Parcels =
-        {
-            Hex(0xE5544A), Hex(0x3F7FE6), Hex(0x3DB36B), Hex(0xF2C230), Hex(0x8E5BD6), Hex(0xF08A3C),
-        };
-
         /// <summary>Spark colors for reward bursts: golds and whites, no rainbow.</summary>
         public static readonly Color[] Sparks = { Gold, Color.white, GoldLight, GoldDeep };
 
