@@ -22,6 +22,10 @@ UNITY = "/Applications/Unity/Hub/Editor/6000.6.7f1/Unity.app/Contents"
 DOTNET = UNITY + "/Resources/Scripting/DotNetSdk/dotnet"
 NUNIT = UNITY + "/Resources/PackageManager/BuiltInPackages/com.unity.ext.nunit/net472/unity-custom/nunit.framework.dll"
 EDITOR_DEFINES = {"UNITY_EDITOR", "UNITY_EDITOR_64", "UNITY_EDITOR_OSX", "UNITY_INCLUDE_TESTS"}
+# The editor's IDE projects carry the active build target's defines (often macOS standalone); the
+# player build swaps those for iOS so `#if UNITY_IOS && !UNITY_EDITOR` code is compiled too.
+STANDALONE_DEFINES = {"UNITY_STANDALONE", "UNITY_STANDALONE_OSX", "PLATFORM_STANDALONE", "PLATFORM_STANDALONE_OSX"}
+IOS_DEFINES = ["UNITY_IOS", "PLATFORM_IOS"]
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -83,7 +87,8 @@ def make_project(assembly, player=False):
     suffix = ".Player" if player else ""
     if player:
         def strip(m):
-            keep = [d for d in m.group(1).split(";") if d not in EDITOR_DEFINES]
+            keep = [d for d in m.group(1).split(";") if d not in EDITOR_DEFINES and d not in STANDALONE_DEFINES]
+            keep += [d for d in IOS_DEFINES if d not in keep]
             return "<DefineConstants>" + ";".join(keep) + "</DefineConstants>"
         text = re.sub(r"<DefineConstants>([^<]*)</DefineConstants>", strip, text)
         text = text.replace('<ProjectReference Include="CargoJam.Core.csproj" />',

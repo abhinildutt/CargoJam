@@ -58,7 +58,15 @@ namespace CargoJam.Game.Meta
     /// <item><c>daily_claimed</c> [day, coins, booster, login_streak]</item>
     /// <item><c>destination_reached</c> [stop, leg]: a win arrived at a new destination (logged by <see cref="Observe"/>).</item>
     /// <item><c>streak_tier_changed</c> [from, to]: a win or give-up changed the streak tier (logged by <see cref="Observe"/>).</item>
+    /// <item><c>coins_source</c> / <c>coins_sink</c> [reason, amount, coins_after]: every change to the balance
+    /// (logged by <see cref="Observe"/>; reasons are <see cref="CoinReason"/> words).</item>
+    /// <item><c>review_requested</c> [level, hard, ask]</item>
+    /// <item><c>notify_permission_asked</c> [level] and <c>notify_scheduled</c> [count]</item>
     /// </list>
+    /// Reserved for the ads and IAP integration (docs/monetization-and-growth-plan.md, section 7):
+    /// <c>ad_offer_shown</c>, <c>ad_rewarded_started</c>, <c>ad_rewarded_completed</c> [placement],
+    /// <c>ad_interstitial_shown</c> [level], <c>ad_revenue</c> [network, placement, value],
+    /// <c>iap_offer_shown</c> [sku, placement], <c>iap_purchased</c> [sku, price, currency] and <c>store_opened</c> [from].
     /// </summary>
     public static class Analytics
     {
@@ -74,6 +82,20 @@ namespace CargoJam.Game.Meta
         public const string DailyClaimed = "daily_claimed";
         public const string DestinationReached = "destination_reached";
         public const string StreakTierChanged = "streak_tier_changed";
+        public const string CoinsSource = "coins_source";
+        public const string CoinsSink = "coins_sink";
+        public const string ReviewRequested = "review_requested";
+        public const string NotifyPermissionAsked = "notify_permission_asked";
+        public const string NotifyScheduled = "notify_scheduled";
+
+        public const string AdOfferShown = "ad_offer_shown";
+        public const string AdRewardedStarted = "ad_rewarded_started";
+        public const string AdRewardedCompleted = "ad_rewarded_completed";
+        public const string AdInterstitialShown = "ad_interstitial_shown";
+        public const string AdRevenue = "ad_revenue";
+        public const string IapOfferShown = "iap_offer_shown";
+        public const string IapPurchased = "iap_purchased";
+        public const string StoreOpened = "store_opened";
 
         /// <summary>How many recent events are kept in memory.</summary>
         public const int Capacity = 200;
@@ -144,20 +166,25 @@ namespace CargoJam.Game.Meta
         }
 
         /// <summary>
-        /// Logs the events <paramref name="progression"/> raises itself: <c>destination_reached</c>
-        /// and <c>streak_tier_changed</c>. Returns the unsubscribe action.
+        /// Logs the events <paramref name="progression"/> raises itself: <c>destination_reached</c>,
+        /// <c>streak_tier_changed</c>, <c>coins_source</c> and <c>coins_sink</c>. Returns the unsubscribe action.
         /// </summary>
         public static Action Observe(Progression progression)
         {
             if (progression == null) throw new ArgumentNullException(nameof(progression));
             Action<int, int> reached = (stop, leg) => Log(DestinationReached, ("stop", stop), ("leg", leg));
             Action<int, int> tier = (from, to) => Log(StreakTierChanged, ("from", from), ("to", to));
+            Action<int, string> coins = (amount, reason) =>
+                Log(amount > 0 ? CoinsSource : CoinsSink,
+                    ("reason", reason), ("amount", Math.Abs(amount)), ("coins_after", progression.Coins));
             progression.DestinationReached += reached;
             progression.StreakTierChanged += tier;
+            progression.CoinsMoved += coins;
             return () =>
             {
                 progression.DestinationReached -= reached;
                 progression.StreakTierChanged -= tier;
+                progression.CoinsMoved -= coins;
             };
         }
 
