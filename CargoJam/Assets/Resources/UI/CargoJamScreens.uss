@@ -2,26 +2,28 @@
 
 /* ---- Wordmark (title screen) -------------------------------------------------------------- */
 
+/* Sizes and the truck's spot come from tools/brand/make_logo.py (lockup aspect 1.9373). */
 .cj-logo {
-    align-items: center;
+    width: 640px;
+    height: 330px;
 }
 
-.cj-logo__word {
-    font-size: 150px;
-    -unity-font-definition: resource("UI/Fonts/Nunito-Black SDF");
-    letter-spacing: -2px;
+.cj-logo__letters {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-image: resource("UI/Brand/WordmarkLetters");
 }
 
-.cj-logo__tiles {
-    flex-direction: row;
-    margin-top: 28px;
-}
-
-.cj-logo__tile {
-    width: 56px;
-    height: 56px;
-    margin: 0 10px;
-    border-radius: 14px;
+.cj-logo__truck {
+    position: absolute;
+    left: 20.31%;
+    top: 46.80%;
+    width: 59.39%;
+    height: 45.89%;
+    background-image: resource("UI/Brand/WordmarkTruck");
 }
 
 /* ---- Home --------------------------------------------------------------------------------- */

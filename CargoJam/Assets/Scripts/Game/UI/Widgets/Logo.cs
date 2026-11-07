@@ -4,41 +4,34 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// The "Cargo Jam" wordmark for the launch title: the name in display type over a row of six
-    /// parcel-colored tiles (the game's only saturated colors). Rises in once; no idle motion.
+    /// The "Cargo Jam" wordmark for the launch title: the name in white over a road, and a red
+    /// truck carrying three parcels. Letters and truck are separate images (tools/brand/make_logo.py)
+    /// so the truck can drive in. Plays once; no idle motion.
     /// </summary>
     public sealed class Logo : VisualElement
     {
-        readonly Label word;
-        readonly VisualElement[] tiles = new VisualElement[6];
+        /// <summary>How far left of its spot the truck starts, off screen (panel units).</summary>
+        const float TruckRunUp = 900f;
+        const float TruckDrive = 0.6f;
+
+        readonly VisualElement letters;
+        readonly VisualElement truck;
 
         public Logo()
         {
             AddToClassList("cj-logo");
             pickingMode = PickingMode.Ignore;
-            word = Ui.Text(this, "Cargo Jam", "cj-logo__word cj-on-glass");
-            var row = Ui.El(this, "cj-logo__tiles");
-            for (int i = 0; i < tiles.Length; i++)
-            {
-                tiles[i] = Ui.El(row, "cj-logo__tile");
-                tiles[i].style.backgroundColor = UiPalette.Parcels[i % UiPalette.Parcels.Length];
-            }
+            letters = Ui.El(this, "cj-logo__letters");
+            truck = Ui.El(this, "cj-logo__truck");
         }
 
-        /// <summary>The word rises in, then the tiles drop into place one by one.</summary>
+        /// <summary>The name and road rise in, then the truck drives in from the left and stops.</summary>
         public void PlayIntro()
         {
-            Anim.SlideIn(word, 0f, 40f, Anim.Panel);
-            for (int i = 0; i < tiles.Length; i++)
-            {
-                var tile = tiles[i];
-                Anim.SetOpacity(tile, 0f);
-                UiTween.Run(Anim.Small, t =>
-                {
-                    Anim.SetOpacity(tile, t);
-                    Anim.SetTranslate(tile, 0f, Mathf.Lerp(-28f, 0f, t));
-                }, Easing.OutQuint, 0.18f + i * 0.05f);
-            }
+            Anim.SlideIn(letters, 0f, 40f, Anim.Panel);
+            Anim.SetTranslate(truck, -TruckRunUp, 0f);
+            UiTween.Run(TruckDrive, t => Anim.SetTranslate(truck, Mathf.Lerp(-TruckRunUp, 0f, t), 0f),
+                Easing.OutQuint, 0.18f);
         }
     }
 }
