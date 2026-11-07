@@ -1,10 +1,12 @@
+using System;
 using System.Collections.Generic;
 
 namespace CargoJam.Core
 {
     /// <summary>
     /// The parcel yard. A parcel is free when a path of empty cells (4-way) connects it to row 0,
-    /// or when it already sits in row 0.
+    /// or when it already sits in row 0. Obstacles (bollards, closed gates) hold no parcel and are
+    /// walls: paths never cross them, and one in row 0 is not a way out.
     /// </summary>
     public sealed class Board
     {
@@ -12,6 +14,8 @@ namespace CargoJam.Core
         static readonly int[] DY = { -1, 0, 0, 1 };
 
         readonly Parcel[] cells;
+        // Bollards and closed gates. Never hold a parcel, so Get is null there and Count skips them.
+        readonly bool[] obstacles;
 
         public int Width { get; }
         public int Height { get; }
@@ -22,6 +26,7 @@ namespace CargoJam.Core
             Width = width;
             Height = height;
             cells = new Parcel[width * height];
+            obstacles = new bool[width * height];
         }
 
         public bool InBounds(Cell c) => c.X >= 0 && c.X < Width && c.Y >= 0 && c.Y < Height;
@@ -36,6 +41,14 @@ namespace CargoJam.Core
                     if (p != null) yield return p;
             }
         }
+
+        /// <summary>True when the cell is a bollard or a closed gate: never a parcel, never part of a path.</summary>
+        public bool IsObstacle(Cell c) => InBounds(c) && obstacles[Index(c)];
+
+        internal void SetObstacle(Cell c, bool value) => obstacles[Index(c)] = value;
+
+        /// <summary>Copies another board's obstacles (same size), for session clones.</summary>
+        internal void CopyObstaclesFrom(Board source) => Array.Copy(source.obstacles, obstacles, obstacles.Length);
 
         internal void Place(Parcel parcel)
         {
@@ -75,7 +88,7 @@ namespace CargoJam.Core
                     var n = new Cell(c.X + DX[d], c.Y + DY[d]);
                     if (!InBounds(n)) continue;
                     int ni = Index(n);
-                    if (parent[ni] != -2 || cells[ni] != null) continue;
+                    if (parent[ni] != -2 || cells[ni] != null || obstacles[ni]) continue;
                     parent[ni] = Index(c);
                     if (n.Y == 0) return BuildPath(parent, ni);
                     queue.Enqueue(n);
@@ -95,7 +108,7 @@ namespace CargoJam.Core
             for (int x = 0; x < Width; x++)
             {
                 var c = new Cell(x, 0);
-                if (cells[Index(c)] != null) continue;
+                if (cells[Index(c)] != null || obstacles[Index(c)]) continue;
                 reachable[Index(c)] = true;
                 queue.Enqueue(c);
             }
@@ -108,7 +121,7 @@ namespace CargoJam.Core
                     var n = new Cell(c.X + DX[d], c.Y + DY[d]);
                     if (!InBounds(n)) continue;
                     int ni = Index(n);
-                    if (reachable[ni] || cells[ni] != null) continue;
+                    if (reachable[ni] || cells[ni] != null || obstacles[ni]) continue;
                     reachable[ni] = true;
                     queue.Enqueue(n);
                 }

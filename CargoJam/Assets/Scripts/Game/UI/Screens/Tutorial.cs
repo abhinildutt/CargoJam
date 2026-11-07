@@ -1,3 +1,4 @@
+using CargoJam.Core;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -5,13 +6,16 @@ namespace CargoJam.Game.UI
 {
     /// <summary>
     /// First-session teaching: on level 1 a hand bobs over a good parcel (following it every frame)
-    /// until the first move; levels 2 and 3 show a one-line tip.
+    /// until the first move; levels 2 and 3 show a one-line tip. When a cargo kind debuts, the hand
+    /// points at what to do with it (<see cref="BeginCargo"/>).
     /// </summary>
     public sealed class Tutorial
     {
         const float HandSize = 150f;
         // Where the fingertip is inside the hand icon (fractions of its size).
         const float TipX = 0.41f, TipY = 0.04f;
+        /// <summary>How far past a lid's edge the fingertip rests when pointing at cargo (panel units).</summary>
+        const float EdgeGap = 2f;
 
         static readonly string[] Tips =
         {
@@ -26,6 +30,8 @@ namespace CargoJam.Game.UI
         readonly Label tipLabel;
         bool handActive;
         bool handShown;
+        /// <summary>The cargo kind the hand is teaching, or null for the level 1 hint.</summary>
+        CargoKind? cargoKind;
         bool tipActive;
         float handFrom;
         UiTween tipTween;
@@ -64,6 +70,20 @@ namespace CargoJam.Game.UI
             }
         }
 
+        /// <summary>
+        /// Points the hand at what teaches a cargo kind on its debut level (the controller picks the cell,
+        /// see <c>GameController.TryGetCargoHintCell</c>) until the first move. Bollards have nothing to
+        /// tap, so they get no hand.
+        /// </summary>
+        public void BeginCargo(CargoKind kind)
+        {
+            Stop();
+            if (kind == CargoKind.Bollard) return;
+            cargoKind = kind;
+            handActive = true;
+            handFrom = Time.unscaledTime + 0.4f;
+        }
+
         /// <summary>The board changed (a move happened): the hand's job is done; tips linger briefly.</summary>
         public void OnMove()
         {
@@ -71,6 +91,7 @@ namespace CargoJam.Game.UI
             {
                 handActive = false;
                 handShown = false;
+                cargoKind = null;
                 Anim.Fade(hand, 1f, 0f, 0.2f, 0f, () => { if (!handActive) Ui.Show(hand, false); });
             }
             if (tipActive)
@@ -93,32 +114,56 @@ namespace CargoJam.Game.UI
         {
             handActive = false;
             handShown = false;
+            cargoKind = null;
             tipActive = false;
             tipTween?.Cancel();
             Ui.Show(hand, false);
             Ui.Show(tip, false);
         }
 
+        bool TryGetTarget(GameController c, out Cell cell) =>
+            cargoKind.HasValue ? c.TryGetCargoHintCell(cargoKind.Value, out cell) : c.TryGetHintCell(out cell);
+
         /// <summary>Follows the hint parcel; call every frame.</summary>
         public void Update()
         {
             if (!handActive) return;
             var c = ctx.Controller;
-            if (Time.unscaledTime < handFrom || !c.InputEnabled || !c.TryGetHintCell(out var cell))
+            Cell cell = default;
+            if (Time.unscaledTime < handFrom || !c.InputEnabled || !TryGetTarget(c, out cell))
             {
                 SetHandShown(false);
                 return;
             }
             SetHandShown(true);
-            var p = ctx.Space.ScreenToPanel(c.CellToScreen(cell));
             float time = Time.unscaledTime - handFrom;
             // A calm tap motion: ease down onto the parcel, rest, lift away.
             float cycle = (time / 1.3f) % 1f;
             float lift = cycle < 0.35f ? 1f - Easing.OutQuint(cycle / 0.35f)
                 : cycle < 0.55f ? 0f
                 : Easing.InOutSine((cycle - 0.55f) / 0.45f);
-            Anim.SetTranslate(hand, p.x - HandSize * TipX, p.y - HandSize * TipY + 10f + lift * 30f);
-            Anim.SetScale(hand, 1f - (1f - lift) * 0.05f);
+            float scale = 1f - (1f - lift) * 0.05f;
+            if (!cargoKind.HasValue)
+            {
+                var p = ctx.Space.ScreenToPanel(c.CellToScreen(cell));
+                Anim.SetTranslate(hand, p.x - HandSize * TipX, p.y - HandSize * TipY + 10f + lift * 30f);
+                Anim.SetScale(hand, scale);
+                return;
+            }
+            // Teaching cargo, the hand must not hide what it teaches: it touches the lid's front edge and
+            // hangs below it, or, when that would cover the lesson, reaches down (mirrored) from above.
+            bool above = c.CargoHintFromAbove;
+            var edge = ctx.Space.ScreenToPanel(c.LidEdgeToScreen(cell, !above));
+            if (above)
+            {
+                Anim.SetTranslate(hand, edge.x - HandSize * TipX, edge.y - HandSize * (1f - TipY) - EdgeGap - lift * 30f);
+                Anim.SetScale(hand, scale, -scale);
+            }
+            else
+            {
+                Anim.SetTranslate(hand, edge.x - HandSize * TipX, edge.y - HandSize * TipY + EdgeGap + lift * 30f);
+                Anim.SetScale(hand, scale);
+            }
         }
     }
 }

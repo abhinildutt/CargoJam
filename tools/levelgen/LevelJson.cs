@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -22,25 +23,31 @@ namespace CargoJam.LevelGen
             for (int i = 0; i < d.rows.Length; i++)
                 sb.Append("    \"").Append(d.rows[i]).Append(i + 1 < d.rows.Length ? "\",\n" : "\"\n");
             sb.Append("  ]");
-            if (d.locks != null && d.locks.Length > 0)
-            {
-                sb.Append(",\n  \"locks\": [\n");
-                for (int i = 0; i < d.locks.Length; i++)
-                {
-                    var l = d.locks[i];
-                    sb.Append($"    {{ \"x\": {l.x}, \"y\": {l.y}, \"keyX\": {l.keyX}, \"keyY\": {l.keyY} }}");
-                    sb.Append(i + 1 < d.locks.Length ? ",\n" : "\n");
-                }
-                sb.Append("  ]");
-            }
+            AppendArray(sb, "locks", d.locks, l => $"{{ \"x\": {l.x}, \"y\": {l.y}, \"keyX\": {l.keyX}, \"keyY\": {l.keyY} }}");
+            AppendArray(sb, "frost", d.frost, f => $"{{ \"x\": {f.x}, \"y\": {f.y}, \"layers\": {f.layers} }}");
+            AppendArray(sb, "express", d.express, e => $"{{ \"x\": {e.x}, \"y\": {e.y}, \"taps\": {e.taps} }}");
+            AppendArray(sb, "straps", d.straps, s => $"{{ \"x\": {s.x}, \"y\": {s.y}, \"x2\": {s.x2}, \"y2\": {s.y2} }}");
+            AppendArray(sb, "gates", d.gates, g => $"{{ \"x\": {g.x}, \"y\": {g.y}, \"color\": \"{g.color}\", \"count\": {g.count} }}");
             sb.Append("\n}\n");
             return sb.ToString();
         }
 
-        public static LevelData Read(string path)
+        /// <summary>Appends <c>,"name": [ ... ]</c> with one entry per line; nothing when the array is empty.</summary>
+        static void AppendArray<T>(StringBuilder sb, string name, T[] items, Func<T, string> entry)
+        {
+            if (items == null || items.Length == 0) return;
+            sb.Append(",\n  \"").Append(name).Append("\": [\n");
+            for (int i = 0; i < items.Length; i++)
+                sb.Append("    ").Append(entry(items[i])).Append(i + 1 < items.Length ? ",\n" : "\n");
+            sb.Append("  ]");
+        }
+
+        public static LevelData Read(string path) => Parse(File.ReadAllText(path));
+
+        public static LevelData Parse(string json)
         {
             var options = new JsonSerializerOptions { IncludeFields = true };
-            return JsonSerializer.Deserialize<LevelData>(File.ReadAllText(path), options);
+            return JsonSerializer.Deserialize<LevelData>(json, options);
         }
     }
 }

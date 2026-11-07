@@ -54,5 +54,53 @@ namespace CargoJam.Core.Tests
             Assert.That(free.Select(p => p.Cell), Has.No.Member(new Cell(3, 2)), "(3,1) is empty but sealed in");
             Assert.That(free.Select(p => p.Cell), Has.No.Member(new Cell(2, 1)));
         }
+
+        // ---- Obstacles --------------------------------------------------------------------------
+
+        [Test]
+        public void BollardHoldsNoParcelAndPathsGoAroundIt()
+        {
+            var s = TestLevels.Session("R", 5, 3,
+                "#.R",
+                "R.R");
+            var bollard = new Cell(0, 0);
+            Assert.That(s.Board.IsObstacle(bollard), Is.True);
+            Assert.That(s.Board.Get(bollard), Is.Null);
+            Assert.That(s.Board.Count, Is.EqualTo(3), "Count counts parcels only");
+            Assert.That(s.Board.FindExitPath(new Cell(0, 1)),
+                Is.EqualTo(new List<Cell> { new Cell(0, 1), new Cell(1, 1), new Cell(1, 0) }));
+        }
+
+        [Test]
+        public void BollardsAreWalls()
+        {
+            // (0,1) reaches only (1,1), which is walled off by the bollard at (1,0).
+            var s = TestLevels.Session("R", 5, 3,
+                "##R",
+                "R.R");
+            Assert.That(s.Board.FindExitPath(new Cell(0, 1)), Is.Null);
+            Assert.That(s.Board.IsFree(new Cell(0, 1)), Is.False);
+
+            var free = new List<Parcel>();
+            s.Board.GetFreeParcels(free);
+            Assert.That(free.Select(p => p.Cell), Is.EqualTo(new[] { new Cell(2, 0) }));
+        }
+
+        [Test]
+        public void ObstacleInRowZeroIsNoWayOut()
+        {
+            // (0,1) sits right under a bollard in row 0; that is not an exit.
+            var s = TestLevels.Session("R", 5, 2,
+                "#R",
+                "R.");
+            var free = new List<Parcel>();
+            s.Board.GetFreeParcels(free);
+            Assert.That(free.Select(p => p.Cell), Is.EqualTo(new[] { new Cell(1, 0) }));
+            Assert.That(s.Board.FindExitPath(new Cell(0, 1)), Is.Null);
+
+            s.Tap(new Cell(1, 0));
+            Assert.That(s.Board.FindExitPath(new Cell(0, 1)),
+                Is.EqualTo(new List<Cell> { new Cell(0, 1), new Cell(1, 1), new Cell(1, 0) }));
+        }
     }
 }

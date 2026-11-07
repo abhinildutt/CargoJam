@@ -17,13 +17,18 @@ namespace CargoJam.Game
         public readonly int Index;
         public readonly bool Hard;
         public readonly int ParcelCount;
+        /// <summary>The level's <see cref="LevelDefinition.CargoMask"/>: bit (1 &lt;&lt; (int)kind) per <see cref="CargoKind"/> used.</summary>
+        public readonly int CargoMask;
 
-        public LevelStartInfo(int index, bool hard, int parcelCount)
+        public LevelStartInfo(int index, bool hard, int parcelCount, int cargoMask = 0)
         {
             Index = index;
             Hard = hard;
             ParcelCount = parcelCount;
+            CargoMask = cargoMask;
         }
+
+        public bool Uses(CargoKind kind) => (CargoMask & (1 << (int)kind)) != 0;
 
         /// <summary>The number players see.</summary>
         public int Number => Index + 1;
@@ -44,8 +49,13 @@ namespace CargoJam.Game
     public sealed class GameController : MonoBehaviour
     {
         const float HitRadius = 0.75f;
-        /// <summary>Levels before this index are never repeated when the content loops (tutorials, ramp).</summary>
-        const int LoopStart = 20;
+        /// <summary>
+        /// Levels before this index are never repeated when the content loops (tutorials, cargo debuts,
+        /// ramp). Used once there are more level files than this (the 100-level set loops 61–100).
+        /// </summary>
+        const int LoopStart = 60;
+        /// <summary>Where the loop starts with <see cref="LoopStart"/> level files or fewer (the 60-level set loops 21–60).</summary>
+        const int ShortLoopStart = 20;
 
         Camera cam;
         Light sun;
@@ -65,11 +75,39 @@ namespace CargoJam.Game
         DockView dock;
         readonly Dictionary<int, ParcelView> parcels = new Dictionary<int, ParcelView>();
         readonly List<TruckView> trucks = new List<TruckView>();
+        readonly List<GateView> gates = new List<GateView>();
+        readonly List<StrapView> straps = new List<StrapView>();
         readonly List<Parcel> freeScratch = new List<Parcel>();
+        /// <summary>The level's express parcels (fixed by their start cells), for the tension check.</summary>
+        readonly List<Parcel> expressParcels = new List<Parcel>();
+        readonly HashSet<int> freeIds = new HashSet<int>();
+        /// <summary>
+        /// Parcels the rules have freed that must still look blocked until a time: ice still on show, or a
+        /// gate's boom still down in front of them. <see cref="RefreshBoard"/> runs again when each ends.
+        /// </summary>
+        readonly Dictionary<int, float> heldDownUntil = new Dictionary<int, float>();
+        /// <summary>Per gate: when its sign last changed, and when its boom is up (after it opened).</summary>
+        float[] gateCountAt = Array.Empty<float>();
+        float[] gateClearAt = Array.Empty<float>();
         int lastScreenWidth, lastScreenHeight;
         float inputBlockedUntil;
         LevelViews views;
         MenuDiorama menu;
+        /// <summary>A <see cref="GlideMenuCamera"/> is in flight, heading for <see cref="menuGlideTo"/>.</summary>
+        bool menuGliding;
+        Vector3 menuGlideTo;
+        /// <summary>Bumped per glide, so an older glide's tween stops steering once a new one starts.</summary>
+        int menuGlideToken;
+
+        /// <summary>The camera's drift around its menu framing: sideways and in-out amplitudes (world units) and periods (seconds).</summary>
+        const float DriftSide = 0.32f;
+        const float DriftSidePeriod = 15f;
+        const float DriftDolly = 0.45f;
+        const float DriftDollyPeriod = 11f;
+        /// <summary>Where the last menu fit put the camera; the drift moves around it.</summary>
+        Vector3 menuRest;
+        float driftClock;
+        bool menuDrift;
 
         /// <summary>Where the home screen's 3D backdrop sits on screen (0..1 viewport) when no <see cref="IMenuLayout"/> says.</summary>
         static readonly Rect DefaultMenuViewport = new Rect(0.02f, 0.31f, 0.96f, 0.27f);
@@ -78,6 +116,43 @@ namespace CargoJam.Game
 
         /// <summary>Loads in a row without anything going to the dock; drives the rising load pitch and callouts.</summary>
         int combo;
+
+        /// <summary>What the music's tension layer was last told (see <see cref="UpdateTension"/>).</summary>
+        bool tense;
+
+        // Playback state for the batch of events from one move (reset by PlayAll).
+        /// <summary>When the move's first parcel starts to slide (-1 until one does): express ticks land just after.</summary>
+        float moveStartAt;
+        /// <summary>
+        /// A strapped pair on its way out: its band slips off as the lead starts; the trail starts with it
+        /// at the lead's pace (when, how long and over how many points the lead slid).
+        /// </summary>
+        StrapView pairStrap;
+        int pairLeadId = -1, pairTrailId = -1;
+        float pairTrailAt, pairLeadSlide;
+        int pairLeadPoints;
+        /// <summary>Gates that opened in this batch (parcels behind them wait for the boom).</summary>
+        readonly List<int> gatesOpened = new List<int>();
+        /// <summary>Express parcels that ran out of moves in this batch.</summary>
+        readonly List<Parcel> missedExpress = new List<Parcel>();
+        /// <summary>When this batch's effect on tension shows: the latest hold landing, dock-chain load or express tick.</summary>
+        float tensionAt;
+        /// <summary>A beat between the losing move's last visible change (a tick, a landing) and the fail explanation.</summary>
+        const float FailAfterLastBeat = 0.25f;
+
+        /// <summary>
+        /// Bumped whenever the board may have changed (a level starts or ends, every <see cref="RefreshBoard"/>),
+        /// so the tutorial's per-frame hint queries reuse one answer per move instead of searching the board.
+        /// </summary>
+        int boardStamp;
+        int hintStamp = -1;
+        bool hintFound;
+        Cell hintCell;
+        int cargoHintStamp = -1;
+        CargoKind cargoHintKind;
+        bool cargoHintFound;
+        bool cargoHintFromAbove;
+        Cell cargoHintCell;
 
         // ---- Events for the UI ------------------------------------------------------------------
 
@@ -104,6 +179,13 @@ namespace CargoJam.Game
         /// <summary>True once the player has made a move this level (restarting then breaks a streak).</summary>
         public bool MovedThisLevel => movedThisLevel;
         public int ParcelsLeft => session == null ? 0 : session.Board.Count + session.Dock.Count;
+
+        /// <summary>
+        /// Time.time when the current level's intro is over and the board takes taps: the board has
+        /// dropped in, and on an arrival level the destination reveal has played. Set by
+        /// <see cref="StartLevel"/> before <see cref="LevelStarted"/> fires.
+        /// </summary>
+        public float IntroEndsAt => inputBlockedUntil;
 
         /// <summary>The UI turns this off while a popup or panel covers the board.</summary>
         public bool InputEnabled { get; set; } = true;
@@ -145,6 +227,20 @@ namespace CargoJam.Game
         }
 
         /// <summary>
+        /// Set by the UI: the camera drifts slowly around the menu framing (the title's living shot).
+        /// Turning it off leaves the camera where the drift has it, so a glide can start from there.
+        /// </summary>
+        public bool MenuDrift
+        {
+            get => menuDrift;
+            set
+            {
+                if (value && !menuDrift) driftClock = 0f;
+                menuDrift = value;
+            }
+        }
+
+        /// <summary>
         /// Set by the UI: whether the destination arrival reveal should play for a level index (it plays
         /// once per destination reached, not on every retry). Unset means it always plays on arrivals.
         /// </summary>
@@ -163,6 +259,7 @@ namespace CargoJam.Game
             RenderSettings.ambientLight = new Color(0.62f, 0.62f, 0.66f);
 
             tweener = gameObject.AddComponent<Tweener>();
+            gameObject.AddComponent<FramePacer>();
             fx = gameObject.AddComponent<FeelDirector>();
             materials = new MaterialBank(Resources.Load<Material>("Materials/Base"));
             levels = LevelLibrary.Load();
@@ -199,6 +296,17 @@ namespace CargoJam.Game
             if (TryPickCell(screen, craneArmed, out var cell)) Tap(cell);
         }
 
+        void LateUpdate()
+        {
+            if (!menuDrift || menu == null || menuGliding) return;
+            driftClock += Time.unscaledDeltaTime;
+            float side = DriftSide * Mathf.Sin(driftClock * Mathf.PI * 2f / DriftSidePeriod);
+            // In-out starts at rest and eases in over the first seconds, so the shot never jumps.
+            float dolly = DriftDolly * (0.5f - 0.5f * Mathf.Cos(driftClock * Mathf.PI * 2f / DriftDollyPeriod));
+            var t = cam.transform;
+            t.position = menuRest + t.right * side + t.forward * dolly;
+        }
+
         // ---- Level lifecycle --------------------------------------------------------------------
 
         /// <summary>Builds and starts the level at a 0-based progress index (content loops past the last level).</summary>
@@ -213,18 +321,39 @@ namespace CargoJam.Game
             levelRoot = new GameObject("Level").transform;
 
             session = new GameSession(levels.Get(ContentIndex(levelIndex)));
+            boardStamp++;
             layout = new Layout(session.Board.Width, session.Board.Height, session.Dock.Capacity);
             if (debugHud != null) debugHud.LevelLabel = $"Level {levelIndex + 1}{(session.Level.Hard ? "  HARD" : "")}";
 
-            Scenery.Build(levelRoot, layout, materials);
+            var level = session.Level;
+            Scenery.Build(levelRoot, layout, materials, Bollards(level));
             var env = environment.ShowLevel(levelIndex, layout);
             if (env.Arrival && ShouldRevealArrival != null) env.Arrival = ShouldRevealArrival(levelIndex);
+            env.Hard = level.Hard;
             EnvironmentShown = env;
             dock = DockView.Create(levelRoot, layout, materials);
             foreach (var p in session.Board.Parcels)
             {
-                parcels[p.Id] = ParcelView.Create(p, levelRoot, layout, materials,
-                    hidden: session.IsHidden(p), locked: session.IsLocked(p), isKey: session.IsKey(p));
+                var look = new ParcelLook
+                {
+                    Hidden = session.IsHidden(p),
+                    Locked = session.IsLocked(p),
+                    IsKey = session.IsKey(p),
+                    Frost = session.FrostLeft(p),
+                    Express = session.IsExpress(p) ? session.ExpressLeft(p) : 0,
+                };
+                parcels[p.Id] = ParcelView.Create(p, levelRoot, layout, materials, look);
+                if (session.IsExpress(p)) expressParcels.Add(p);
+            }
+            for (int i = 0; i < level.Gates.Count; i++)
+                gates.Add(GateView.Create(i, level.Gates[i], session.GateLeft(i), levelRoot, layout, materials));
+            gateCountAt = new float[gates.Count];
+            gateClearAt = new float[gates.Count];
+            for (int i = 0; i < level.Straps.Count; i++)
+            {
+                var a = parcels[session.Board.Get(level.Straps[i].A).Id];
+                var b = parcels[session.Board.Get(level.Straps[i].B).Id];
+                straps.Add(StrapView.Create(i, a, b, materials));
             }
             foreach (var t in session.Trucks)
             {
@@ -248,15 +377,20 @@ namespace CargoJam.Game
                 Dock = dock,
                 Parcels = new List<ParcelView>(parcels.Values),
                 Trucks = trucks,
+                Gates = gates,
+                Straps = straps,
+                NextHard = IsHardLevel(levelIndex + 1),
                 Environment = environment,
             };
             float introSeconds = fx?.LevelBuilt(views) ?? 0f;
             introSeconds += fx?.EnvironmentChanged(env) ?? 0f;
             inputBlockedUntil = Time.time + introSeconds;
+            // A level can open tense (a short express count); the layer comes in as the board lands.
+            UpdateTension(inputBlockedUntil);
 
             ComboChanged?.Invoke(0);
             DockChanged?.Invoke(session.Dock.Count, session.Dock.Capacity);
-            LevelStarted?.Invoke(new LevelStartInfo(levelIndex, session.Level.Hard, session.Board.Count));
+            LevelStarted?.Invoke(new LevelStartInfo(levelIndex, session.Level.Hard, session.Board.Count, session.Level.CargoMask));
         }
 
         public void Restart() => StartLevel(levelIndex);
@@ -272,6 +406,8 @@ namespace CargoJam.Game
             menu = MenuDiorama.Create(materials);
             var env = environment.ShowMenu(levelIndex);
             env.Arrival = false;
+            // The level Play starts next: the music prefetches its cue (Drive or Storm when HARD).
+            env.Hard = levels.Count > 0 && IsHardLevel(levelIndex);
             EnvironmentShown = env;
             fx?.EnvironmentChanged(env);
             FitCamera();
@@ -279,17 +415,54 @@ namespace CargoJam.Game
 
         public bool MenuSceneActive => menu != null;
 
+        /// <summary>
+        /// Glides the camera from where it is to the menu framing <see cref="MenuLayout"/> asks for now,
+        /// eased in and out over <paramref name="seconds"/>: the title's establishing shot settling into
+        /// the home screen's. A refit meanwhile (a resize, the home screen laying out) retargets the
+        /// glide instead of cutting. Snaps when the menu diorama isn't showing or the time is zero.
+        /// </summary>
+        public void GlideMenuCamera(float seconds)
+        {
+            if (menu == null || seconds <= 0f)
+            {
+                menuGliding = false;
+                FitCamera();
+                return;
+            }
+            var from = cam.transform.position;
+            menuGliding = true;
+            FitCamera();
+            int token = ++menuGlideToken;
+            tweener.Run(tweener.Now, seconds,
+                t => { if (cam && token == menuGlideToken) cam.transform.position = Vector3.LerpUnclamped(from, menuGlideTo, Ease.InOutCubic(t)); },
+                null,
+                () => { if (token == menuGlideToken) menuGliding = false; });
+        }
+
         /// <summary>Tears down whatever is on stage: the current level or the menu backdrop.</summary>
         void ClearLevel()
         {
+            if (tense)
+            {
+                tense = false;
+                fx?.TensionChanged(false, tweener.Now);
+            }
             fx?.LevelCleared();
             tweener.Clear();
+            menuGliding = false;
             parcels.Clear();
             trucks.Clear();
+            gates.Clear();
+            straps.Clear();
+            heldDownUntil.Clear();
+            expressParcels.Clear();
+            gateCountAt = gateClearAt = Array.Empty<float>();
+            ResetBatch(0f);
             combo = 0;
             craneArmed = false;
             movedThisLevel = false;
             session = null;
+            boardStamp++;
             layout = null;
             views = null;
             if (levelRoot != null) Destroy(levelRoot.gameObject);
@@ -303,12 +476,12 @@ namespace CargoJam.Game
         {
             int count = levels.Count;
             if (index < count) return index;
-            int loopStart = Mathf.Min(LoopStart, count - 1);
+            int loopStart = count > LoopStart ? LoopStart : Mathf.Min(ShortLoopStart, count - 1);
             return loopStart + (index - count) % (count - loopStart);
         }
 
         /// <summary>Whether the level at a progress index is a HARD one (for the home screen badge).</summary>
-        public bool IsHardLevel(int index) => levels.Get(ContentIndex(index)).Hard;
+        public bool IsHardLevel(int index) => levels.IsHard(ContentIndex(index));
 
         // ---- Boosters ---------------------------------------------------------------------------
 
@@ -365,11 +538,12 @@ namespace CargoJam.Game
         }
 
         /// <summary>
-        /// Whether the fail screen should offer Continue (+1 slot). Only when the dock filled up: a board
-        /// stalled by padlocks fails with room to spare, and another slot wouldn't help.
+        /// Whether the fail screen should offer Continue (+1 slot). Only after running
+        /// <see cref="FailReason.OutOfSpace"/>: a board stuck behind ice, padlocks or gates, or a missed
+        /// express parcel, isn't helped by another slot.
         /// </summary>
         public bool CanContinue => session != null && session.Status == GameStatus.Failed
-            && session.Dock.IsFull && session.CanAddHoldingSlot;
+            && session.FailReason == FailReason.OutOfSpace && session.CanAddHoldingSlot;
 
         /// <summary>The fail screen's Continue: one more slot, and play resumes.</summary>
         public bool ContinueWithExtraSlot()
@@ -384,33 +558,186 @@ namespace CargoJam.Game
 
         // ---- Hints for the tutorial -------------------------------------------------------------
 
-        /// <summary>A good parcel to point at: a free one matching the truck, else any free one.</summary>
+        /// <summary>
+        /// A good move to point at, among the units that can be tapped and taken now: an express parcel
+        /// about to run out first, then one the truck takes whole, else any.
+        /// </summary>
         public bool TryGetHintCell(out Cell cell)
+        {
+            if (hintStamp != boardStamp)
+            {
+                hintStamp = boardStamp;
+                hintFound = FindHintCell(out hintCell);
+            }
+            cell = hintCell;
+            return hintFound;
+        }
+
+        bool FindHintCell(out Cell cell)
         {
             cell = default;
             if (session == null) return false;
-            session.Board.GetFreeParcels(freeScratch);
+            session.GetMoves(freeScratch);
             Parcel best = null;
+            int bestRank = 0;
             foreach (var p in freeScratch)
             {
-                if (session.IsLocked(p)) continue;
-                if (session.CurrentTruck != null && session.CurrentTruck.Accepts(p))
-                {
-                    best = p;
-                    break;
-                }
-                if (best == null) best = p;
+                if (!session.CanTake(p)) continue;
+                int rank = session.IsExpress(p) && session.ExpressLeft(p) <= ParcelView.ExpressUrgent ? 3
+                    : TruckTakesWhole(p) ? 2 : 1;
+                if (rank <= bestRank) continue;
+                best = p;
+                bestRank = rank;
             }
             if (best == null) return false;
             cell = best.Cell;
             return true;
         }
 
+        /// <summary>
+        /// Where the hand should point to teach a cargo kind on its debut level (see design v4, section 5):
+        /// a tappable, takeable unit that shows the kind off. False when there is nothing to point at
+        /// (always for bollards).
+        /// </summary>
+        public bool TryGetCargoHintCell(CargoKind kind, out Cell cell)
+        {
+            if (cargoHintStamp != boardStamp || cargoHintKind != kind)
+            {
+                cargoHintStamp = boardStamp;
+                cargoHintKind = kind;
+                cargoHintFound = FindCargoHintCell(kind, out cargoHintCell);
+                cargoHintFromAbove = cargoHintFound && TaughtFromAbove(kind, cargoHintCell);
+            }
+            cell = cargoHintCell;
+            return cargoHintFound;
+        }
+
+        /// <summary>
+        /// The cargo hint (see <see cref="TryGetCargoHintCell"/>) should be pointed at from above: what it
+        /// teaches (a frozen crate, the hidden parcel, the strap partner) lies just below the cell, where
+        /// a hand reaching up from below would cover it.
+        /// </summary>
+        public bool CargoHintFromAbove => cargoHintFound && cargoHintFromAbove;
+
+        bool TaughtFromAbove(CargoKind kind, Cell cell)
+        {
+            var target = session?.Board.Get(cell);
+            if (target == null) return false;
+            return Teaching(kind, target, new Cell(cell.X, cell.Y + 1)) && !Teaching(kind, target, new Cell(cell.X, cell.Y - 1));
+        }
+
+        /// <summary>Whether the parcel at <paramref name="c"/> is what tapping <paramref name="target"/> teaches about.</summary>
+        bool Teaching(CargoKind kind, Parcel target, Cell c)
+        {
+            var n = session.Board.Get(c);
+            if (n == null) return false;
+            switch (kind)
+            {
+                case CargoKind.Frost: return session.FrostLeft(n) > 0;
+                case CargoKind.Mystery: return session.IsHidden(n);
+                case CargoKind.Strap: return session.StrapPartner(target) == n;
+                default: return false;
+            }
+        }
+
+        bool FindCargoHintCell(CargoKind kind, out Cell cell)
+        {
+            cell = default;
+            if (session == null || session.Status != GameStatus.Playing || kind == CargoKind.Bollard) return false;
+            // Frost is taught by making some other move and watching the count drop: the usual hint
+            // (never a frozen crate, which GetMoves leaves out), while a crate is still frozen.
+            if (kind == CargoKind.Frost) return AnyFrozen() && FindHintCell(out cell);
+            session.GetMoves(freeScratch);
+            foreach (var p in freeScratch)
+            {
+                if (!session.CanTake(p) || !Teaches(kind, p)) continue;
+                cell = p.Cell;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Whether tapping <paramref name="p"/> (a unit from GetMoves) shows off a cargo kind.</summary>
+        bool Teaches(CargoKind kind, Parcel p)
+        {
+            var partner = session.StrapPartner(p);
+            switch (kind)
+            {
+                case CargoKind.Mystery:
+                    // The parcel covering it.
+                    return NextToHidden(p) || (partner != null && NextToHidden(partner));
+                case CargoKind.Express:
+                    return session.IsExpress(p) && session.ExpressLeft(p) > 0;
+                case CargoKind.Lock:
+                    return session.IsKey(p);
+                case CargoKind.Strap:
+                    // GetMoves lists the pair by its free member.
+                    return partner != null;
+                case CargoKind.Gate:
+                    return TruckTakesWhole(p) && ClosedGateWants(p.Color);
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>The loading truck takes this unit without the dock: its color, with room for a whole pair.</summary>
+        bool TruckTakesWhole(Parcel p)
+        {
+            var truck = session.CurrentTruck;
+            if (truck == null || !truck.Accepts(p)) return false;
+            return session.StrapPartner(p) == null || truck.Capacity - truck.Loaded >= 2;
+        }
+
+        bool ClosedGateWants(int color)
+        {
+            var level = session.Level;
+            for (int g = 0; g < level.Gates.Count; g++)
+                if (level.Gates[g].Color == color && !session.IsGateOpen(g)) return true;
+            return false;
+        }
+
+        /// <summary>Some crate in the yard is still frozen.</summary>
+        bool AnyFrozen()
+        {
+            foreach (var p in session.Board.Parcels)
+                if (session.FrostLeft(p) > 0) return true;
+            return false;
+        }
+
+        bool NextToHidden(Parcel p)
+        {
+            for (int d = 0; d < 4; d++)
+            {
+                var n = session.Board.Get(Neighbour(p.Cell, d));
+                if (n != null && session.IsHidden(n)) return true;
+            }
+            return false;
+        }
+
+        static Cell Neighbour(Cell c, int direction) => direction switch
+        {
+            0 => new Cell(c.X, c.Y - 1),
+            1 => new Cell(c.X - 1, c.Y),
+            2 => new Cell(c.X + 1, c.Y),
+            _ => new Cell(c.X, c.Y + 1),
+        };
+
         /// <summary>Screen position (origin bottom-left) of the top of the parcel at a cell.</summary>
         public Vector2 CellToScreen(Cell cell)
         {
             var top = layout.ParcelRest(cell, true) + Vector3.up * (Layout.ParcelSize.y * 0.5f);
             return cam.WorldToScreenPoint(top);
+        }
+
+        /// <summary>
+        /// A point on the lid of the parcel at a cell, just inside its front edge (<paramref name="front"/>,
+        /// toward the camera, lower on screen) or its back edge.
+        /// </summary>
+        public Vector2 LidEdgeToScreen(Cell cell, bool front)
+        {
+            var top = layout.ParcelRest(cell, true) + Vector3.up * (Layout.ParcelSize.y * 0.5f);
+            var edge = top + Vector3.forward * (Layout.ParcelSize.z * 0.42f * (front ? -1f : 1f));
+            return cam.WorldToScreenPoint(edge);
         }
 
         // ---- Taps and event playback ------------------------------------------------------------
@@ -445,17 +772,45 @@ namespace CargoJam.Game
             int comboBefore = combo;
             int dockBefore = session.Dock.Count, capacityBefore = session.Dock.Capacity;
             bool held = false;
+            ResetBatch(tweener.Now);
             foreach (var e in events)
             {
                 Play(e);
                 held |= e is ParcelHeld;
             }
+            // A pair whose lead never got scheduled (not expected) still drops its band.
+            if (pairStrap != null) pairStrap.Release(tweener.Now);
+            pairStrap = null;
+            HoldBehindOpeningGates();
             RefreshBoard();
             if (combo != comboBefore) ComboChanged?.Invoke(combo);
             // Holds report their own fill at landing time; anything else that changed the dock reports now.
             if (!held && (session.Dock.Count != dockBefore || session.Dock.Capacity != capacityBefore))
                 fx?.DockFillChanged(session.Dock.Count, session.Dock.Capacity, tweener.Now);
             DockChanged?.Invoke(session.Dock.Count, session.Dock.Capacity);
+            UpdateTension(tensionAt);
+        }
+
+        /// <summary>
+        /// Tells the music whether the board is tense (design v4, section 7): while playing with the dock
+        /// one short of full, or an express parcel in the yard nearly out of moves. Only changes are sent;
+        /// a win or fail turns it off (and so does tearing the level down, see <see cref="ClearLevel"/>).
+        /// </summary>
+        void UpdateTension(float at)
+        {
+            bool wanted = session != null && session.Status == GameStatus.Playing
+                && (session.Dock.Count >= session.Dock.Capacity - 1 || ExpressNearlyOut());
+            if (wanted == tense) return;
+            tense = wanted;
+            fx?.TensionChanged(tense, Mathf.Max(at, tweener.Now));
+        }
+
+        /// <summary>An express parcel still in the yard has <see cref="ParcelView.ExpressUrgent"/> moves or fewer left.</summary>
+        bool ExpressNearlyOut()
+        {
+            foreach (var p in expressParcels)
+                if (session.Board.Get(p.Cell) == p && session.ExpressLeft(p) <= ParcelView.ExpressUrgent) return true;
+            return false;
         }
 
         void Play(GameEvent e)
@@ -481,9 +836,8 @@ namespace CargoJam.Game
                     var tv = trucks[loaded.Truck.Index];
                     var path = loaded.Lifted ? LiftPoints(pv) : PathPoints(loaded.Path);
                     float slide = loaded.Lifted ? Timing.CraneLift : Timing.Slide(path.Count);
-                    float start = Mathf.Max(now, tv.BayReadyAt - slide - Timing.HopToTruck);
-                    LeaveYard(pv, path, start, slide, loaded.Lifted);
-                    HopIntoTruck(pv, tv, loaded.TruckSlot, start + slide);
+                    float hop = LeaveYard(pv, path, slide, loaded.Lifted, tv.BayReadyAt - Timing.HopToTruck, now);
+                    HopIntoTruck(pv, tv, loaded.TruckSlot, hop);
                     break;
                 }
 
@@ -493,12 +847,11 @@ namespace CargoJam.Game
                     var pv = parcels[held.Parcel.Id];
                     var path = held.Lifted ? LiftPoints(pv) : PathPoints(held.Path);
                     float slide = held.Lifted ? Timing.CraneLift : Timing.Slide(path.Count);
-                    float start = Mathf.Max(now, dock.SlotFreeAt[held.DockSlot] - slide - Timing.HopToDock);
-                    LeaveYard(pv, path, start, slide, held.Lifted);
-                    tweener.Arc(pv.transform, layout.DockRest(held.DockSlot), 0.5f, Layout.ParcelSize,
-                        start + slide, Timing.HopToDock);
-                    pv.SettledAt = start + slide + Timing.HopToDock;
+                    float hop = LeaveYard(pv, path, slide, held.Lifted, dock.SlotFreeAt[held.DockSlot] - Timing.HopToDock, now);
+                    tweener.Arc(pv.transform, layout.DockRest(held.DockSlot), 0.5f, Layout.ParcelSize, hop, Timing.HopToDock);
+                    pv.SettledAt = hop + Timing.HopToDock;
                     combo = 0;
+                    tensionAt = Mathf.Max(tensionAt, pv.SettledAt);
                     fx?.ParcelLanded(pv, LandingSpot.Dock, pv.SettledAt, 0);
                     fx?.DockFillChanged(session.Dock.Count, session.Dock.Capacity, pv.SettledAt);
                     break;
@@ -511,6 +864,7 @@ namespace CargoJam.Game
                     float start = Mathf.Max(now, pv.SettledAt, tv.BayReadyAt) + fromDock.ChainIndex * Timing.ChainStagger;
                     dock.SlotFreeAt[fromDock.DockSlot] = start + 0.05f;
                     HopIntoTruck(pv, tv, fromDock.TruckSlot, start);
+                    tensionAt = Mathf.Max(tensionAt, start);
                     break;
                 }
 
@@ -538,7 +892,8 @@ namespace CargoJam.Game
                 case ParcelRevealed revealed:
                 {
                     var pv = parcels[revealed.Parcel.Id];
-                    float at = now + 0.05f;
+                    // A parcel uncovered by a gate opening flips once the boom is up.
+                    float at = Mathf.Max(now + 0.05f, GateClearAt(revealed.Parcel));
                     pv.Reveal(tweener, at);
                     fx?.ParcelRevealed(pv, at);
                     break;
@@ -566,23 +921,157 @@ namespace CargoJam.Game
                     break;
                 }
 
+                case FrostCracked cracked:
+                {
+                    var pv = parcels[cracked.Parcel.Id];
+                    // The Crane thaws its target at once. A move's countdown lands with its express ticks
+                    // (just after the move starts), a beat behind them so the two read apart.
+                    float at = now;
+                    if (!cracked.Lifted)
+                        at = (moveStartAt >= 0f ? Mathf.Max(now, moveStartAt) : now) + Timing.SlideMin + Timing.CrackDelay;
+                    pv.Crack(tweener, at, cracked.Left);
+                    fx?.FrostCracked(pv, cracked.Left, at);
+                    // Thawed by the count: it lifts as the ice bursts, not before.
+                    if (cracked.Left == 0 && !cracked.Lifted) HoldDown(cracked.Parcel.Id, at);
+                    tensionAt = Mathf.Max(tensionAt, at);
+                    break;
+                }
+
+                case ExpressTicked ticked:
+                {
+                    var pv = parcels[ticked.Parcel.Id];
+                    // Just after the move starts (which may wait for a truck to pull in).
+                    float at = (moveStartAt >= 0f ? Mathf.Max(now, moveStartAt) : now) + Timing.SlideMin;
+                    pv.SetExpress(ticked.Left, tweener, at);
+                    fx?.ExpressTicked(pv, ticked.Left, at);
+                    tensionAt = Mathf.Max(tensionAt, at);
+                    break;
+                }
+
+                case ExpressMissed missed:
+                    // Its tag already reads a red 0 from the last tick; the fail explanation points at it.
+                    missedExpress.Add(missed.Parcel);
+                    break;
+
+                case StrapMoved moved:
+                    // The lead's ParcelLoaded/Held comes next: the band slips off as it starts to slide.
+                    pairStrap = StrapFor(moved.Lead);
+                    pairLeadId = moved.Lead.Id;
+                    pairTrailId = moved.Trail.Id;
+                    break;
+
+                case StrapCut cut:
+                {
+                    var strap = StrapFor(cut.Lifted);
+                    if (strap == null) break;
+                    strap.Snap(now);
+                    fx?.StrapSnapped(strap, now);
+                    break;
+                }
+
+                case StrapRestored restored:
+                {
+                    // Both ParcelReturned events came first: the band goes back on once both have landed.
+                    var strap = StrapFor(restored.A);
+                    if (strap == null) break;
+                    strap.Restore(Mathf.Max(parcels[restored.A.Id].SettledAt, parcels[restored.B.Id].SettledAt));
+                    break;
+                }
+
+                case GateProgress progress:
+                {
+                    if (progress.Gate < 0 || progress.Gate >= gates.Count) break;
+                    var gv = gates[progress.Gate];
+                    // The count drops when the loaded parcel lands in its truck (its hop is already scheduled).
+                    float at = Mathf.Max(now, parcels[progress.Loaded.Id].SettledAt);
+                    gv.SetCount(progress.Left, at);
+                    fx?.GateProgress(gv, progress.Left, at);
+                    gateCountAt[progress.Gate] = at;
+                    break;
+                }
+
+                case GateOpened opened:
+                {
+                    if (opened.Gate < 0 || opened.Gate >= gates.Count) break;
+                    var gv = gates[opened.Gate];
+                    // Right after its last GateProgress: the sign reads 0, then the boom lifts.
+                    float at = Mathf.Max(now, gateCountAt[opened.Gate]) + Timing.GateOpenDelay;
+                    gv.Open(at);
+                    fx?.GateOpened(gv, at);
+                    gateClearAt[opened.Gate] = at + GateView.BoomTime;
+                    gatesOpened.Add(opened.Gate);
+                    break;
+                }
+
                 case LevelWon _:
                     Celebrate(now);
                     break;
 
-                case LevelFailed _:
-                    ExplainFail(now);
+                case LevelFailed failed:
+                    ExplainFail(now, failed.Reason);
+                    break;
+
+                default:
+                    Debug.LogWarning($"GameController: no playback for {e.GetType().Name}; it was skipped.");
                     break;
             }
         }
 
-        void LeaveYard(ParcelView pv, List<Vector3> path, float start, float slide, bool lifted)
+        /// <summary>Starts a new batch of events (one move, Undo or Extra Slot).</summary>
+        void ResetBatch(float now)
         {
+            moveStartAt = -1f;
+            pairStrap = null;
+            pairLeadId = pairTrailId = -1;
+            pairTrailAt = now;
+            pairLeadSlide = 0f;
+            pairLeadPoints = 0;
+            gatesOpened.Clear();
+            missedExpress.Clear();
+            tensionAt = now;
+        }
+
+        /// <summary>The view of the strap a parcel belongs to (intact or not), or null.</summary>
+        StrapView StrapFor(Parcel parcel)
+        {
+            int s = session.StrapIndex(parcel);
+            return s >= 0 && s < straps.Count ? straps[s] : null;
+        }
+
+        /// <summary>
+        /// Slides a parcel out of the yard and returns when it may hop on: as it reaches the edge, but not
+        /// before <paramref name="hopReady"/> (its truck has pulled in, or its dock slot is clear). A
+        /// parcel waits on its cell so it arrives just in time; a strapped pair's trail instead starts with
+        /// its lead at the lead's pace (its path is one cell longer, so it stays one cell behind), and
+        /// waits at the edge if it must.
+        /// </summary>
+        float LeaveYard(ParcelView pv, List<Vector3> path, float slide, bool lifted, float hopReady, float now)
+        {
+            int id = pv.Parcel.Id;
+            bool trail = id == pairTrailId && pairLeadPoints > 0;
+            if (trail) slide = pairLeadSlide * path.Count / pairLeadPoints;
+            float start = trail ? pairTrailAt : Mathf.Max(now, hopReady - slide);
             pv.MarkLeftYard();
             tweener.Punch(pv.transform, Layout.ParcelSize, new Vector3(-0.12f, 0.18f, -0.12f), start, Timing.TapPunch);
             tweener.MoveAlong(pv.transform, path, start, slide);
             // Feedback on the tap itself is immediate, even if the parcel waits for a truck to pull in.
             fx?.ParcelPicked(pv, lifted);
+
+            if (moveStartAt < 0f || start < moveStartAt) moveStartAt = start;
+            if (id == pairLeadId)
+            {
+                pairStrap?.Release(start);
+                pairStrap = null;
+                pairLeadId = -1;
+                pairTrailAt = start;
+                pairLeadSlide = slide;
+                pairLeadPoints = path.Count;
+            }
+            else if (id == pairTrailId)
+            {
+                pairTrailId = -1;
+            }
+            return Mathf.Max(start + slide, hopReady);
         }
 
         void HopIntoTruck(ParcelView pv, TruckView tv, int slot, float start)
@@ -673,33 +1162,72 @@ namespace CargoJam.Game
         }
 
         /// <summary>
-        /// Shows why the level was lost before the panel covers it: the waiting truck bounces, the dock
-        /// shakes, and the buried parcels it needed pulse while the camera leans toward the dock.
+        /// Shows why the level was lost before the panel covers it, by <paramref name="reason"/>:
+        /// <list type="bullet">
+        /// <item>OutOfSpace: the waiting truck bounces, the dock shakes, and the buried parcels it needed
+        /// pulse while the camera leans toward the dock.</item>
+        /// <item>ExpressMissed: the express parcel that ran out pulses.</item>
+        /// <item>Stuck: what holds the free parcels back pulses (ice, padlocks, a pair with no room for
+        /// two), and so do the gates still closed.</item>
+        /// </list>
         /// </summary>
-        void ExplainFail(float now)
+        void ExplainFail(float now, FailReason reason)
         {
-            float at = now + Timing.FailExplainDelay;
+            // After the losing move has shown itself: the express tag's last tick, or the last hold landing.
+            float at = Mathf.Max(now + Timing.FailExplainDelay, tensionAt + FailAfterLastBeat);
             var truck = session.CurrentTruck;
             var tv = truck != null ? trucks[truck.Index] : null;
             var needed = new List<ParcelView>();
+            var lookAt = layout.DockSlotCenter((layout.DockSlots - 1) / 2);
 
-            if (tv != null)
+            switch (reason)
             {
-                tweener.Punch(tv.Body, Vector3.one, new Vector3(0.08f, 0.12f, 0.08f), at, 0.3f);
-                foreach (var p in session.Board.Parcels)
-                {
-                    if (p.Color != truck.Color) continue;
-                    var pv = parcels[p.Id];
-                    needed.Add(pv);
-                    tweener.At(at, pv.Highlight);
-                    for (int k = 0; k < 3; k++)
-                        tweener.Punch(pv.transform, Layout.ParcelSize, new Vector3(0.3f, 0.3f, 0.3f), at + 0.15f + k * Timing.FailPulse, 0.3f);
-                }
+                case FailReason.ExpressMissed:
+                    foreach (var p in missedExpress) needed.Add(parcels[p.Id]);
+                    break;
+
+                case FailReason.Stuck:
+                    session.Board.GetFreeParcels(freeScratch);
+                    foreach (var p in freeScratch)
+                    {
+                        var partner = session.StrapPartner(p);
+                        if (!session.IsRestrained(p) && partner == null) continue;
+                        AddOnce(needed, parcels[p.Id]);
+                        if (partner != null) AddOnce(needed, parcels[partner.Id]);
+                    }
+                    foreach (var gv in gates)
+                        if (!gv.IsOpen)
+                            for (int k = 0; k < 3; k++)
+                                tweener.Punch(gv.transform, Vector3.one, new Vector3(0.12f, 0.18f, 0.12f), at + 0.15f + k * Timing.FailPulse, 0.3f);
+                    break;
+
+                default:
+                    if (tv == null) break;
+                    tweener.Punch(tv.Body, Vector3.one, new Vector3(0.08f, 0.12f, 0.08f), at, 0.3f);
+                    foreach (var p in session.Board.Parcels)
+                        if (p.Color == truck.Color) needed.Add(parcels[p.Id]);
+                    break;
             }
-            tweener.At(at, () => dock.Flash(tweener));
-            fx?.Fail(at, needed, tv);
-            PushCamera(layout.DockSlotCenter((layout.DockSlots - 1) / 2), 0.06f, at, 0.6f);
+
+            foreach (var pv in needed)
+            {
+                tweener.At(at, pv.Highlight);
+                for (int k = 0; k < 3; k++)
+                    tweener.Punch(pv.transform, Layout.ParcelSize, new Vector3(0.3f, 0.3f, 0.3f), at + 0.15f + k * Timing.FailPulse, 0.3f);
+            }
+            if (reason == FailReason.OutOfSpace)
+                tweener.At(at, () => dock.Flash(tweener));
+            else if (needed.Count > 0)
+                lookAt = needed[0].transform.position;
+            fx?.Fail(at, reason, needed, tv);
+            PushCamera(lookAt, 0.06f, at, 0.6f);
+            tensionAt = Mathf.Max(tensionAt, at);
             LevelFailed?.Invoke(ParcelsLeft, at + Timing.FailOverlayDelay);
+        }
+
+        static void AddOnce(List<ParcelView> list, ParcelView pv)
+        {
+            if (!list.Contains(pv)) list.Add(pv);
         }
 
         void PushCamera(Vector3 toward, float fraction, float start, float duration)
@@ -741,26 +1269,85 @@ namespace CargoJam.Game
             return new List<Vector3> { up, over };
         }
 
+        /// <summary>
+        /// Lifts and brightens what can be tapped. A strapped pair counts as free when either member has
+        /// a path (<see cref="GameSession.IsUnitFree"/>), so both members lift together under their band;
+        /// padlocked and frozen parcels stay down (<see cref="GameSession.IsRestrained"/>), as do parcels
+        /// held down until their ice or gate is out of the way on screen.
+        /// </summary>
         void RefreshBoard()
         {
+            boardStamp++;
             if (session == null) return;
+            float now = tweener.Now;
             session.Board.GetFreeParcels(freeScratch);
-            var free = new HashSet<int>();
-            foreach (var p in freeScratch) free.Add(p.Id);
+            freeIds.Clear();
+            foreach (var p in freeScratch)
+                if (!heldDownUntil.TryGetValue(p.Id, out float until) || until <= now) freeIds.Add(p.Id);
             foreach (var p in session.Board.Parcels)
             {
                 var pv = parcels[p.Id];
                 if (pv.HasKeyBadge && !session.IsKey(p)) pv.RemoveKeyBadge();
                 if (!pv.InYard) continue;
-                pv.SetFree(free.Contains(p.Id) && !session.IsLocked(p), layout, tweener);
+                var partner = session.StrapPartner(p);
+                bool unitFree = freeIds.Contains(p.Id) || (partner != null && freeIds.Contains(partner.Id));
+                pv.SetFree(unitFree && !session.IsRestrained(p), layout, tweener);
             }
             dock.ShowFill(session.Dock.Count, session.Dock.Capacity);
         }
 
+        /// <summary>Keeps a parcel looking blocked until <paramref name="until"/>, then refreshes the board.</summary>
+        void HoldDown(int parcelId, float until)
+        {
+            if (until <= tweener.Now) return;
+            if (heldDownUntil.TryGetValue(parcelId, out float current) && current >= until) return;
+            heldDownUntil[parcelId] = until;
+            tweener.At(until, RefreshBoard);
+        }
+
+        /// <summary>
+        /// When a parcel freed by this batch's gate openings may look free (and flip, if hidden): once the
+        /// boom of a gate on its way out is up. 0 when no gate it needs opened in this batch.
+        /// </summary>
+        float GateClearAt(Parcel parcel)
+        {
+            if (gatesOpened.Count == 0) return 0f;
+            var path = session.Board.FindExitPath(parcel.Cell);
+            if (path == null) return 0f;
+            float clear = 0f;
+            foreach (int g in gatesOpened)
+                if (path.Contains(session.Level.Gates[g].Cell)) clear = Mathf.Max(clear, gateClearAt[g]);
+            return clear;
+        }
+
+        /// <summary>Parcels that a gate opening in this batch has just freed stay down until its boom is up.</summary>
+        void HoldBehindOpeningGates()
+        {
+            if (gatesOpened.Count == 0) return;
+            session.Board.GetFreeParcels(freeScratch);
+            foreach (var p in freeScratch)
+            {
+                var pv = parcels[p.Id];
+                if (!pv.InYard || pv.IsFree) continue;
+                HoldDown(p.Id, GateClearAt(p));
+            }
+        }
+
+        /// <summary>The level's bollard cells, for the yard mesh.</summary>
+        List<Cell> Bollards(LevelDefinition level)
+        {
+            var bollards = new List<Cell>();
+            for (int y = 0; y < session.Board.Height; y++)
+            for (int x = 0; x < session.Board.Width; x++)
+                if (level.IsBollard(x, y)) bollards.Add(new Cell(x, y));
+            return bollards;
+        }
+
         /// <summary>
         /// Maps a screen press to a yard cell. A press that misses every parcel snaps to the nearest
-        /// free one within <see cref="HitRadius"/> cells, so near-misses still count. With the Crane
-        /// armed any parcel counts as a target.
+        /// tappable unit (<see cref="GameSession.GetMoves"/>) within <see cref="HitRadius"/> cells, so
+        /// near-misses still count. With the Crane armed any parcel counts as a target. A press on a
+        /// bollard or closed gate is nobody's.
         /// </summary>
         bool TryPickCell(Vector2 screen, bool anyParcel, out Cell cell)
         {
@@ -773,6 +1360,7 @@ namespace CargoJam.Game
             float fx = hit.x / Layout.CellSize + (session.Board.Width - 1) * 0.5f;
             float fy = -hit.z / Layout.CellSize;
             var direct = new Cell(Mathf.RoundToInt(fx), Mathf.RoundToInt(fy));
+            if (session.Board.IsObstacle(direct)) return false;
             if (session.Board.Get(direct) != null)
             {
                 cell = direct;
@@ -786,7 +1374,7 @@ namespace CargoJam.Game
             }
             else
             {
-                session.Board.GetFreeParcels(freeScratch);
+                session.GetMoves(freeScratch);
             }
             float best = HitRadius * HitRadius;
             bool found = false;
@@ -808,7 +1396,18 @@ namespace CargoJam.Game
             lastScreenHeight = ScreenInfo.Height;
             if (menu != null)
             {
-                CameraRig.Fit(cam, MenuDiorama.Bounds, menuLayout != null ? menuLayout.MenuViewport : DefaultMenuViewport);
+                var menuViewport = menuLayout != null ? menuLayout.MenuViewport : DefaultMenuViewport;
+                if (!menuGliding)
+                {
+                    CameraRig.Fit(cam, MenuDiorama.Bounds, menuViewport);
+                    menuRest = cam.transform.position;
+                    return;
+                }
+                // Mid-glide: aim the glide at the new framing and leave the camera where the glide has it.
+                var at = cam.transform.position;
+                CameraRig.Fit(cam, MenuDiorama.Bounds, menuViewport);
+                menuGlideTo = cam.transform.position;
+                cam.transform.position = at;
                 return;
             }
             if (layout == null) return;

@@ -1,15 +1,19 @@
 {
   "id": 12,
   "hard": false,
-  "holdingSlots": 5,
+  "holdingSlots": 3,
   "truckCapacity": 3,
-  "trucks": "ROBRBROPR",
+  "trucks": "OBRPBPBRPO",
   "rows": [
-    "RRRRO",
-    ".RO.B",
-    "OBBBB",
-    "RRRRR",
-    "ROOBO",
-    "RPPP."
+    "ORPRBP",
+    "BRBbBB",
+    "B.P#PP",
+    "ROO#.R",
+    "PPO#bO",
+    "ROB#PP"
+  ],
+  "straps": [
+    { "x": 2, "y": 3, "x2": 2, "y2": 4 },
+    { "x": 4, "y": 1, "x2": 5, "y2": 1 }
   ]
 }

@@ -59,6 +59,8 @@ namespace CargoJam.Game.Feel
         int ladder;
         float lastDepartAt = float.NegativeInfinity;
         float nextTrailAt;
+        /// <summary>Bumped by every tension change, so a scheduled change only applies if nothing newer came after it.</summary>
+        int tensionVersion;
 
         /// <summary>One-shot sound effects (also used by the debug HUD).</summary>
         public AudioService Audio => sfx;
@@ -149,6 +151,8 @@ namespace CargoJam.Game.Feel
             particles.Clear();
             dockFx.End();
             music.ClearDuck();
+            tensionVersion++;
+            music.SetTension(false);
         }
 
         // ---- Environment (design v3): ambience, music, and the arrival reveal --------------------
@@ -163,7 +167,9 @@ namespace CargoJam.Game.Feel
             string biome = info.Biome != null ? info.Biome.Id : Journey.IdOf(info.Stop);
             var area = views != null ? views.Layout.ContentBounds : MenuDiorama.Bounds;
             ambient.Show(AmbientLife.KindFor(biome, info.Mood), storm, area, views != null, cam);
-            music.PlayStop(info.Stop, storm);
+            // Calm base, livelier swaps (design v4 §7); the next level's cue renders in the background.
+            MusicSelector.Choose(info, views, out var cue, out var prefetch);
+            music.Play(cue, prefetch);
 
             float extra = 0f;
             if (views != null && info.Arrival) extra = PlayArrival(info);
@@ -368,6 +374,111 @@ namespace CargoJam.Game.Feel
             }
         }
 
+        // ---- Cargo ---------------------------------------------------------------------------------
+
+        public void FrostCracked(ParcelView parcel, int left, float at)
+        {
+            if (views == null) return;
+            var ice = fxMaterials.Ice;
+            views.Tweener.At(at, () =>
+            {
+                if (!parcel) return;
+                var collar = parcel.transform.position + Vector3.up * 0.2f;
+                if (left <= 0)
+                {
+                    // Thawed: the ice bursts off in a big spray of shards and a frosty glint.
+                    particles.Emit(collar, BurstSpec.IceShards(16), ice);
+                    particles.Emit(collar + Vector3.up * 0.2f, BurstSpec.Sparkle(6), fxMaterials.White);
+                    sfx.Play(Sfx.IceShatter, 1f, 0.9f);
+                    Haptics.Play(Haptic.Tick);
+                }
+                else
+                {
+                    // Every move knocks a few chips off: soft, as it comes with most moves on a frost level.
+                    particles.Emit(collar, BurstSpec.IceShards(3), ice);
+                    sfx.PlayVaried(Sfx.IceCrack, IcePitch(left), 0.45f, 0.03f);
+                }
+            });
+        }
+
+        /// <summary>The ice cracks higher as the thaw nears: a semitone a move over the last six (+5 at 1 left).</summary>
+        static float IcePitch(int left) => Mathf.Pow(2f, (Mathf.Clamp(6 - left, 0, 5) - 1f) / 12f);
+
+        public void ExpressTicked(ParcelView parcel, int left, float at)
+        {
+            if (views == null) return;
+            // Rising pitch as the count runs down: two semitones a move over the last five.
+            float pitch = Mathf.Pow(2f, Mathf.Clamp(6 - left, 0, 5) * 2f / 12f);
+            float volume = left <= 2 ? 0.85f : 0.55f;
+            views.Tweener.At(at, () =>
+            {
+                sfx.Play(Sfx.ExpressTick, pitch, volume);
+                if (left == 1) Haptics.Play(Haptic.Warning);
+            });
+        }
+
+        public void StrapSnapped(StrapView strap, float at)
+        {
+            if (views == null) return;
+            views.Tweener.At(at, () =>
+            {
+                if (!strap) return;
+                var a = strap.A ? strap.A.transform.position : strap.transform.position;
+                var b = strap.B ? strap.B.transform.position : strap.transform.position;
+                var mid = (a + b) * 0.5f + Vector3.up * 0.45f;
+                particles.Emit(mid, BurstSpec.Sparks(8), fxMaterials.White);
+                particles.Emit(mid, BurstSpec.Dust(4), fxMaterials.Dust);
+                sfx.PlayVaried(Sfx.StrapSnap, 1f, 0.85f);
+                Haptics.Play(Haptic.Tick);
+            });
+        }
+
+        public void GateProgress(GateView gate, int left, float at)
+        {
+            if (views == null || !gate) return;
+            var mat = views.Materials.Parcel(gate.Gate.Color, true);
+            // Each count down climbs a step, so the last loads before it opens build up.
+            float pitch = Mathf.Pow(2f, Mathf.Clamp(5 - left, 0, 5) * 2f / 12f);
+            views.Tweener.At(at, () =>
+            {
+                if (!gate) return;
+                particles.Emit(gate.transform.position + Vector3.up * 1.1f, BurstSpec.Sparkle(4), mat);
+                sfx.Play(Sfx.GateTick, pitch, 0.8f);
+            });
+        }
+
+        public void GateOpened(GateView gate, float at)
+        {
+            if (views == null || !gate) return;
+            var mat = views.Materials.Parcel(gate.Gate.Color, true);
+            var palette = fxMaterials.SparklePalette;
+            views.Tweener.At(at, () =>
+            {
+                if (!gate) return;
+                var top = gate.transform.position + Vector3.up;
+                particles.Emit(top, BurstSpec.Sparkle(12), palette, palette.Length);
+                particles.Emit(top, BurstSpec.Sparkle(6), mat);
+                particles.Emit(gate.transform.position, BurstSpec.Dust(6), fxMaterials.Dust);
+                sfx.Play(Sfx.GateOpen);
+                Haptics.Play(Haptic.TruckFull, 0.5f);
+            });
+        }
+
+        /// <summary>
+        /// The latest call wins: a change scheduled for later is dropped if another call (or a fail or
+        /// teardown) comes in before it fires, so the music always ends up matching the board.
+        /// </summary>
+        public void TensionChanged(bool tense, float at)
+        {
+            int version = ++tensionVersion;
+            if (views == null || at <= views.Tweener.Now)
+            {
+                music.SetTension(tense);
+                return;
+            }
+            views.Tweener.At(at, () => { if (version == tensionVersion) music.SetTension(tense); });
+        }
+
         // ---- Win and fail -------------------------------------------------------------------------
 
         public void WinSequence(float at, Vector3 lastTruck)
@@ -436,16 +547,27 @@ namespace CargoJam.Game.Feel
             });
         }
 
-        public void Fail(float at, IReadOnlyList<ParcelView> needed, TruckView waiting)
+        public void Fail(float at, FailReason reason, IReadOnlyList<ParcelView> needed, TruckView waiting)
         {
             ResetTimeScale();
             if (views == null) return;
             overlay.ClearCallouts();
             music.Duck(at, 2.2f);
+            bool missed = reason == FailReason.ExpressMissed;
+            // Nothing scheduled before the fail may turn the tension layer back on under the sheet.
+            int version = ++tensionVersion;
             views.Tweener.At(at, () =>
             {
+                if (version == tensionVersion) music.SetTension(false);
                 overlay.SetFailMood(true);
-                sfx.Play(Sfx.Horn, 0.85f);
+                if (missed)
+                {
+                    // The express shipment left without its parcel: the countdown's last tick, high,
+                    // then a lower honk from the truck that gave up waiting.
+                    sfx.Play(Sfx.ExpressTick, 2f, 0.9f);
+                    sfx.Play(Sfx.Horn, 0.7f);
+                }
+                else sfx.Play(Sfx.Horn, 0.85f);
                 sfx.Play(Sfx.Fail);
                 Haptics.Play(Haptic.Fail);
             });
@@ -461,6 +583,7 @@ namespace CargoJam.Game.Feel
                 slowRealStart = Time.unscaledTime;
             }
             if (slowRealStart < 0f) return;
+            FramePacer.KeepAwake();
 
             float u = Time.unscaledTime - slowRealStart;
             float scale;

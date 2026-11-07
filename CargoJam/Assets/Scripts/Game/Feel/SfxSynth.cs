@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using static CargoJam.Game.Feel.Dsp;
 
 namespace CargoJam.Game.Feel
 {
@@ -40,6 +41,12 @@ namespace CargoJam.Game.Feel
                 case Sfx.Callout: return Notes("callout", new[] { 79, 84, 88 }, 0.06f, 0.3f, 0.3f);
                 case Sfx.Stamp: return Clip("stamp", 0.2f, Stamp);
                 case Sfx.Thunder: return Thunder();
+                case Sfx.IceCrack: return Clip("ice-crack", 0.16f, IceCrack);
+                case Sfx.IceShatter: return Clip("ice-shatter", 0.5f, IceShatter);
+                case Sfx.ExpressTick: return Clip("express-tick", 0.09f, ExpressTick);
+                case Sfx.StrapSnap: return Clip("strap-snap", 0.22f, StrapSnap);
+                case Sfx.GateTick: return Clip("gate-tick", 0.09f, GateTick);
+                case Sfx.GateOpen: return Clip("gate-open", 0.55f, GateOpen);
                 default: throw new ArgumentOutOfRangeException(nameof(sfx));
             }
         }
@@ -50,6 +57,84 @@ namespace CargoJam.Game.Feel
             float body = Sine(Sweep(t, d, 150f, 80f)) * Decay(t, 26f);
             float slap = Noise(t) * Decay(t, 90f) * 0.45f;
             return (body + slap) * Mathf.Min(1f, t * 600f) * 0.55f;
+        }
+
+        // Ice giving way: a crackle of three glassy ticks over a short brittle ping.
+        static float IceCrack(float t, float d)
+        {
+            float crackle = 0f;
+            for (int i = 0; i < 3; i++)
+            {
+                float local = t - i * 0.022f;
+                if (local < 0f) break;
+                crackle += Noise(t) * Sine(local * 3400f) * Decay(local, 220f) * (1f - 0.25f * i);
+            }
+            float ping = (Sine(t * 2650f) + 0.5f * Sine(t * 4130f)) * Decay(t, 32f) * 0.22f;
+            return (crackle * 0.55f + ping) * Mathf.Min(1f, t * 2000f) * 0.7f;
+        }
+
+        // The last of the ice bursting: a bright noisy break, a low knock and scattered tinkles falling away.
+        static float IceShatter(float t, float d)
+        {
+            // Differenced noise: a high-passed, glassy hiss.
+            uint n = (uint)(t * Rate);
+            float burst = (Dsp.Noise(n) - Dsp.Noise(n - 1u)) * 0.5f * Decay(t, 11f);
+            float knock = Sine(Sweep(t, d, 260f, 140f)) * Decay(t, 30f) * 0.35f;
+            float tinkle = 0f;
+            for (int i = 0; i < 5; i++)
+            {
+                float local = t - 0.035f - i * 0.055f;
+                if (local < 0f) break;
+                float f = 2200f + 430f * ((i * 3) % 5);
+                tinkle += (Sine(local * f) + 0.3f * Sine(local * f * 2.76f)) * Decay(local, 26f) * (0.32f - 0.04f * i);
+            }
+            return (burst * 0.9f + knock + tinkle) * Mathf.Min(1f, t * 1500f) * 0.6f;
+        }
+
+        // A crisp clock tick with a short tonal blip, so pitching it up reads as urgency.
+        static float ExpressTick(float t, float d)
+        {
+            float click = Noise(t) * Decay(t, 600f) * 0.35f;
+            float blip = (Sine(t * 1320f) + 0.35f * Soft(Sine(t * 1320f) * 4f)) * Decay(t, 48f) * 0.4f;
+            return (click + blip) * Mathf.Min(1f, t * 3000f) * 0.75f;
+        }
+
+        // A taut woven band letting go: a fast downward twang with a papery slap.
+        static float StrapSnap(float t, float d)
+        {
+            float twang = Soft(Sine(Sweep(t, 0.12f, 900f, 120f)) * 2.2f) * Decay(t, 20f) * 0.35f;
+            float slap = Noise(t) * Decay(t, 70f) * 0.5f;
+            float thud = Sine(t * 110f) * Decay(t, 28f) * 0.25f;
+            return (twang + slap + thud) * Mathf.Min(1f, t * 2500f) * 0.6f;
+        }
+
+        // A mechanical counter flipping: two tight clacks and a small metallic tick.
+        static float GateTick(float t, float d)
+        {
+            float second = t - 0.028f;
+            float clack = Noise(t) * Decay(t, 380f) * 0.5f + Sine(t * 1900f) * Decay(t, 140f) * 0.3f;
+            if (second > 0f) clack += Noise(second) * Decay(second, 420f) * 0.35f + Sine(second * 2500f) * Decay(second, 120f) * 0.25f;
+            return clack * 0.6f;
+        }
+
+        // The boom swinging up: a short rising ratchet, then a bright two-note ding.
+        static float GateOpen(float t, float d)
+        {
+            float ratchet = 0f;
+            if (t < 0.2f)
+            {
+                float tooth = (t * 60f) % 1f;
+                ratchet = Noise(t) * Decay(tooth / 60f, 500f) * 0.35f * Envelope(t, 0.2f, 0.02f, 0.05f);
+            }
+            float ding = 0f;
+            for (int i = 0; i < 2; i++)
+            {
+                float local = t - 0.17f - i * 0.09f;
+                if (local < 0f) break;
+                float f = i == 0 ? 1318.5f : 1975.5f;
+                ding += (Sine(local * f) + 0.25f * Sine(local * f * 2.76f)) * Decay(local, 9f) * Mathf.Min(1f, local * 800f) * 0.28f;
+            }
+            return ratchet + ding;
         }
 
         // Far-off thunder: heavily low-passed noise that swells and rolls away, with a slow wobble.
@@ -179,29 +264,7 @@ namespace CargoJam.Game.Feel
             return clip;
         }
 
-        /// <summary>Phase (in cycles) of a sine sweeping from f0 to f1 over d seconds.</summary>
-        static float Sweep(float t, float d, float f0, float f1) => f0 * t + (f1 - f0) * t * t / (2f * d);
-
-        static float Sine(float cycles) => Mathf.Sin(cycles * 2f * Mathf.PI);
-        static float Saw(float cycles) => 2f * (cycles - Mathf.Floor(cycles + 0.5f));
-        static float Triangle(float cycles) => 2f * Mathf.Abs(Saw(cycles)) - 1f;
-        static float Soft(float x) => (float)Math.Tanh(x);
-        static float Decay(float t, float rate) => Mathf.Exp(-t * rate);
-
-        static float Envelope(float t, float d, float attack, float release)
-        {
-            if (t < attack) return t / attack;
-            if (t > d - release) return Mathf.Max(0f, (d - t) / release);
-            return 1f;
-        }
-
-        // Deterministic hash noise, so the clips sound the same every launch.
-        static float Noise(float t)
-        {
-            uint x = (uint)(t * Rate) * 747796405u + 2891336453u;
-            x = ((x >> (int)((x >> 28) + 4u)) ^ x) * 277803737u;
-            x = (x >> 22) ^ x;
-            return x / (float)uint.MaxValue * 2f - 1f;
-        }
+        // Deterministic hash noise per sample, so the clips sound the same every launch.
+        static float Noise(float t) => Dsp.Noise((uint)(t * Rate));
     }
 }

@@ -49,8 +49,11 @@ namespace CargoJam.Game.Presentation.Fx
             delay = Mathf.Max(0f, delay);
             float now = tw.Now + delay;
 
+            var gates = views.Gates;
             int rows = 0;
             foreach (var pv in views.Parcels) rows = Mathf.Max(rows, pv.Parcel.Cell.Y + 1);
+            if (gates != null)
+                foreach (var gate in gates) rows = Mathf.Max(rows, gate.Gate.Cell.Y + 1);
             float stagger = rows > 1 ? Mathf.Min(RowStagger, MaxRowSpread / (rows - 1)) : 0f;
 
             foreach (var pv in views.Parcels)
@@ -59,6 +62,11 @@ namespace CargoJam.Game.Presentation.Fx
                 float start = now + DropStart + pv.Parcel.Cell.Y * stagger + UnityEngine.Random.Range(0f, 0.012f);
                 Drop(tw, pv, start, delay > 0f);
             }
+            // Customs gates drop with their row, like the parcels around them.
+            if (gates != null)
+                foreach (var gate in gates)
+                    if (gate && !gate.IsOpen)
+                        DropGate(tw, gate, now + DropStart + gate.Gate.Cell.Y * stagger, delay > 0f);
             if (rowLanded != null)
             {
                 for (int row = 0; row < rows; row++)
@@ -104,6 +112,25 @@ namespace CargoJam.Game.Presentation.Fx
                     if (!pv || !pv.InYard) return;
                     tr.position = rest;
                     SquashInYard(tw, pv, tw.Now, Squash);
+                });
+        }
+
+        /// <summary>A gate falls in like a parcel and lands with a squash. Gates can't be tapped, so no yard check.</summary>
+        static void DropGate(Tweener tw, GateView gate, float start, bool park)
+        {
+            var tr = gate.transform;
+            var rest = tr.position;
+            var restScale = tr.localScale;
+            var from = rest + Vector3.up * DropHeight;
+            tr.position = park ? rest + Vector3.up * ParkHeight : from;
+            tw.Run(start, DropTime,
+                t => { if (tr) tr.position = Vector3.LerpUnclamped(from, rest, Ease.InCubic(t)); },
+                null,
+                () =>
+                {
+                    if (!tr) return;
+                    tr.position = rest;
+                    tw.Punch(tr, restScale, SquashAmount, tw.Now, Squash);
                 });
         }
 

@@ -315,5 +315,10 @@ namespace CargoJam.Game.Presentation
         public bool Changed;
         /// <summary>This level starts a new destination (see <see cref="Journey.IsArrival"/>).</summary>
         public bool Arrival;
+        /// <summary>
+        /// The level is (in a level) or the level about to start is (on the menu) a HARD one. Set by the
+        /// controller; lets the menu prefetch the right music cue.
+        /// </summary>
+        public bool Hard;
     }
 }

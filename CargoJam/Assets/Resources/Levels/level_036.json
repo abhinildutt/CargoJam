@@ -1,18 +1,17 @@
 {
   "id": 36,
   "hard": false,
-  "holdingSlots": 5,
+  "holdingSlots": 3,
   "truckCapacity": 3,
-  "trucks": "YGPGBPGYPBYB",
+  "trucks": "GBYGPOPBOY",
   "rows": [
-    "GGGGGYY",
-    "BPG.PYG",
-    "YpBBBPG",
-    ".PBP.Bb",
-    "P..YyBY",
-    "YPGB.YP"
+    "GBOBYYP",
+    "BP.P.PO",
+    "BGPGOYG",
+    "..oOYOB",
+    "GyGY.Pb"
   ],
-  "locks": [
-    { "x": 0, "y": 0, "keyX": 6, "keyY": 1 }
+  "straps": [
+    { "x": 4, "y": 0, "x2": 5, "y2": 0 }
   ]
 }

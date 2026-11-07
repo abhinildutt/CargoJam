@@ -72,6 +72,12 @@ namespace CargoJam.Game.UI
                 case IconKind.ChevronRight: Mono(p, f, tint, (q, g, c) => Chevron(q, g, c, false)); break;
                 case IconKind.Truck: Truck(p, f); break;
                 case IconKind.Map: Mono(p, f, tint, MapPin); break;
+                case IconKind.Bollard: Bollard(p, f); break;
+                case IconKind.Frost: Frost(p, f); break;
+                case IconKind.Mystery: Mystery(p, f); break;
+                case IconKind.Express: Express(p, f); break;
+                case IconKind.Strap: Strap(p, f); break;
+                case IconKind.Gate: Gate(p, f); break;
             }
         }
 
@@ -457,6 +463,95 @@ namespace CargoJam.Game.UI
             Circle(p, f, 78f, 74f, 11f, UiPalette.Ink);
             Circle(p, f, 22f, 74f, 4f, UiPalette.Ink3);
             Circle(p, f, 78f, 74f, 4f, UiPalette.Ink3);
+        }
+
+        // ---- Cargo icons (the "New cargo!" card) --------------------------------------------------
+
+        /// <summary>A white concrete post with a dark band and a rounded cap, as on the board.</summary>
+        static void Bollard(Painter2D p, Frame f)
+        {
+            RoundRect(p, f, 18f, 84f, 64f, 10f, 5f, UiPalette.Ink3);
+            // A soft edge, so the white post holds up on a light card.
+            RoundRect(p, f, 27f, 23f, 46f, 67f, 8f, UiPalette.Cargo.ConcreteEdge);
+            Circle(p, f, 50f, 30f, 23f, UiPalette.Cargo.ConcreteEdge);
+            RoundRect(p, f, 30f, 26f, 40f, 62f, 6f, UiPalette.Cargo.ConcreteShade);
+            Circle(p, f, 50f, 30f, 20f, UiPalette.Cargo.ConcreteShade);
+            RoundRect(p, f, 30f, 26f, 32f, 62f, 6f, UiPalette.Cargo.Concrete);
+            Circle(p, f, 46f, 29f, 16f, UiPalette.Cargo.Concrete);
+            RoundRect(p, f, 30f, 58f, 40f, 11f, 0f, UiPalette.Cargo.BollardBand);
+            RoundRect(p, f, 36f, 16f, 7f, 38f, 3.5f, UiPalette.A(Color.white, 0.6f));
+        }
+
+        /// <summary>A six-armed snowflake: three crossing strokes with a pair of tips on each arm.</summary>
+        static void Frost(Painter2D p, Frame f)
+        {
+            p.strokeColor = UiPalette.Cargo.Ice;
+            p.lineWidth = f.L(8f);
+            for (int arm = 0; arm < 6; arm++)
+            {
+                float a = (arm * 60f - 90f) * Mathf.Deg2Rad;
+                var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                Line(p, f, 50f, 50f, 50f + dir.x * 42f, 50f + dir.y * 42f);
+                // Tips branch off two thirds of the way out, leaning back toward the middle.
+                float b0 = a + 140f * Mathf.Deg2Rad, b1 = a - 140f * Mathf.Deg2Rad;
+                float bx = 50f + dir.x * 28f, by = 50f + dir.y * 28f;
+                p.lineWidth = f.L(6f);
+                Line(p, f, bx, by, bx + Mathf.Cos(b0) * 13f, by + Mathf.Sin(b0) * 13f);
+                Line(p, f, bx, by, bx + Mathf.Cos(b1) * 13f, by + Mathf.Sin(b1) * 13f);
+                p.lineWidth = f.L(8f);
+            }
+            Circle(p, f, 50f, 50f, 9f, UiPalette.Cargo.Ice);
+            Circle(p, f, 50f, 50f, 4.5f, UiPalette.Cargo.IceLight);
+        }
+
+        /// <summary>A covered parcel: a crate under a grey tarp with a white question mark, as on the board.</summary>
+        static void Mystery(Painter2D p, Frame f)
+        {
+            RoundRect(p, f, 14f, 18f, 72f, 72f, 16f, UiPalette.Cargo.MysteryDeep);
+            RoundRect(p, f, 14f, 14f, 72f, 70f, 16f, UiPalette.Cargo.Mystery);
+            p.strokeColor = Color.white;
+            p.lineWidth = f.L(9f);
+            p.BeginPath();
+            ArcPoints(p, f, 50f, 40f, 14f, 180f, 450f, true);
+            p.LineTo(f.P(50f, 62f));
+            p.Stroke();
+            Circle(p, f, 50f, 74f, 5.5f, Color.white);
+        }
+
+        /// <summary>
+        /// The express parcel's countdown display, as on the board: a dark tile with an amber rim and an
+        /// amber lightning bolt (ship it fast).
+        /// </summary>
+        static void Express(Painter2D p, Frame f)
+        {
+            RoundRect(p, f, 8f, 8f, 84f, 84f, 14f, UiPalette.Cargo.ExpressAmber);
+            RoundRect(p, f, 15f, 15f, 70f, 70f, 9f, UiPalette.Cargo.ExpressDisplay);
+            Poly(p, UiPalette.Cargo.ExpressAmber, f.P(58f, 20f), f.P(31f, 55f), f.P(47f, 55f), f.P(41f, 81f), f.P(69f, 44f), f.P(53f, 44f), f.P(63f, 20f));
+        }
+
+        /// <summary>Two parcels held together by a belt and buckle.</summary>
+        static void Strap(Painter2D p, Frame f)
+        {
+            RoundRect(p, f, 6f, 30f, 42f, 46f, 9f, UiPalette.Cargo.Strap);
+            RoundRect(p, f, 52f, 30f, 42f, 46f, 9f, UiPalette.Cargo.Strap);
+            RoundRect(p, f, 6f, 62f, 42f, 14f, 9f, UiPalette.Cargo.StrapDeep);
+            RoundRect(p, f, 52f, 62f, 42f, 14f, 9f, UiPalette.Cargo.StrapDeep);
+            RoundRect(p, f, 2f, 47f, 96f, 11f, 5.5f, UiPalette.Ink);
+            RoundRect(p, f, 41f, 40f, 18f, 25f, 5f, UiPalette.GoldDeep);
+            RoundRect(p, f, 44f, 43f, 12f, 19f, 3f, UiPalette.Gold);
+        }
+
+        /// <summary>A customs barrier: striped arm across two posts.</summary>
+        static void Gate(Painter2D p, Frame f)
+        {
+            RoundRect(p, f, 14f, 44f, 72f, 15f, 5f, Color.white);
+            RoundRect(p, f, 28f, 44f, 11f, 15f, 0f, UiPalette.Danger);
+            RoundRect(p, f, 50f, 44f, 11f, 15f, 0f, UiPalette.Danger);
+            RoundRect(p, f, 72f, 44f, 11f, 15f, 0f, UiPalette.Danger);
+            RoundRect(p, f, 6f, 30f, 20f, 62f, 6f, UiPalette.Secondary);
+            RoundRect(p, f, 74f, 40f, 20f, 52f, 6f, UiPalette.Secondary);
+            Circle(p, f, 16f, 22f, 8f, UiPalette.Danger);
+            RoundRect(p, f, 2f, 88f, 96f, 7f, 3.5f, UiPalette.Ink3);
         }
 
         /// <summary>A red "off" slash across a toggle icon.</summary>

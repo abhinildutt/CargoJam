@@ -38,14 +38,28 @@ namespace CargoJam.Game.UI
         public static readonly Color GiftWrap = Danger;
         public static readonly Color GiftWrapDark = Hex(0xB4403C);
 
-        /// <summary>The parcel colors in ParcelColors order (R B G Y P O), for the wordmark.</summary>
-        public static readonly Color[] Parcels =
-        {
-            Hex(0xE5544A), Hex(0x3F7FE6), Hex(0x3DB36B), Hex(0xF2C230), Hex(0x8E5BD6), Hex(0xF08A3C),
-        };
-
         /// <summary>Spark colors for reward bursts: golds and whites, no rainbow.</summary>
         public static readonly Color[] Sparks = { Gold, Color.white, GoldLight, GoldDeep };
+
+        /// <summary>Colors for the cargo icons on the "New cargo!" card (multi-color icons).</summary>
+        public static class Cargo
+        {
+            public static readonly Color Ice = Hex(0x5E9BC4);
+            public static readonly Color IceLight = Hex(0xBFDDF0);
+            /// <summary>The grey tarp over a mystery parcel, as on the board.</summary>
+            public static readonly Color Mystery = Hex(0x8D9099);
+            public static readonly Color MysteryDeep = Hex(0x6C6F78);
+            /// <summary>The white concrete bollard and its dark band, as on the board.</summary>
+            public static readonly Color Concrete = Hex(0xEDEBE6);
+            public static readonly Color ConcreteShade = Hex(0xC9C6BF);
+            public static readonly Color ConcreteEdge = Hex(0x8F8C85);
+            public static readonly Color BollardBand = Hex(0x23252B);
+            /// <summary>The express parcel's countdown display: near-black with an amber rim and figures.</summary>
+            public static readonly Color ExpressDisplay = Hex(0x1A1C29);
+            public static readonly Color ExpressAmber = Hex(0xFFCC1F);
+            public static readonly Color Strap = Hex(0x3F7FE6);
+            public static readonly Color StrapDeep = Hex(0x2F62B8);
+        }
 
         /// <summary>Muted scene colors for the six postcard illustrations (Journey screen).</summary>
         public static class Art

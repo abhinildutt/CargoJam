@@ -1,0 +1,20 @@
+{
+  "id": 81,
+  "hard": false,
+  "holdingSlots": 3,
+  "truckCapacity": 3,
+  "trucks": "OGBYRYPOBP",
+  "rows": [
+    "BBGYPG",
+    "OYG.YO",
+    ".OBPYO",
+    "BPPPYR",
+    "O#RP#O",
+    "B#BR#Y"
+  ],
+  "locks": [
+    { "x": 4, "y": 2, "keyX": 2, "keyY": 1 },
+    { "x": 1, "y": 0, "keyX": 1, "keyY": 2 },
+    { "x": 1, "y": 1, "keyX": 4, "keyY": 1 }
+  ]
+}

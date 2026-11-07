@@ -32,10 +32,40 @@ namespace CargoJam.Core.Tests
             return new GameSession(LevelDefinition.Parse(data));
         }
 
+        /// <summary>A session from level data built with <see cref="Data"/> and the cargo helpers below.</summary>
+        public static GameSession Session(LevelData data)
+        {
+            return new GameSession(LevelDefinition.Parse(data));
+        }
+
         /// <summary>The parcel at (x, y) stays locked until the parcel at (keyX, keyY) is loaded.</summary>
         public static LockData Lock(int x, int y, int keyX, int keyY)
         {
             return new LockData { x = x, y = y, keyX = keyX, keyY = keyY };
+        }
+
+        /// <summary>The parcel at (x, y) is frozen until <paramref name="moves"/> moves have gone by.</summary>
+        public static FrostData Frost(int x, int y, int moves)
+        {
+            return new FrostData { x = x, y = y, layers = moves };
+        }
+
+        /// <summary>The parcel at (x, y) is express with <paramref name="taps"/> moves to leave the yard.</summary>
+        public static ExpressData Express(int x, int y, int taps)
+        {
+            return new ExpressData { x = x, y = y, taps = taps };
+        }
+
+        /// <summary>The parcels at (x, y) and (x2, y2) are strapped together.</summary>
+        public static StrapData Strap(int x, int y, int x2, int y2)
+        {
+            return new StrapData { x = x, y = y, x2 = x2, y2 = y2 };
+        }
+
+        /// <summary>The '+' at (x, y) opens after <paramref name="count"/> loads of <paramref name="color"/>.</summary>
+        public static GateData Gate(int x, int y, char color, int count)
+        {
+            return new GateData { x = x, y = y, color = color.ToString(), count = count };
         }
     }
 }

@@ -1,0 +1,22 @@
+{
+  "id": 61,
+  "hard": false,
+  "holdingSlots": 3,
+  "truckCapacity": 3,
+  "trucks": "BRGPBOYPOR",
+  "rows": [
+    "RYRGOO",
+    ".RBBB.",
+    ".OBBOY",
+    ".O.RPY",
+    "RPBPPG",
+    "PRO.GP"
+  ],
+  "locks": [
+    { "x": 0, "y": 0, "keyX": 2, "keyY": 1 },
+    { "x": 4, "y": 2, "keyX": 3, "keyY": 1 }
+  ],
+  "straps": [
+    { "x": 4, "y": 0, "x2": 5, "y2": 0 }
+  ]
+}

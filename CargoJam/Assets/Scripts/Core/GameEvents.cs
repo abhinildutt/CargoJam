@@ -2,6 +2,19 @@ using System.Collections.Generic;
 
 namespace CargoJam.Core
 {
+    /// <summary>Why a level was lost (<see cref="LevelFailed.Reason"/>, <see cref="GameSession.FailReason"/>).</summary>
+    public enum FailReason
+    {
+        /// <summary>Not failed.</summary>
+        None,
+        /// <summary>No legal move, but one more holding slot would allow one: Continue is offered.</summary>
+        OutOfSpace,
+        /// <summary>No legal move, and another slot wouldn't help (e.g. every free parcel is restrained).</summary>
+        Stuck,
+        /// <summary>An express parcel ran out of moves while still in the yard.</summary>
+        ExpressMissed,
+    }
+
     /// <summary>
     /// What happened during a tap, in order. The session applies its rules instantly;
     /// views replay these events as animations.
@@ -122,8 +135,92 @@ namespace CargoJam.Core
         public ParcelUnlocked(Parcel parcel) { Parcel = parcel; }
     }
 
+    /// <summary>
+    /// A move went by while a crate was frozen: <see cref="Left"/> moves remain until it thaws, and at 0
+    /// it has thawed (free from the next move on). With <see cref="Lifted"/> the Crane thawed it outright
+    /// just before lifting it (then <see cref="Left"/> is 0).
+    /// </summary>
+    public sealed class FrostCracked : GameEvent
+    {
+        public Parcel Parcel { get; }
+        public int Left { get; }
+        public bool Lifted { get; }
+
+        public FrostCracked(Parcel parcel, int left, bool lifted = false)
+        {
+            Parcel = parcel;
+            Left = left;
+            Lifted = lifted;
+        }
+    }
+
+    /// <summary>A move went by while an express parcel was still in the yard; <see cref="Left"/> moves remain.</summary>
+    public sealed class ExpressTicked : GameEvent
+    {
+        public Parcel Parcel { get; }
+        public int Left { get; }
+        public ExpressTicked(Parcel parcel, int left) { Parcel = parcel; Left = left; }
+    }
+
+    /// <summary>An express parcel ran out of moves in the yard. A <see cref="LevelFailed"/> follows.</summary>
+    public sealed class ExpressMissed : GameEvent
+    {
+        public Parcel Parcel { get; }
+        public ExpressMissed(Parcel parcel) { Parcel = parcel; }
+    }
+
+    /// <summary>A strapped pair left the yard together: <see cref="Lead"/> (the free member) first, then <see cref="Trail"/>.</summary>
+    public sealed class StrapMoved : GameEvent
+    {
+        public Parcel Lead { get; }
+        public Parcel Trail { get; }
+        public StrapMoved(Parcel lead, Parcel trail) { Lead = lead; Trail = trail; }
+    }
+
+    /// <summary>The Crane cut a strap: <see cref="Lifted"/> leaves alone and <see cref="Partner"/> stays, unstrapped.</summary>
+    public sealed class StrapCut : GameEvent
+    {
+        public Parcel Lifted { get; }
+        public Parcel Partner { get; }
+        public StrapCut(Parcel lifted, Parcel partner) { Lifted = lifted; Partner = partner; }
+    }
+
+    /// <summary>Undo returned a pair held together, and their strap is back.</summary>
+    public sealed class StrapRestored : GameEvent
+    {
+        public Parcel A { get; }
+        public Parcel B { get; }
+        public StrapRestored(Parcel a, Parcel b) { A = a; B = b; }
+    }
+
+    /// <summary>A load of the gate's color counted gate <see cref="Gate"/> (an index into <see cref="LevelDefinition.Gates"/>) down.</summary>
+    public sealed class GateProgress : GameEvent
+    {
+        public int Gate { get; }
+        public int Left { get; }
+        public Parcel Loaded { get; }
+
+        public GateProgress(int gate, int left, Parcel loaded)
+        {
+            Gate = gate;
+            Left = left;
+            Loaded = loaded;
+        }
+    }
+
+    /// <summary>Gate <see cref="Gate"/> reached 0 and opened; its cell is now empty for good.</summary>
+    public sealed class GateOpened : GameEvent
+    {
+        public int Gate { get; }
+        public GateOpened(int gate) { Gate = gate; }
+    }
+
     public sealed class LevelWon : GameEvent { }
 
-    /// <summary>The holding dock is full and no free parcel matches the loading truck.</summary>
-    public sealed class LevelFailed : GameEvent { }
+    /// <summary>The level is lost; <see cref="Reason"/> says why.</summary>
+    public sealed class LevelFailed : GameEvent
+    {
+        public FailReason Reason { get; }
+        public LevelFailed(FailReason reason = FailReason.OutOfSpace) { Reason = reason; }
+    }
 }

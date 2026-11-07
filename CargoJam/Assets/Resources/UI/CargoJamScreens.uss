@@ -1,34 +1,29 @@
 /* Cargo Jam UI, design v3: screens and popups. Tokens live on .cj-root (CargoJamBase.uss). */
 
-/* ---- Launch splash ------------------------------------------------------------------------ */
+/* ---- Wordmark (title screen) -------------------------------------------------------------- */
 
-.cj-splash {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--ink);
-}
-
+/* Sizes and the truck's spot come from tools/brand/make_logo.py (lockup aspect 1.9373). */
 .cj-logo {
-    align-items: center;
+    width: 640px;
+    height: 330px;
 }
 
-.cj-logo__word {
-    font-size: 150px;
-    -unity-font-definition: resource("UI/Fonts/Nunito-Black SDF");
-    letter-spacing: -2px;
+.cj-logo__letters {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-image: resource("UI/Brand/WordmarkLetters");
 }
 
-.cj-logo__tiles {
-    flex-direction: row;
-    margin-top: 28px;
-}
-
-.cj-logo__tile {
-    width: 56px;
-    height: 56px;
-    margin: 0 10px;
-    border-radius: 14px;
+.cj-logo__truck {
+    position: absolute;
+    left: 20.31%;
+    top: 46.80%;
+    width: 59.39%;
+    height: 45.89%;
+    background-image: resource("UI/Brand/WordmarkTruck");
 }
 
 /* ---- Home --------------------------------------------------------------------------------- */
@@ -743,4 +738,44 @@
 .cj-daily__check-icon {
     width: 76px;
     height: 76px;
+}
+
+/* ---- Level picker (editor and development builds only) ------------------------------------ */
+
+.cj-home__dev {
+    margin-left: 24px;
+}
+
+.cj-picker__number {
+    margin-top: 8px;
+    -unity-text-align: middle-center;
+}
+
+.cj-picker__detail {
+    margin-top: 4px;
+}
+
+.cj-picker__steps {
+    align-self: stretch;
+}
+
+.cj-picker__caption {
+    margin-top: 40px;
+    -unity-text-align: middle-center;
+}
+
+.cj-picker__grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 8px -8px 0 -8px;
+}
+
+.cj-picker__chip {
+    margin: 8px;
+    padding: 0 28px;
+}
+
+.cj-picker__chip .cj-btn__label {
+    font-size: 34px;
 }

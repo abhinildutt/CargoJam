@@ -63,7 +63,9 @@ namespace CargoJam.Game.Debugging
 #endif
             ScreenInfo.Override(Width, Height, SafeArea);
 
-            if (cameraTexture == null) cameraTexture = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32);
+            // Same MSAA as the screen, so captures show the edges a phone shows.
+            if (cameraTexture == null)
+                cameraTexture = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32) { antiAliasing = 4 };
             // Depth 24 includes a stencil buffer, which UI Toolkit needs to clip rounded overflow (bars).
             if (uiTexture == null) uiTexture = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32);
 

@@ -173,6 +173,7 @@ namespace CargoJam.Core.Tests
             var s = TestLevels.Session(new[] { TestLevels.Lock(0, 0, 2, 0) }, "RBG", 1, 1, "RBG");
             var events = s.Tap(new Cell(1, 0));
             Assert.That(Types(events), Is.EqualTo(new[] { typeof(ParcelHeld), typeof(LevelFailed) }));
+            Assert.That(((LevelFailed)events[1]).Reason, Is.EqualTo(FailReason.OutOfSpace), "the free green would fit a new slot");
             Assert.That(s.HasFreeMatch(), Is.False);
 
             var unlocked = TestLevels.Session("RBG", 1, 1, "RBG");
@@ -188,6 +189,44 @@ namespace CargoJam.Core.Tests
             var events = s.Tap(new Cell(1, 0));
             Assert.That(Types(events), Is.EqualTo(new[] { typeof(ParcelHeld), typeof(LevelFailed) }));
             Assert.That(s.Status, Is.EqualTo(GameStatus.Failed));
+            Assert.That(s.FailReason, Is.EqualTo(FailReason.Stuck));
+            Assert.That(((LevelFailed)events[1]).Reason, Is.EqualTo(FailReason.Stuck));
+        }
+
+        [Test]
+        public void AFullDockWithOnlyPadlockedFreeParcelsIsStuck()
+        {
+            // Design v4 behaviour change: this used to be an out-of-space fail with a Continue. Another
+            // slot can't help a padlocked parcel, so it is Stuck and Extra Slot can't resume it.
+            var s = TestLevels.Session(new[] { TestLevels.Lock(0, 0, 1, 0) }, "RB", 1, 1, "RB");
+            var events = s.Tap(new Cell(1, 0));
+            Assert.That(Types(events), Is.EqualTo(new[] { typeof(ParcelHeld), typeof(LevelFailed) }));
+            Assert.That(s.Dock.IsFull, Is.True);
+            Assert.That(s.FailReason, Is.EqualTo(FailReason.Stuck));
+            Assert.That(s.CanAddHoldingSlot, Is.False);
+            Assert.That(s.AddHoldingSlot(), Is.Empty);
+            Assert.That(s.Status, Is.EqualTo(GameStatus.Failed));
+        }
+
+        [Test]
+        public void CraneEventsComeInOrder()
+        {
+            // A hidden, padlocked, frozen parcel: revealed, unlocked, thawed, then lifted.
+            var data = TestLevels.Data("RB", 5, 3, "RRR", "bBB");
+            data.locks = new[] { TestLevels.Lock(0, 1, 1, 0) };
+            data.frost = new[] { TestLevels.Frost(0, 1, 1) };
+            var s = TestLevels.Session(data);
+            var p = At(s, 0, 1);
+            Assert.That(s.IsHidden(p) && s.IsLocked(p) && s.FrostLeft(p) == 1, Is.True);
+
+            var events = s.CraneLift(p.Cell);
+            Assert.That(Types(events), Is.EqualTo(new[]
+            {
+                typeof(ParcelRevealed), typeof(ParcelUnlocked), typeof(FrostCracked), typeof(ParcelHeld),
+            }));
+            var thaw = (FrostCracked)events[2];
+            Assert.That(thaw.Left, Is.Zero);
+            Assert.That(thaw.Lifted, Is.True, "the Crane thawed it outright");
         }
 
         [Test]

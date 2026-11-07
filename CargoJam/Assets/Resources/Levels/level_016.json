@@ -1,14 +1,19 @@
 {
   "id": 16,
   "hard": false,
-  "holdingSlots": 5,
+  "holdingSlots": 3,
   "truckCapacity": 3,
-  "trucks": "OBOPOBOB",
+  "trucks": "ORYGGRYRGO",
   "rows": [
-    "OOOOBO",
-    "BOOBbO",
-    ".BbBPO",
-    "OBOP..",
-    "OB...P"
+    "YGGGRO",
+    "RROGoY",
+    "YGR...",
+    "####+#",
+    "GYGRRY",
+    "rG..RO",
+    ".OGRYO"
+  ],
+  "gates": [
+    { "x": 4, "y": 3, "color": "G", "count": 3 }
   ]
 }

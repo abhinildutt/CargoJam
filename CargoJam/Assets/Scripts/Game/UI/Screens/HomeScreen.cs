@@ -40,6 +40,8 @@ namespace CargoJam.Game.UI
         public event Action DailyClicked;
         public event Action ChestClicked;
         public event Action JourneyClicked;
+        /// <summary>The dev "Levels" button (editor and development builds only).</summary>
+        public event Action LevelsClicked;
         /// <summary>The bottom block was laid out (the diorama framing may change).</summary>
         public event Action LayoutChanged;
 
@@ -60,6 +62,12 @@ namespace CargoJam.Game.UI
             var gear = new CandyButton(null, "cj-btn--glass cj-btn--icon cj-home__settings", IconKind.Gear);
             gear.Clicked += () => SettingsClicked?.Invoke();
             topRow.Add(gear);
+            if (LevelPickerPopup.Enabled)
+            {
+                var levels = new CandyButton("Levels", "cj-btn--glass cj-btn--s cj-home__dev");
+                levels.Clicked += () => LevelsClicked?.Invoke();
+                topRow.Add(levels);
+            }
 
             edge = Ui.El(safe, "cj-home__edge");
             dailyButton = EdgeButton(IconKind.Gift, "cj-home__daily", () => DailyClicked?.Invoke());
@@ -138,11 +146,25 @@ namespace CargoJam.Game.UI
             Ui.Show(edge, dailyReady || p.ChestReady);
         }
 
+        /// <summary>
+        /// Lays the screen out without showing it (hidden, so nothing on it draws or takes taps), so
+        /// <see cref="BottomBlockTop"/> is exact before the first <see cref="Show"/>: the title's camera
+        /// glide can aim at the real home framing.
+        /// </summary>
+        public void Prepare()
+        {
+            if (visible) return;
+            Refresh();
+            root.style.visibility = Visibility.Hidden;
+            Ui.Show(ctx.HomeLayer, true);
+        }
+
         public void Show()
         {
             Refresh();
             if (visible) return;
             visible = true;
+            root.style.visibility = StyleKeyword.Null;
             Ui.Show(ctx.HomeLayer, true);
             Anim.Fade(root, 0f, 1f, Anim.Small);
             Anim.SlideIn(topRow, 0f, -40f, Anim.Panel);

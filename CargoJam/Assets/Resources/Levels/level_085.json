@@ -1,0 +1,20 @@
+{
+  "id": 85,
+  "hard": true,
+  "holdingSlots": 2,
+  "truckCapacity": 3,
+  "trucks": "PYGYROBYOGRPBPR",
+  "rows": [
+    "RYBYOPG",
+    "OYGPGPY",
+    "O#YoB#Y",
+    "###+###",
+    "BYOYRGB",
+    "ROPRPYR",
+    "RBPPPPG",
+    "R#BRG#R"
+  ],
+  "gates": [
+    { "x": 3, "y": 3, "color": "Y", "count": 3 }
+  ]
+}

@@ -10,6 +10,7 @@ namespace CargoJam.Game.Presentation
         public static float OutCubic(float t) => 1f - Mathf.Pow(1f - t, 3f);
         public static float InCubic(float t) => t * t * t;
         public static float InOutQuad(float t) => t < 0.5f ? 2f * t * t : 1f - Mathf.Pow(-2f * t + 2f, 2f) / 2f;
+        public static float InOutCubic(float t) => t < 0.5f ? 4f * t * t * t : 1f - Mathf.Pow(-2f * t + 2f, 3f) / 2f;
 
         public static float OutBack(float t)
         {
@@ -53,6 +54,7 @@ namespace CargoJam.Game.Presentation
 
         void Update()
         {
+            if (active.Count > 0) FramePacer.KeepAwake();
             float now = Time.time;
             // Callbacks may queue more tweens; those are picked up in this same pass.
             for (int i = 0; i < active.Count; i++)

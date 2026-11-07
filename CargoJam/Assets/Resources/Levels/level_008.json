@@ -1,14 +1,19 @@
 {
   "id": 8,
   "hard": false,
-  "holdingSlots": 5,
+  "holdingSlots": 3,
   "truckCapacity": 3,
-  "trucks": "GOPPGGP",
+  "trucks": "RYPBYBRP",
   "rows": [
-    "PGPGO",
-    "PPOPG",
-    ".GG.G",
-    "P.POG",
-    "P.GGP"
+    "YRYYP",
+    "YBRPP",
+    "BB#R.",
+    "R.#BR",
+    "PR#YB",
+    "PP#BY"
+  ],
+  "straps": [
+    { "x": 3, "y": 1, "x2": 4, "y2": 1 },
+    { "x": 0, "y": 5, "x2": 1, "y2": 5 }
   ]
 }

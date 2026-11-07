@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CargoJam.Core;
 using UnityEngine;
 
 namespace CargoJam.Game.Presentation
@@ -8,6 +9,8 @@ namespace CargoJam.Game.Presentation
     /// the road with its paint. Biome colors come from the shared materials, which
     /// <see cref="WorldEnvironment"/> recolors; the ground around it belongs to the environment.
     /// About six draw calls in all: the apron, tiles and curbs are one mesh, the road another.
+    /// Bollards are concrete posts merged into the yard mesh (curb material, plus one draw call for
+    /// their dark band); the tile under each one is left out.
     /// </summary>
     public static class Scenery
     {
@@ -16,17 +19,30 @@ namespace CargoJam.Game.Presentation
         const float TileSize = 0.94f;
         const float TileTop = 0.006f;
         const float ApronTop = -0.002f;
+        /// <summary>A bollard: post radius and height, its dark band, and the square footing it stands on.</summary>
+        const float BollardRadius = 0.24f;
+        const float BollardHeight = 0.6f;
+        const float BollardCap = 0.09f;
+        const float BandBottom = 0.38f;
+        const float BandHeight = 0.1f;
+        const float FootingSize = 0.66f;
+        const int BollardSegments = 12;
 
         static readonly Dictionary<float, Mesh> roads = new Dictionary<float, Mesh>();
         static Mesh yardMesh;
 
-        public static void Build(Transform parent, Layout layout, MaterialBank materials)
+        /// <param name="bollards">
+        /// The level's bollard cells (<see cref="LevelDefinition.IsBollard"/>), or null for none. They
+        /// never move, so they are baked into the yard mesh.
+        /// </param>
+        public static void Build(Transform parent, Layout layout, MaterialBank materials, IReadOnlyList<Cell> bollards = null)
         {
             var root = new GameObject("Scenery").transform;
             root.SetParent(parent, false);
+            bool hasBollards = bollards != null && bollards.Count > 0;
 
-            // Apron (0), tiles (1) and curbs (2) in one mesh.
-            var b = new MeshBuilder(3);
+            // Apron (0), tiles (1) and curbs (2) in one mesh, plus the bollards' bands (3) when there are any.
+            var b = new MeshBuilder(hasBollards ? 4 : 3);
             float half = Mathf.Max(layout.Width * Layout.CellSize * 0.5f,
                 (layout.DockSlots + 1) * Layout.DockSpacing * 0.5f) + 0.35f;
             float near = -(layout.Height - 1) * Layout.CellSize - 0.85f;
@@ -45,14 +61,20 @@ namespace CargoJam.Game.Presentation
             for (int y = 0; y < layout.Height; y++)
             for (int x = 0; x < layout.Width; x++)
             {
-                var c = layout.CellCenter(new Core.Cell(x, y));
+                var cell = new Cell(x, y);
+                if (hasBollards && Contains(bollards, cell)) continue;
+                var c = layout.CellCenter(cell);
                 Slab(b, 1, c.x - TileSize * 0.5f, c.x + TileSize * 0.5f, c.z - TileSize * 0.5f, c.z + TileSize * 0.5f,
                     ApronTop - 0.01f, TileTop);
             }
+            if (hasBollards)
+                for (int i = 0; i < bollards.Count; i++) AddBollard(b, layout.CellCenter(bollards[i]));
             // One level exists at a time, so the yard mesh is refilled rather than reallocated.
             yardMesh = b.ToMesh("Yard", yardMesh);
             var yard = MeshKit.Show("Yard", root, yardMesh, materials.Apron, castShadows: false);
-            yard.sharedMaterials = new[] { materials.Apron, materials.Tile, materials.Curb };
+            yard.sharedMaterials = hasBollards
+                ? new[] { materials.Apron, materials.Tile, materials.Curb, materials.Wheel }
+                : new[] { materials.Apron, materials.Tile, materials.Curb };
 
             float yardWidth = layout.Width * Layout.CellSize;
             var edge = MaterialBank.Box("Dock Edge", root, new Vector3(0f, 0.01f, Layout.DockEdgeZ - 0.1f),
@@ -84,6 +106,33 @@ namespace CargoJam.Game.Presentation
             var r = MeshKit.Show("Road", parent, mesh, materials.Road, castShadows: false);
             r.sharedMaterials = new[] { materials.Road, materials.LaneMark };
             return r;
+        }
+
+        static bool Contains(IReadOnlyList<Cell> cells, Cell cell)
+        {
+            for (int i = 0; i < cells.Count; i++)
+                if (cells[i].Equals(cell)) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// A round concrete post on a square footing, with a domed cap and a dark band (submesh 3, so
+        /// it never reads as a parcel or as yellow dock paint), at a cell's center.
+        /// </summary>
+        static void AddBollard(MeshBuilder b, Vector3 c)
+        {
+            const float f = FootingSize * 0.5f;
+            Slab(b, 2, c.x - f, c.x + f, c.z - f, c.z + f, ApronTop - 0.01f, 0.03f);
+            Cylinder(b, 2, c, 0.03f, BollardHeight, BollardRadius, BollardRadius);
+            Cylinder(b, 2, c, BollardHeight, BollardHeight + BollardCap, BollardRadius, BollardRadius * 0.62f);
+            Cylinder(b, 3, c, BandBottom, BandBottom + BandHeight, BollardRadius + 0.012f, BollardRadius + 0.012f);
+        }
+
+        /// <summary>A faceted (possibly tapered) cylinder standing on the ground between two heights.</summary>
+        static void Cylinder(MeshBuilder b, int submesh, Vector3 c, float y0, float y1, float bottomRadius, float topRadius)
+        {
+            var m = Matrix4x4.TRS(new Vector3(c.x, (y0 + y1) * 0.5f, c.z), Quaternion.identity, new Vector3(1f, y1 - y0, 1f));
+            MeshKit.AddCylinder(b, submesh, m, BollardSegments, bottomRadius, topRadius, Vector2.zero);
         }
 
         /// <summary>A box between two x, two z and two y values (no bottom needed, but cheap enough to keep).</summary>

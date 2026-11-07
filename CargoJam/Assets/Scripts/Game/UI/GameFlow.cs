@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using CargoJam.Core;
 using CargoJam.Game.Feel;
 using CargoJam.Game.Meta;
 using CargoJam.Game.Presentation;
+using CargoJam.Game.Presentation.Fx;
 using CargoJam.Meta;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -10,19 +12,40 @@ using UnityEngine.UIElements;
 namespace CargoJam.Game.UI
 {
     /// <summary>
-    /// Owns the UI Toolkit document and sequences the game: Home (⇄ Journey) → Level → Win
-    /// (→ Chest → Unlock) → next Level, or Fail → Continue / Try again. Wires boosters and continues
+    /// Owns the UI Toolkit document and sequences the game: Title (once per launch) → Home (⇄ Journey)
+    /// → Level → Win (→ Chest → Unlock) → next Level, or Fail → Continue / Try again. A level that debuts a cargo kind
+    /// shows its "New cargo!" card once the board has landed (after any arrival or HARD banner), then
+    /// the tutorial hand. Wires boosters and continues
     /// to the economy, keeps board input off while anything covers it, tells the camera which part
-    /// of the screen belongs to the UI (<see cref="IHudLayout"/>) and where to frame the home
-    /// diorama (<see cref="IMenuLayout"/>), and hands the journey's arrival rules to the controller.
+    /// of the screen belongs to the UI (<see cref="IHudLayout"/>) and where to frame the menu
+    /// diorama on the title and on Home (<see cref="IMenuLayout"/>), and hands the journey's arrival
+    /// rules to the controller.
     /// </summary>
     public sealed class GameFlow : MonoBehaviour, IHudLayout, IMenuLayout
     {
-        static readonly string[] StyleSheets = { "UI/CargoJamBase", "UI/CargoJamScreens" };
+        static readonly string[] StyleSheets = { "UI/CargoJamBase", "UI/CargoJamScreens", "UI/CargoJamTitle" };
         static readonly Rect FallbackMenuViewport = new Rect(0.02f, 0.34f, 0.96f, 0.56f);
+        static readonly Rect FallbackTitleViewport = new Rect(-0.08f, 0.1f, 1.16f, 0.62f);
+        /// <summary>
+        /// How far the title's hero shot may run past each side of the screen (0..1 of the width): the
+        /// depot fills the width edge to edge, cropping the outer stacks a little.
+        /// </summary>
+        const float TitleBleed = 0.08f;
+        /// <summary>
+        /// Panel units the hero shot tucks under the wordmark's bottom and the Play block's top (negative
+        /// leaves air instead: the depot starts just below the wordmark, under the clear sky).
+        /// </summary>
+        const float TitleTuckTop = -40f;
+        const float TitleTuckBottom = 170f;
+        /// <summary>Play on the title: the camera's glide from the establishing shot to the home framing.</summary>
+        const float TitleGlide = 1.05f;
+        /// <summary>Play on the title: when the home screen starts its own show, once the title has lifted away.</summary>
+        const float TitleHomeAt = 0.45f;
 
         enum State
         {
+            /// <summary>The launch title, up to and through its hand-over to Home.</summary>
+            Title,
             Home,
             Playing,
             Won,
@@ -36,6 +59,7 @@ namespace CargoJam.Game.UI
         PanelSpace space;
         Action stopAnalytics;
 
+        TitleScreen title;
         HomeScreen home;
         JourneyScreen journey;
         LevelHud hud;
@@ -47,18 +71,38 @@ namespace CargoJam.Game.UI
         BuyBoosterPopup buy;
         ChestPopup chest;
         UnlockPopup unlock;
+        CargoIntroPopup cargoIntro;
         DailyPopup daily;
-        VisualElement splash;
-        const string SplashSeenKey = "cj.splashSeen";
+        LevelPickerPopup picker;
+        /// <summary>When the HARD banner starts on an ordinary level, in seconds after the level starts (as the board drops in).</summary>
+        const float BannerAt = 0.3f;
+        /// <summary>On an arrival level the HARD banner waits for the destination reveal and card, then this long.</summary>
+        const float ArrivalBannerGap = 0.6f;
+        /// <summary>From the board being ready (or the HARD banner ending) to the first cargo card.</summary>
+        const float CargoCardGap = 0.25f;
 
-        State state = State.Home;
+        State state = State.Title;
         int continuesUsed;
+        /// <summary>False while the title hides the coin pill; Home brings it back.</summary>
+        bool coinsShown = true;
         int attemptIndex = -1;
         int attempt;
         /// <summary>The level index the Journey screen last showed, so the truck can drive from there.</summary>
         int journeySeenIndex;
         Rect lastSafeArea;
         Vector2Int lastScreen;
+        /// <summary>Cargo cards still to show for the level that just started, in enum order.</summary>
+        readonly List<CargoKind> cargoQueue = new List<CargoKind>();
+        /// <summary>Bumped on every level start so a card callback from an older level does nothing.</summary>
+        int cargoToken;
+        /// <summary>
+        /// Cards are queued or showing for the level that just started: the board takes no taps until the
+        /// last "Got it", so nobody plays a new cargo kind before it has been explained.
+        /// </summary>
+        bool cardsPending;
+        /// <summary>The cargo the hand teaches on <see cref="teachLevel"/>, so a retry points it out again.</summary>
+        CargoKind teachKind;
+        int teachLevel = -1;
         readonly List<KeyValuePair<float, Action>> timed = new List<KeyValuePair<float, Action>>();
 
         /// <summary>
@@ -109,14 +153,7 @@ namespace CargoJam.Game.UI
         {
             if (ctx == null) return;
             ApplySafeArea();
-            ShowHome();
-            // The wordmark splash is a first-launch moment; returning players go straight to Home.
-            if (PlayerPrefs.GetInt(SplashSeenKey, 0) == 0)
-            {
-                PlayerPrefs.SetInt(SplashSeenKey, 1);
-                PlayerPrefs.Save();
-                PlaySplash();
-            }
+            ShowTitle();
         }
 
         void OnDestroy()
@@ -161,7 +198,7 @@ namespace CargoJam.Game.UI
                 i = -1; // the action may have changed the list
             }
 
-            controller.InputEnabled = state == State.Playing && !ctx.AnyModalOpen && !home.Visible && !journey.Visible;
+            controller.InputEnabled = state == State.Playing && !cardsPending && !ctx.AnyModalOpen && !home.Visible && !journey.Visible;
             tutorial.Update();
         }
 
@@ -187,12 +224,14 @@ namespace CargoJam.Game.UI
 
         /// <summary>
         /// The home diorama fills the screen between the top row and the bottom block (destination
-        /// name, journey strip, Level button): roughly the top two thirds.
+        /// name, journey strip, Level button): roughly the top two thirds. While the title holds the
+        /// frame it is the establishing shot instead (<see cref="TitleViewport"/>).
         /// </summary>
         public Rect MenuViewport
         {
             get
             {
+                if (title != null && title.Framing) return TitleViewport;
                 if (space == null || home == null) return FallbackMenuViewport;
                 var size = space.PanelSize;
                 if (size.y <= 1f || float.IsNaN(size.y)) return FallbackMenuViewport;
@@ -207,11 +246,30 @@ namespace CargoJam.Game.UI
             }
         }
 
+        /// <summary>
+        /// The title's hero shot: the diorama fills the screen's width (<see cref="TitleBleed"/>) and the
+        /// height between the wordmark and the Play button, tucking under both so the scene runs behind
+        /// them rather than floating in a frame.
+        /// </summary>
+        Rect TitleViewport
+        {
+            get
+            {
+                if (space == null) return FallbackTitleViewport;
+                var size = space.PanelSize;
+                if (size.y <= 1f || float.IsNaN(size.y)) return FallbackTitleViewport;
+                float yMax = 1f - (title.StageTop - TitleTuckTop) / size.y;
+                float yMin = 1f - (title.StageBottom + TitleTuckBottom) / size.y;
+                if (yMax - yMin < 0.25f) return FallbackTitleViewport;
+                return Rect.MinMaxRect(-TitleBleed, Mathf.Clamp01(yMin), 1f + TitleBleed, Mathf.Clamp01(yMax));
+            }
+        }
+
         /// <summary>True when a press would hit the UI (or the board is covered).</summary>
         public bool Captures(Vector2 screenPosition)
         {
             if (ctx == null) return false;
-            if (ctx.AnyModalOpen || home.Visible || journey.Visible) return true;
+            if (ctx.AnyModalOpen || title.Visible || home.Visible || journey.Visible) return true;
             var panel = ctx.Root.panel;
             if (panel == null) return false;
             var picked = panel.Pick(space.ScreenToPanel(screenPosition));
@@ -257,6 +315,7 @@ namespace CargoJam.Game.UI
                 Root = root,
                 HudLayer = Ui.El(root, "cj-fill"),
                 HomeLayer = Ui.El(root, "cj-fill"),
+                TitleLayer = Ui.El(root, "cj-fill"),
                 ScreenLayer = Ui.El(root, "cj-fill"),
                 OverlayLayer = Ui.El(root, "cj-fill"),
                 ModalLayer = Ui.El(root, "cj-fill"),
@@ -274,8 +333,6 @@ namespace CargoJam.Game.UI
             ctx.Coins = new CoinCounter();
             topRow.Add(ctx.Coins);
             ctx.Coins.SetValue(progression.Coins, false);
-
-            splash = Ui.El(root, "cj-fill cj-splash", true);
         }
 
         void BuildScreens()
@@ -283,6 +340,18 @@ namespace CargoJam.Game.UI
             hud = new LevelHud(ctx);
             hud.PauseClicked += OnPauseClicked;
             hud.BoosterClicked += OnBoosterClicked;
+
+            title = new TitleScreen(ctx, ctx.TitleLayer);
+            title.PlayClicked += LeaveTitle;
+            title.SettingsClicked += () =>
+            {
+                if (title.Framing && !ctx.AnyModalOpen) pause.ShowSettings(null);
+            };
+            // The wordmark and Play block decide the establishing shot: refit when they lay out.
+            title.LayoutChanged += () =>
+            {
+                if (title.Framing) controller.MenuLayout = this;
+            };
 
             home = new HomeScreen(ctx);
             home.PlayClicked += OnPlayClicked;
@@ -300,6 +369,7 @@ namespace CargoJam.Game.UI
                     chest.Show(progression.NextChestIsBig, progression.OpenChest, home.Refresh);
             };
             home.JourneyClicked += OpenJourney;
+            home.LevelsClicked += OpenLevelPicker;
             // The bottom block's real height decides the diorama's frame: refit when it lays out.
             home.LayoutChanged += () =>
             {
@@ -326,6 +396,8 @@ namespace CargoJam.Game.UI
             buy = new BuyBoosterPopup(ctx);
             chest = new ChestPopup(ctx);
             unlock = new UnlockPopup(ctx);
+            cargoIntro = new CargoIntroPopup(ctx);
+            if (LevelPickerPopup.Enabled) picker = new LevelPickerPopup(ctx);
             daily = new DailyPopup(ctx);
         }
 
@@ -352,45 +424,83 @@ namespace CargoJam.Game.UI
             if (controller.MenuLayout == (IMenuLayout)this) controller.MenuLayout = this;
         }
 
-        /// <summary>The launch splash: the wordmark over a dark wash, gone after a moment or a tap.</summary>
-        void PlaySplash()
-        {
-            var logo = new Logo();
-            splash.Add(logo);
-            Ui.Show(splash, true);
-            logo.PlayIntro();
-            bool gone = false;
-            Action dismiss = () =>
-            {
-                if (gone) return;
-                gone = true;
-                Anim.Fade(splash, 1f, 0f, Anim.Panel, 0f, () =>
-                {
-                    Ui.Show(splash, false);
-                    splash.Clear();
-                });
-            };
-            splash.RegisterCallback<PointerDownEvent>(_ => dismiss());
-            UiTween.Delay(1.5f, dismiss);
-        }
-
         // ---- Flow -------------------------------------------------------------------------------
 
         void At(float time, Action action) => timed.Add(new KeyValuePair<float, Action>(time, action));
 
-        void ShowHome()
+        /// <summary>
+        /// The launch title over the menu diorama in its establishing shot. Home lays out unseen
+        /// beneath it (so the camera knows where it will end up) and the coin pill stays away until
+        /// Home, so nothing on screen speaks of progress.
+        /// </summary>
+        void ShowTitle()
+        {
+            state = State.Title;
+            // Title first, so the scene's first fit already reads the establishing shot.
+            title.Show();
+            home.Prepare();
+            coinsShown = false;
+            Ui.Show(ctx.Coins, false);
+            controller.ShowMenuScene(progression.LevelIndex);
+            controller.MenuDrift = true;
+        }
+
+        /// <summary>
+        /// Play on the title: the wordmark and button lift away, the camera glides in from the
+        /// establishing shot to the home framing (<see cref="TitleGlide"/>), and part-way through Home
+        /// plays its own show over the same diorama (no rebuild, no cut).
+        /// </summary>
+        void LeaveTitle()
+        {
+            if (state != State.Title || !title.Framing || ctx.AnyModalOpen) return;
+            // From here MenuViewport reads the home framing, which is what the glide aims at.
+            title.Leave();
+            // The glide starts from wherever the drift has the camera, so there is no jump.
+            controller.MenuDrift = false;
+            controller.GlideMenuCamera(TitleGlide);
+            UiTween.Delay(TitleHomeAt, () =>
+            {
+                if (state == State.Title) ShowHome(false);
+            });
+        }
+
+        /// <summary>Drops the title at once (tools that jump straight into a level).</summary>
+        void SkipTitle()
+        {
+            if (state != State.Title) return;
+            title.HideNow();
+            // The title's framing is gone: fit the home one now rather than gliding.
+            controller.MenuDrift = false;
+            controller.MenuLayout = this;
+            ShowHome(false);
+        }
+
+        /// <summary>
+        /// Home over its living diorama. <paramref name="buildScene"/> is false coming from the title,
+        /// which already shows the same diorama for the same level.
+        /// </summary>
+        void ShowHome(bool buildScene = true)
         {
             state = State.Home;
             timed.Clear();
+            cardsPending = false;
             hud.Hide();
             tutorial.Stop();
             banner.Stop();
             ctx.Toast.Hide();
             controller.CancelCrane();
             // The home screen has its own living diorama; the level loads when Play is tapped.
-            controller.ShowMenuScene(progression.LevelIndex);
+            if (buildScene) controller.ShowMenuScene(progression.LevelIndex);
             home.Show();
-            // No daily popup: the Daily icon's dot on the left edge is the only prompt.
+            if (!coinsShown)
+            {
+                coinsShown = true;
+                Ui.Show(ctx.Coins, true);
+                Anim.Fade(ctx.Coins, 0f, 1f, Anim.Panel);
+            }
+            // No daily popup: the Daily icon's dot on the left edge is the only prompt. Anything that
+            // should ever open by itself on reaching Home goes here, after home.Show(), so it waits for
+            // Home and never pops over the title.
         }
 
         void OpenJourney()
@@ -407,6 +517,26 @@ namespace CargoJam.Game.UI
             if (!journey.Visible) return;
             SetSceneVisible(true);
             journey.Hide(() => { if (state == State.Home) home.Refresh(); });
+        }
+
+        void OpenLevelPicker()
+        {
+            if (picker == null || state != State.Home || ctx.AnyModalOpen || journey.Visible) return;
+            picker.Show(progression.LevelIndex, controller.LevelCount, JumpToLevel);
+        }
+
+        /// <summary>Dev picker and <c>PerfBench</c>: moves progress to the chosen level (0-based) and plays it.</summary>
+        internal void JumpToLevel(int index)
+        {
+            SkipTitle();
+            if (state != State.Home) return;
+            var debuts = new List<(int, int)>();
+            foreach (var (number, kind) in LevelPickerPopup.Debuts) debuts.Add((number - 1, (int)kind));
+            progression.JumpTo(index, debuts);
+            journeySeenIndex = progression.LevelIndex;
+            ProfileStore.Save(progression.Data);
+            home.Refresh();
+            OnPlayClicked();
         }
 
         void SetSceneVisible(bool on)
@@ -449,10 +579,30 @@ namespace CargoJam.Game.UI
             hud.SetLevel(info.Number, info.Hard);
             hud.RefreshBoosters();
             ctx.Toast.Hide();
+            cargoQueue.Clear();
+            cargoToken++;
+            cardsPending = false;
             if (state == State.Playing)
             {
-                if (info.Hard) banner.Play(controller.EnvironmentShown.Arrival ? 2.5f : 0.3f);
-                tutorial.Begin(info.Index);
+                bool arrival = controller.EnvironmentShown.Arrival;
+                float readyAt = BoardReadyAt(arrival);
+                float bannerAt = arrival ? readyAt - Time.time + ArrivalBannerGap : BannerAt;
+                if (info.Hard) banner.Play(bannerAt);
+                QueueCargoCards(info);
+                cardsPending = cargoQueue.Count > 0;
+                if (cardsPending)
+                {
+                    // The cards come first (after the HARD banner, if any); the hand follows the last one.
+                    tutorial.Stop();
+                    float cardsAt = info.Hard ? Time.time + bannerAt + HardBanner.Duration : readyAt;
+                    ShowCargoCardsAt(cardsAt + CargoCardGap, cargoToken);
+                }
+                else
+                {
+                    tutorial.Begin(info.Index);
+                    // Retrying the debut level: the card is done with, the hand isn't.
+                    if (attempt > 1 && teachLevel == info.Index) tutorial.BeginCargo(teachKind);
+                }
             }
             else
             {
@@ -460,10 +610,77 @@ namespace CargoJam.Game.UI
             }
         }
 
+        // ---- Cargo cards ------------------------------------------------------------------------
+
+        /// <summary>Queues a card for every cargo kind in the level the player hasn't met yet.</summary>
+        void QueueCargoCards(LevelStartInfo info)
+        {
+            if (info.CargoMask == 0) return;
+            foreach (CargoKind kind in Enum.GetValues(typeof(CargoKind)))
+                if (info.Uses(kind) && !progression.HasSeenCargo((int)kind)) cargoQueue.Add(kind);
+            if (cargoQueue.Count == 0) return;
+
+            // The hand teaches the first kind you can act on; a bollard has nothing to tap.
+            teachKind = cargoQueue[0];
+            foreach (var kind in cargoQueue)
+            {
+                if (kind == CargoKind.Bollard) continue;
+                teachKind = kind;
+                break;
+            }
+            teachLevel = info.Index;
+        }
+
+        /// <summary>
+        /// Time.time when the level that just started is ready to be looked at: the board has landed
+        /// (<see cref="GameController.IntroEndsAt"/>, which includes any destination reveal) and, on an
+        /// arrival level, the destination card has gone (it plays even when there is nothing to pan over).
+        /// </summary>
+        float BoardReadyAt(bool arrival)
+        {
+            float ready = Mathf.Max(Time.time, controller.IntroEndsAt);
+            return arrival ? Mathf.Max(ready, Time.time + ArrivalCard.Life) : ready;
+        }
+
+        /// <summary>Opens the cards at a time, waiting while a pause or settings sheet is up.</summary>
+        void ShowCargoCardsAt(float due, int token)
+        {
+            At(due, () =>
+            {
+                if (token != cargoToken || state != State.Playing) return;
+                if (ctx.AnyModalOpen)
+                {
+                    ShowCargoCardsAt(Time.time + 0.25f, token);
+                    return;
+                }
+                ShowNextCargoCard(token);
+            });
+        }
+
+        void ShowNextCargoCard(int token)
+        {
+            if (token != cargoToken || state != State.Playing) return;
+            if (cargoQueue.Count == 0)
+            {
+                // All met: the board opens, and the hand shows where to start (unless they already have).
+                cardsPending = false;
+                if (!controller.MovedThisLevel) tutorial.BeginCargo(teachKind);
+                return;
+            }
+            var kind = cargoQueue[0];
+            cargoQueue.RemoveAt(0);
+            cargoIntro.Show(kind, () =>
+            {
+                progression.MarkCargoSeen((int)kind);
+                ShowNextCargoCard(token);
+            });
+        }
+
         void OnLevelWon(float showAt)
         {
             if (state != State.Playing) return;
             state = State.Won;
+            cardsPending = false;
             tutorial.Stop();
             banner.Stop();
             ctx.Toast.Hide();
@@ -503,18 +720,22 @@ namespace CargoJam.Game.UI
         {
             if (state != State.Playing) return;
             state = State.Failed;
+            cardsPending = false;
             tutorial.Stop();
             ctx.Toast.Hide();
             controller.CancelCrane();
-            At(showAt, () => ShowFail(parcelsLeft));
+            var reason = controller.Session != null ? controller.Session.FailReason : FailReason.OutOfSpace;
+            Analytics.LogLevelFail(controller.LevelIndex, parcelsLeft, continuesUsed, reason);
+            At(showAt, () => ShowFail(parcelsLeft, reason));
         }
 
-        void ShowFail(int parcelsLeft)
+        void ShowFail(int parcelsLeft, FailReason reason)
         {
             int cost = progression.ContinueCost(continuesUsed);
-            // A board stalled by padlocks fails with dock room to spare; another slot wouldn't help.
+            // Only a full dock can be helped by another slot (not a stalled board or a missed express);
+            // the sheet also hides Continue unless the reason is OutOfSpace.
             bool canGrow = controller.CanContinue;
-            fail.Show(parcelsLeft, cost, progression.CanAfford(cost), canGrow, UiText.StreakDropWarning(progression));
+            fail.Show(reason, parcelsLeft, cost, progression.CanAfford(cost), canGrow, UiText.StreakDropWarning(progression));
         }
 
         void OnContinueClicked()
@@ -648,7 +869,8 @@ namespace CargoJam.Game.UI
         void OnBoardChanged(int _)
         {
             hud.RefreshBoosters();
-            tutorial.OnMove();
+            // Only a real move ends the teaching: a rejected tap (a frozen crate, a padlock) keeps the hand up.
+            if (controller.MovedThisLevel) tutorial.OnMove();
         }
 
         void OnDockChanged(int count, int capacity) => OnBoardChanged(count);

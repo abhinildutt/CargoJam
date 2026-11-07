@@ -14,6 +14,8 @@ namespace CargoJam.Game.UI
         /// <summary>In-level HUD (top bar and booster bar).</summary>
         public VisualElement HudLayer;
         public VisualElement HomeLayer;
+        /// <summary>The launch title, over Home (which lays out unseen beneath it).</summary>
+        public VisualElement TitleLayer;
         /// <summary>Full-screen screens over Home (the Journey map).</summary>
         public VisualElement ScreenLayer;
         /// <summary>Non-blocking overlays: HARD banner, tutorial hand, tips, toasts.</summary>

@@ -112,6 +112,53 @@ namespace CargoJam.Meta
         /// <summary>The multiplier the next win will pay (the streak counts that win, see <see cref="RecordWin"/>).</summary>
         public float NextWinMultiplier => EconomyConfig.StreakMultiplier(Data.winStreak + 1);
 
+        // ---- Cargo introductions (docs/design-v4-cargo-variety.md, section 5) ----
+
+        /// <summary>
+        /// Whether the player has been introduced to a cargo kind (an int <c>CargoKind</c>): its
+        /// "New cargo!" card has been seen, or the migration credited it to an existing player. Kinds
+        /// outside <see cref="ProfileData.CargoKinds"/> count as seen so they never queue a card.
+        /// </summary>
+        public bool HasSeenCargo(int kind)
+        {
+            if (kind < 0 || kind >= ProfileData.CargoKinds) return true;
+            var seen = Data.cargoSeen;
+            return seen != null && kind < seen.Length && seen[kind];
+        }
+
+        /// <summary>
+        /// Records that the player has seen a cargo kind's card. Returns true when it is new (and raises
+        /// <see cref="Changed"/>). Out-of-range kinds are ignored.
+        /// </summary>
+        public bool MarkCargoSeen(int kind)
+        {
+            if (kind < 0 || kind >= ProfileData.CargoKinds) return false;
+            var seen = Data.cargoSeen = ProfileMigration.ResizeCargoSeen(Data.cargoSeen);
+            if (seen[kind]) return false;
+            seen[kind] = true;
+            RaiseChanged();
+            return true;
+        }
+
+        /// <summary>
+        /// Testing aid (the dev level picker): moves progress to <paramref name="levelIndex"/> as if the
+        /// player had just got there. Boosters available by then are unlocked, earlier destinations'
+        /// arrivals count as shown, and each cargo kind counts as seen exactly when it debuts before that
+        /// level, so the level's own "New cargo!" card still shows. <paramref name="cargoDebuts"/> lists
+        /// (0-based debut level, int <c>CargoKind</c>). Coins and streaks are kept.
+        /// </summary>
+        public void JumpTo(int levelIndex, IEnumerable<(int levelIndex, int kind)> cargoDebuts)
+        {
+            Data.levelIndex = Math.Max(0, levelIndex);
+            Data.lastArrivalShown = Data.levelIndex > 0 ? Journey.LegFor(Data.levelIndex - 1) : -1;
+            var seen = Data.cargoSeen = ProfileMigration.ResizeCargoSeen(Data.cargoSeen);
+            foreach (var (debut, kind) in cargoDebuts)
+                if (kind >= 0 && kind < seen.Length) seen[kind] = debut < Data.levelIndex;
+            ApplyUnlocks(Data.levelIndex);
+            Normalize(Data);
+            RaiseChanged();
+        }
+
         // ---- Streak tiers (docs/design-v3-premium-journey.md, section 6) ----
 
         /// <summary>

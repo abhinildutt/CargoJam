@@ -1,0 +1,24 @@
+{
+  "id": 74,
+  "hard": false,
+  "holdingSlots": 3,
+  "truckCapacity": 3,
+  "trucks": "RBPGYGPORBYO",
+  "rows": [
+    "#PRGRB#",
+    "GBRYBPY",
+    "#O#B#P#",
+    "OR#R#GG",
+    "GP#B#PG",
+    "YR#O#OY",
+    "OPBY#OY"
+  ],
+  "frost": [
+    { "x": 4, "y": 0, "layers": 6 },
+    { "x": 3, "y": 1, "layers": 4 },
+    { "x": 5, "y": 1, "layers": 3 }
+  ],
+  "express": [
+    { "x": 3, "y": 0, "taps": 6 }
+  ]
+}

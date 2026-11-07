@@ -1,7 +1,7 @@
 {
   "id": 2,
   "hard": false,
-  "holdingSlots": 5,
+  "holdingSlots": 4,
   "truckCapacity": 3,
   "trucks": "RBRB",
   "rows": [

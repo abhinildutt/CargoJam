@@ -9,21 +9,35 @@ namespace CargoJam.Meta
     /// </summary>
     public static class ProfileMigration
     {
+        /// <summary>Core <c>CargoKind.Mystery</c> as an int (Meta can't reference Core; a test keeps them in step).</summary>
+        public const int MysteryKind = 2;
+        /// <summary>Core <c>CargoKind.Lock</c> as an int.</summary>
+        public const int LockKind = 4;
+        /// <summary>First level index (0-based) where Mystery cargo already appeared in v3 content (level 15).</summary>
+        public const int MysteryDebutLevelIndex = 14;
+        /// <summary>First level index (0-based) where padlocks already appeared in v3 content (level 25).</summary>
+        public const int LockDebutLevelIndex = 24;
+
         /// <summary>
-        /// True when the profile predates v2: an older <see cref="ProfileData.version"/>, or a postcard
-        /// array that is missing or the wrong length (how a v1 save can load, depending on the parser).
+        /// True when the profile predates the current version: an older <see cref="ProfileData.version"/>,
+        /// or a postcard / cargo-seen array that is missing or the wrong length (how an older save can load,
+        /// depending on the parser).
         /// </summary>
         public static bool NeedsUpgrade(ProfileData data) =>
             data != null &&
-            (data.version < ProfileData.CurrentVersion || data.postcards == null || data.postcards.Length != Journey.StopCount);
+            (data.version < ProfileData.CurrentVersion ||
+             data.postcards == null || data.postcards.Length != Journey.StopCount ||
+             data.cargoSeen == null || data.cargoSeen.Length != ProfileData.CargoKinds);
 
         /// <summary>
         /// Brings a loaded profile up to the current version in place. Returns true when anything changed
-        /// (so the caller can save it).
+        /// (so the caller can save it). Each step runs only for saves that predate it.
         /// <list type="bullet">
         /// <item>v1 → v2: earns the postcard of every destination reached so far, including Harbor Town
         /// (<see cref="MarkReachedPostcards"/>), and records the current leg's arrival as already shown,
         /// so existing players don't get a reveal for the place they are already in.</item>
+        /// <item>v2 → v3: sizes <see cref="ProfileData.cargoSeen"/> and marks the cargo they already met in
+        /// v3 content as seen (<see cref="MarkCargoAlreadyMet"/>), so only genuinely new cargo gets a card.</item>
         /// </list>
         /// </summary>
         public static bool Upgrade(ProfileData data)
@@ -31,11 +45,51 @@ namespace CargoJam.Meta
             if (!NeedsUpgrade(data)) return false;
 
             data.levelIndex = Math.Max(0, data.levelIndex);
-            data.postcards = ResizePostcards(data.postcards);
-            MarkReachedPostcards(data);
-            data.lastArrivalShown = Math.Max(data.lastArrivalShown, Journey.LegFor(data.levelIndex));
+            bool postcardsBad = data.postcards == null || data.postcards.Length != Journey.StopCount;
+            if (data.version < 2 || postcardsBad)
+            {
+                data.postcards = ResizePostcards(data.postcards);
+                MarkReachedPostcards(data);
+                data.lastArrivalShown = Math.Max(data.lastArrivalShown, Journey.LegFor(data.levelIndex));
+            }
+
+            data.cargoSeen = ResizeCargoSeen(data.cargoSeen);
+            if (data.version < 3) MarkCargoAlreadyMet(data);
+
             data.version = Math.Max(data.version, ProfileData.CurrentVersion);
             return true;
+        }
+
+        /// <summary>
+        /// Marks the cargo a pre-v4 player has already met: Mystery from level 15 and Lock from level 25
+        /// (the levelIndex they have reached, so existing players aren't re-introduced to them).
+        /// Resizes the array first when needed. Returns true when a kind was added.
+        /// </summary>
+        public static bool MarkCargoAlreadyMet(ProfileData data)
+        {
+            if (data == null) return false;
+            data.cargoSeen = ResizeCargoSeen(data.cargoSeen);
+            bool added = false;
+            if (data.levelIndex >= MysteryDebutLevelIndex && !data.cargoSeen[MysteryKind])
+            {
+                data.cargoSeen[MysteryKind] = true;
+                added = true;
+            }
+            if (data.levelIndex >= LockDebutLevelIndex && !data.cargoSeen[LockKind])
+            {
+                data.cargoSeen[LockKind] = true;
+                added = true;
+            }
+            return added;
+        }
+
+        /// <summary>A cargo-seen array of exactly <see cref="ProfileData.CargoKinds"/>, keeping the known entries.</summary>
+        public static bool[] ResizeCargoSeen(bool[] seen)
+        {
+            if (seen != null && seen.Length == ProfileData.CargoKinds) return seen;
+            var sized = new bool[ProfileData.CargoKinds];
+            if (seen != null) Array.Copy(seen, sized, Math.Min(seen.Length, sized.Length));
+            return sized;
         }
 
         /// <summary>
